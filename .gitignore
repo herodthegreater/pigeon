@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Model weights (auto-downloaded by ultralytics on first run)
+*.pt
+
+# Datasets / eval images (regenerate with build_eval_set.py; COCO licensing)
+eval_set/
+datasets/
+
+# Outputs
+runs/
+samples/
+
+# OS
+.DS_Store

@@ -1,0 +1,9 @@
+# Core detector + carving stack
+torch>=2.4
+ultralytics>=8.3
+torch-pruning>=1.6
+numpy>=1.26
+pillow>=10.0
+
+# Only needed to (re)build the bird eval set from COCO
+fiftyone
