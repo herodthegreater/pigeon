@@ -48,8 +48,11 @@ class BirdmAPEvaluator(Evaluator):
     unit = ""
 
     def __init__(self, root: str, imgsz: int = 640, conf: float = 0.001,
-                 iou_thr: float = 0.5, device: str | None = None):
+                 iou_thr: float = 0.5, device: str | None = None,
+                 max_images: int | None = None):
         self.images = sorted(glob.glob(os.path.join(root, "images", "val", "*")))
+        if max_images:
+            self.images = self.images[:max_images]  # fast subset for live eval
         labels_dir = os.path.join(root, "labels", "val")
         self.imgsz, self.conf, self.iou, self.device = imgsz, conf, iou_thr, device
         self.gt: dict[str, np.ndarray] = {}

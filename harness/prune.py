@@ -95,6 +95,41 @@ def make_prunable(yolo) -> None:
     replace_c2f_with_c2f_v2(yolo.model)
 
 
+def structured_prune_per_stage(yolo, stage_fracs: dict[str, float],
+                               example: torch.Tensor | None = None) -> None:
+    """Real removal that honors per-stage fractions (dict stage -> frac), so the
+    UI's per-column masks become a real, placement-aware pruned model. Call
+    make_prunable(yolo) once first.
+    """
+    from .mask import top_stage
+
+    model = yolo.model
+    device = next(model.parameters()).device
+    if example is None:
+        example = torch.randn(1, 3, 640, 640)
+    example = example.to(device)
+
+    ignored = [m for m in model.modules() if isinstance(m, Detect)]
+    ignored_set = {id(c) for m in ignored for c in m.modules()}
+    ratio_dict = {}
+    for name, m in model.named_modules():
+        if isinstance(m, torch.nn.Conv2d) and id(m) not in ignored_set:
+            st = top_stage(name)
+            if st and stage_fracs.get(st, 0) > 0:
+                ratio_dict[m] = min(float(stage_fracs[st]), 0.9)
+
+    was = model.training
+    model.train()
+    Pruner = getattr(tp.pruner, "GroupNormPruner", tp.pruner.MetaPruner)
+    pruner = Pruner(
+        model, example, importance=tp.importance.GroupMagnitudeImportance(),
+        iterative_steps=1, pruning_ratio=0.0, pruning_ratio_dict=ratio_dict,
+        ignored_layers=ignored,
+    )
+    pruner.step()
+    model.train(was)
+
+
 def structured_prune(yolo, ratio: float, example: torch.Tensor | None = None) -> None:
     """Really remove `ratio` of channels (global L2), sparing the Detect head.
     Call `make_prunable(yolo)` once before the first prune.

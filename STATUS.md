@@ -36,6 +36,26 @@ the method. How it works: drive `DetectionTrainer` directly, set
 nn.Module, so the pruned arch survives; `_setup_train` still sets nc/names/args).
 Gotcha: background shells don't inherit cwd — use absolute paths.
 
+## Recovery magnitude (`iterative_prune.py`)
+A ~12%-pruned YOLOv8n fine-tuned 45 epochs (3x15) on 400 bird imgs recovers to
+**mAP 0.388 = 91% of native 0.428** (up from 0.00). Cut-and-regrow strongly
+validated. KNOWN BUG: the iterative loop only pruned on step 1 — re-pruning a
+reloaded (YOLO(best)) model no-ops (params flat at 2.775M across steps), so the
+"20% in 3 steps" is really ~12% in 1 step. Fix before building auto-prune mode;
+does not block the UI (single-prune + masking).
+
+## Carving cockpit (web UI) — BUILT (`server.py`, `static/index.html`, `harness/mask.py`)
+FastAPI + node-grid front end, verified end-to-end in-browser:
+- 17 real YOLOv8n stages as columns, 20 nodes = 5% each, FLOP-weighted glow.
+- Click nodes -> **mask** channels (zero lowest-L1; live, reversible, no crash).
+- **Measure** -> REAL bird mAP@50 on a 40-img subset in ~1.2s (real gradient:
+  robust vs sensitive stages).
+- **Export** -> REAL per-stage structured removal (`structured_prune_per_stage`,
+  torch-pruning `pruning_ratio_dict`), measured params/FLOPs/latency, saved to
+  `runs/pigeon_pruned.pt` (~2s). Honors WHERE you cut.
+- Responsive (stacks on narrow viewports). Run: `uvicorn server:app --port 8000`.
+Deps added: fastapi, uvicorn.
+
 ## Design consequences (locked)
 - Auto-prune "training mode" = prune -> fine-tune -> test, repeat.
 - Interactive demo value = "how small can I shrink while regrowing mAP back",

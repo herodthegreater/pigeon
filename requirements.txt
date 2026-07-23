@@ -5,5 +5,9 @@ torch-pruning>=1.6
 numpy>=1.26
 pillow>=10.0
 
+# The carving cockpit (web UI)
+fastapi
+uvicorn
+
 # Only needed to (re)build the bird eval set from COCO
 fiftyone

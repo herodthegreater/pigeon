@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PIGEON — carving cockpit</title>
+<style>
+  :root{
+    --bg:#0a0e12; --panel:#111820; --line:#1e2a35; --ink:#c9d6e0;
+    --dim:#5a6b78; --accent:#3fe0c8; --accent2:#7dd3fc; --bad:#ff5c6c; --good:#4ade80;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+  header{padding:18px 22px;border-bottom:1px solid var(--line);
+         display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  h1{margin:0;font-size:20px;letter-spacing:3px;color:var(--accent)}
+  h1 .b{color:var(--ink)}
+  .sub{color:var(--dim)}
+  .wrap{display:flex;gap:0;height:calc(100vh - 60px)}
+  .stage-area{flex:1;overflow:auto;padding:22px}
+  .grid{display:flex;gap:10px;align-items:flex-end;min-height:100%}
+  .col{display:flex;flex-direction:column;align-items:center;gap:6px;
+       min-width:44px}
+  .clabel{font-size:11px;color:var(--dim);text-align:center}
+  .cch{font-size:10px;color:var(--dim)}
+  .flopbar{height:3px;width:34px;background:#0d141b;border-radius:2px;overflow:hidden}
+  .flopbar > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
+  .flabel{font-size:9px;color:var(--accent2)}
+  .nodes{display:flex;flex-direction:column-reverse;gap:2px;padding:5px;
+         border:1px solid var(--line);border-radius:6px;background:#0c1218}
+  .node{width:22px;height:9px;border-radius:2px;background:#24313d;cursor:pointer;
+        transition:.08s}
+  .node:hover{outline:1px solid var(--accent2)}
+  .node.kept{background:linear-gradient(90deg,#2a6f63,#3fe0c8)}
+  .node.masked{background:#37202a;box-shadow:inset 0 0 0 1px #5a2530}
+  .panel{width:300px;border-left:1px solid var(--line);background:var(--panel);
+         padding:20px;display:flex;flex-direction:column;gap:18px;overflow:auto}
+  .metric .k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+  .metric .v{font-size:30px;font-weight:600}
+  .bar{height:8px;background:#0c1218;border-radius:4px;overflow:hidden;margin-top:6px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--bad),var(--good));transition:.3s width}
+  .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)}
+  .row .lab{color:var(--dim)}
+  button{font:inherit;padding:11px;border-radius:7px;border:1px solid var(--line);
+         background:#16212b;color:var(--ink);cursor:pointer;width:100%}
+  button.go{background:var(--accent);color:#04120f;border-color:var(--accent);font-weight:700}
+  button:disabled{opacity:.5;cursor:wait}
+  #export{border-color:var(--accent2);color:var(--accent2)}
+  #exportout{font-size:12px;border:1px solid var(--line);border-radius:7px;
+             padding:4px 10px;background:#0c1218}
+  #exportout:empty{display:none}
+  .note{font-size:11px;color:var(--dim);line-height:1.6}
+  .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px}
+  .tag.real{background:#123; color:var(--good);border:1px solid #274}
+  .tag.est{background:#210; color:#fb923c;border:1px solid #532}
+  .spin{color:var(--accent);animation:p 1s infinite}
+  @keyframes p{50%{opacity:.4}}
+  @media (max-width:760px){
+    .wrap{flex-direction:column;height:auto}
+    .stage-area{height:50vh}
+    .panel{width:auto;border-left:none;border-top:1px solid var(--line)}
+    header{padding:14px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐦 PIGEON<span class="b"> // carving cockpit</span></h1>
+  <span class="sub" id="native">loading…</span>
+</header>
+<div class="wrap">
+  <div class="stage-area"><div class="grid" id="grid"></div></div>
+  <div class="panel">
+    <div class="metric">
+      <div class="k">bird mAP@50 <span class="tag real">REAL</span></div>
+      <div class="v" id="mapv">—</div>
+      <div class="bar"><i id="mapbar" style="width:100%"></i></div>
+      <div class="sub" id="mappct"></div>
+    </div>
+    <div>
+      <div class="row"><span class="lab">est. FLOPs <span class="tag est">EST</span></span><span id="flops">—</span></div>
+      <div class="row"><span class="lab">est. compute removed</span><span id="saving">0%</span></div>
+      <div class="row"><span class="lab">total channels masked</span><span id="masked">0%</span></div>
+    </div>
+    <button class="go" id="measure">▶ Measure mAP</button>
+    <button id="export">⤓ Export real model</button>
+    <button id="reset">↺ Reset</button>
+    <div id="exportout"></div>
+    <div class="note">
+      Each column is a real stage of YOLOv8n; each column is 20 nodes = 5% of its
+      channels. Brighter columns burn more compute — cut there first.
+      <br><br><b>mAP is measured for real</b> on <span id="nimg"></span> bird images.
+      <b>FLOPs are an estimate</b> of what a real Export removal would save
+      (masking zeros channels; it doesn't shrink the file — that's the Export step).
+    </div>
+  </div>
+</div>
+<script>
+let STAGES=[], NODE_H=20, NATIVE={}, masks={}; // masks[stage] = node count 0..20
+
+async function boot(){
+  const s = await (await fetch('/api/structure')).json();
+  STAGES=s.stages; NODE_H=s.node_height; NATIVE=s.native;
+  document.getElementById('native').textContent =
+    `yolov8n · ${NATIVE.params_m}M params · ${NATIVE.flops_g} GFLOPs · native mAP ${NATIVE.map} · ${s.device}`;
+  document.getElementById('nimg').textContent = s.eval_images;
+  render();
+  setMap(NATIVE.map);
+  updateEstimates();
+}
+
+function render(){
+  const g=document.getElementById('grid'); g.innerHTML='';
+  const maxF = Math.max(...STAGES.map(x=>x.flop_frac));
+  for(const st of STAGES){
+    const col=document.createElement('div'); col.className='col';
+    const glow = 0.25 + 0.75*(st.flop_frac/maxF);
+    const nodes=document.createElement('div'); nodes.className='nodes';
+    const lit = masks[st.stage]||0;
+    for(let i=0;i<NODE_H;i++){
+      const n=document.createElement('div');
+      n.className='node '+(i<(NODE_H-lit)?'kept':'masked');
+      n.style.opacity = i<(NODE_H-lit)? (0.45+0.55*glow) : 1;
+      n.onclick=()=>{ masks[st.stage] = (lit===NODE_H-i)?0:(NODE_H-i); render(); updateEstimates(); };
+      nodes.appendChild(n);
+    }
+    col.innerHTML=`<div class="clabel">${st.stage.replace('model.','L')}</div>
+      <div class="flabel">${(st.flop_frac*100).toFixed(0)}%</div>
+      <div class="flopbar"><i style="width:${100*st.flop_frac/maxF}%"></i></div>`;
+    col.appendChild(nodes);
+    col.insertAdjacentHTML('beforeend',`<div class="cch">${st.channels}ch</div>`);
+    g.appendChild(col);
+  }
+}
+
+function fracs(){ const o={}; for(const k in masks) if(masks[k]>0) o[k]=masks[k]/NODE_H; return o; }
+
+function updateEstimates(){
+  const f=fracs();
+  let saving=0, maskedCh=0, n=0;
+  const byF=Object.fromEntries(STAGES.map(s=>[s.stage,s.flop_frac]));
+  for(const k in f){ saving += (byF[k]||0)*f[k]; maskedCh += f[k]; n++; }
+  const avgMasked = STAGES.length? 100*Object.values(f).reduce((a,b)=>a+b,0)/STAGES.length : 0;
+  document.getElementById('flops').textContent = (NATIVE.flops_g*(1-saving)).toFixed(3)+' G';
+  document.getElementById('saving').textContent = Math.round(100*saving)+'%';
+  document.getElementById('masked').textContent = Math.round(avgMasked)+'%';
+}
+
+function setMap(m){
+  document.getElementById('mapv').textContent = m.toFixed(4);
+  const pct = 100*m/NATIVE.map;
+  document.getElementById('mapbar').style.width = Math.max(2,pct)+'%';
+  document.getElementById('mappct').textContent = `${pct.toFixed(0)}% of native`;
+}
+
+document.getElementById('measure').onclick = async (e)=>{
+  const btn=e.target; btn.disabled=true; const old=btn.textContent;
+  btn.innerHTML='<span class="spin">measuring…</span>';
+  const r = await (await fetch('/api/apply',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({masks:fracs()})})).json();
+  setMap(r.map);
+  document.getElementById('flops').textContent = r.est_flops_g+' G';
+  document.getElementById('saving').textContent = r.est_saving_pct+'%';
+  btn.disabled=false; btn.textContent=old;
+};
+
+document.getElementById('export').onclick = async (e)=>{
+  const btn=e.target; btn.disabled=true; const old=btn.textContent;
+  btn.innerHTML='<span class="spin">removing channels…</span>';
+  const r=await (await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({masks:fracs()})})).json();
+  document.getElementById('exportout').innerHTML=
+    `<div class="row"><span class="lab">real params</span><span>${r.params_m}M · ${r.params_pct}%</span></div>
+     <div class="row"><span class="lab">real FLOPs</span><span>${r.flops_g}G · ${r.flops_pct}%</span></div>
+     <div class="row"><span class="lab">real latency</span><span>${r.latency_ms} ms</span></div>
+     <div class="sub" style="margin-top:8px">saved → <b>${r.path}</b><br>↳ fine-tune to recover accuracy — structural cuts hit the cliff.</div>`;
+  btn.disabled=false; btn.textContent=old;
+};
+
+document.getElementById('reset').onclick = async ()=>{
+  masks={}; render(); updateEstimates();
+  document.getElementById('exportout').innerHTML='';
+  const r=await (await fetch('/api/reset',{method:'POST'})).json();
+  setMap(r.map);
+};
+
+boot();
+</script>
+</body>
+</html>

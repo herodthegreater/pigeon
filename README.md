@@ -29,11 +29,28 @@ fake-quantization doesn't care what the weights mean. `harness/model.py` adds
 - `samples/` — drop test images/videos here
 - `runs/` — annotated outputs
 
-## Quickstart
+## The carving cockpit (web UI)
+
+A node-grid where each column is a real YOLOv8n stage (20 nodes = 5% of its
+channels, FLOP-weighted). Click nodes to mask channels, **Measure** real bird
+mAP@50, and **Export** a genuinely smaller model that honors where you cut.
+
+```bash
+uvicorn server:app --port 8000 --app-dir .    # then open http://localhost:8000
+```
+
+- Masking is the live, reversible layer (real mAP, estimated compute).
+- Export does real dependency-aware channel removal (torch-pruning) and saves
+  `runs/pigeon_pruned.pt`. Fine-tune after Export to recover accuracy (structural
+  cuts hit the cliff — see STATUS.md).
+
+## Experiments / scripts
 
 ```bash
 # uses the shared venv at ../weight-harness/.venv
-python benchmark.py                                 # baseline numbers
-python pigeon.py --source samples/your_pigeons.jpg --save
-python pigeon.py --source 0 --track                 # live webcam
+python benchmark.py            # baseline numbers
+python carve.py                # quant curve (mAP vs bit-width)
+python prune_sweep.py          # structural cliff (mAP vs prune %)
+python finetune.py             # prune 20% + fine-tune -> recovery
+python pigeon.py --source 0 --track   # live webcam bird tracking
 ```
