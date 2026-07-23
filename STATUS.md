@@ -26,6 +26,16 @@
    => Fine-tuning is MANDATORY and interleaved: the loop is prune -> fine-tune ->
    test. The live-mask UX must show *recovery*, not just the drop.
 
+## Fine-tune recovery — LOOP CLOSED (`finetune.py`, `build_finetune_set.py`)
+Prune YOLOv8n 20% (mAP 0) -> fine-tune the *pruned* model 40 epochs on 400 COCO
+bird images -> **mAP recovers 0.000 -> 0.0706** (P/R 0 -> 0.20/0.14). Cut-and-
+regrow works end-to-end on the real model. Recovery is *partial* (vs 0.43
+native) — bottleneck is the tiny 400-image train set + a hard one-shot cut, not
+the method. How it works: drive `DetectionTrainer` directly, set
+`trainer.model = <pruned module>` (8.4 `setup_model()` returns early on an
+nn.Module, so the pruned arch survives; `_setup_train` still sets nc/names/args).
+Gotcha: background shells don't inherit cwd — use absolute paths.
+
 ## Design consequences (locked)
 - Auto-prune "training mode" = prune -> fine-tune -> test, repeat.
 - Interactive demo value = "how small can I shrink while regrowing mAP back",
@@ -34,9 +44,9 @@
   GLOBAL prune swept here -- worth testing.
 
 ## Next steps
-1. **Fine-tune recovery** (close the reverse-training loop): pull a COCO bird
-   TRAIN subset, prune ~30%, `yolo.train()` a few epochs, show mAP climb off 0.
-   This proves the method viable and unlocks everything downstream.
+1. **Stronger recovery** (loop is proven; now push the number up): more train
+   data (2k+ bird imgs), more epochs, and/or iterative small prunes with
+   fine-tuning between each cut — target mAP back near native 0.43.
 2. Per-stage prune control (`pruning_ratio_dict`) + FLOP-weighted columns
    (stages 3,5,head,1,7 ~= 64% of compute on yolo11n; recompute for v8n).
 3. FastAPI backend + node-grid front page (masking preview + real Export).

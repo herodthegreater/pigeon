@@ -9,6 +9,7 @@ venv/
 
 # Datasets / eval images (regenerate with build_eval_set.py; COCO licensing)
 eval_set/
+finetune_data/
 datasets/
 
 # Outputs
