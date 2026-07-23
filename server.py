@@ -10,7 +10,9 @@ mAP + ESTIMATED compute saved. Real structural removal is the (separate) Export.
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -51,6 +53,15 @@ NATIVE_MAP = ev.score(yolo)
 
 class ApplyReq(BaseModel):
     masks: dict[str, float] = {}
+
+
+class RecoverReq(BaseModel):
+    masks: dict[str, float] = {}
+    epochs: int = 12
+
+
+RECOVER_PROGRESS = os.path.join(HERE, "runs", "recover_progress.json")
+_recover_proc: subprocess.Popen | None = None
 
 
 def _measure(masks: dict[str, float]) -> dict:
@@ -136,3 +147,33 @@ def export(req: ApplyReq):
             "latency_ms": round(dt * 1000, 2),
             "path": os.path.relpath(path, HERE),
         }
+
+
+@app.post("/api/recover")
+def recover(req: RecoverReq):
+    """Start a background subprocess: prune per masks, then fine-tune the pruned
+    model. Progress streams to a JSON file that /api/recover_status polls."""
+    global _recover_proc
+    if _recover_proc is not None and _recover_proc.poll() is None:
+        return {"started": False, "reason": "a recovery job is already running"}
+    os.makedirs(os.path.dirname(RECOVER_PROGRESS), exist_ok=True)
+    with open(RECOVER_PROGRESS, "w") as f:
+        json.dump({"status": "starting", "epochs": req.epochs}, f)
+    _recover_proc = subprocess.Popen([
+        sys.executable, os.path.join(HERE, "recover_job.py"),
+        "--masks", json.dumps(req.masks),
+        "--epochs", str(req.epochs),
+        "--progress", RECOVER_PROGRESS,
+    ])
+    return {"started": True, "epochs": req.epochs}
+
+
+@app.get("/api/recover_status")
+def recover_status():
+    if not os.path.exists(RECOVER_PROGRESS):
+        return {"status": "idle"}
+    try:
+        with open(RECOVER_PROGRESS) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {"status": "starting"}  # mid-write; try again next poll

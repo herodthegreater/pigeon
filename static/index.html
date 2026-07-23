@@ -50,6 +50,10 @@
   #exportout{font-size:12px;border:1px solid var(--line);border-radius:7px;
              padding:4px 10px;background:#0c1218}
   #exportout:empty{display:none}
+  #recover{border-color:var(--good);color:var(--good)}
+  #recoverout{font-size:12px;border:1px solid var(--line);border-radius:7px;
+              padding:4px 10px;background:#0c1218}
+  #recoverout:empty{display:none}
   .note{font-size:11px;color:var(--dim);line-height:1.6}
   .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px}
   .tag.real{background:#123; color:var(--good);border:1px solid #274}
@@ -85,8 +89,10 @@
     </div>
     <button class="go" id="measure">▶ Measure mAP</button>
     <button id="export">⤓ Export real model</button>
+    <button id="recover">🌱 Export + Recover</button>
     <button id="reset">↺ Reset</button>
     <div id="exportout"></div>
+    <div id="recoverout"></div>
     <div class="note">
       Each column is a real stage of YOLOv8n; each column is 20 nodes = 5% of its
       channels. Brighter columns burn more compute — cut there first.
@@ -178,9 +184,42 @@ document.getElementById('export').onclick = async (e)=>{
   btn.disabled=false; btn.textContent=old;
 };
 
+document.getElementById('recover').onclick = async ()=>{
+  const btn=document.getElementById('recover');
+  const r=await (await fetch('/api/recover',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({masks:fracs(), epochs:12})})).json();
+  if(!r.started){ document.getElementById('recoverout').innerHTML=`<div class="sub">${r.reason}</div>`; return; }
+  btn.disabled=true; pollRecover();
+};
+
+async function pollRecover(){
+  const s=await (await fetch('/api/recover_status')).json();
+  renderRecover(s);
+  if(s.status==='done'||s.status==='error'){ document.getElementById('recover').disabled=false; return; }
+  setTimeout(pollRecover, 2000);
+}
+
+function renderRecover(s){
+  const el=document.getElementById('recoverout');
+  if(!s.status||s.status==='idle'){ el.innerHTML=''; return; }
+  if(s.status==='error'){ el.innerHTML=`<div class="sub" style="color:var(--bad)">error: ${s.msg}</div>`; return; }
+  if(s.status==='starting'||s.status==='pruning'){
+    el.innerHTML=`<div class="sub"><span class="spin">pruning + spinning up training…</span></div>`; return; }
+  const done = s.status==='done';
+  const pct = 100*(s.map||0);   // absolute val mAP@50 scaled to a 0–100 bar
+  el.innerHTML = `
+    <div class="row"><span class="lab">🌱 recover</span><span>epoch ${Math.min(s.epoch,s.epochs)}/${s.epochs}${done?' ✓ done':' '+SPINCHAR()}</span></div>
+    <div class="k" style="margin-top:6px">recovered mAP@50 <span class="tag est">val set</span></div>
+    <div class="v" style="font-size:26px">${(s.map||0).toFixed(4)}</div>
+    <div class="bar"><i style="width:${Math.max(2,pct)}%;background:linear-gradient(90deg,#f59e0b,var(--good))"></i></div>
+    <div class="sub">pruned to ${s.params_m}M · ${s.flops_g}G ${done?'· saved '+s.best:''}</div>`;
+}
+function SPINCHAR(){ return '<span class="spin">…training</span>'; }
+
 document.getElementById('reset').onclick = async ()=>{
   masks={}; render(); updateEstimates();
   document.getElementById('exportout').innerHTML='';
+  document.getElementById('recoverout').innerHTML='';
   const r=await (await fetch('/api/reset',{method:'POST'})).json();
   setMap(r.map);
 };

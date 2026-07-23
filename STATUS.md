@@ -53,6 +53,12 @@ FastAPI + node-grid front end, verified end-to-end in-browser:
 - **Export** -> REAL per-stage structured removal (`structured_prune_per_stage`,
   torch-pruning `pruning_ratio_dict`), measured params/FLOPs/latency, saved to
   `runs/pigeon_pruned.pt` (~2s). Honors WHERE you cut.
+- **Export + Recover** (`recover_job.py`, subprocess) -> prune + fine-tune the
+  pruned model, streaming per-epoch mAP to a JSON the UI polls. Verified: a light
+  L9 cut recovered **0.00 -> 0.4395 (val mAP@50) in ~2 epochs**, saved to
+  `runs/recover/weights/best.pt`. The whole cut-and-regrow loop, in one button.
+  (Recover mAP is on the 125-img training-val set; the cockpit's live mAP is a
+  40-img fast subset -- both real, different sample sizes.)
 - Responsive (stacks on narrow viewports). Run: `uvicorn server:app --port 8000`.
 Deps added: fastapi, uvicorn.
 
