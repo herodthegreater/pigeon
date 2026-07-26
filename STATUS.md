@@ -69,6 +69,12 @@ FastAPI + node-grid front end, verified end-to-end in-browser:
   badges (✂ safe / ⚠ careful / 🛑 costly), a live **Coach** that critiques your
   cuts, an **efficiency-frontier** chart (compute-removed vs. mAP per Measure),
   and a "Principles of carving" lesson.
+- **Technique-split, explanation-first redesign**: a persistent scoreboard
+  (mAP / size / compute vs native) over three modules — **Precision** (quantize,
+  `/api/quantize`), **Structure** (prune, scan+grid), **Regrow** (fine-tune).
+  Each leads with a plain-English explanation + a one-click **suggested** action
+  (Apply 8-bit / Cut top-value stages / Recover 12 epochs) and hides manual
+  controls behind a "details" expander. Useful first, informative second.
 - Responsive (stacks on narrow viewports). Run: `uvicorn server:app --port 8000`.
 Deps added: fastapi, uvicorn.
 

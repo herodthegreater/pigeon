@@ -29,7 +29,7 @@ from ultralytics import YOLO
 
 from harness.evaluate import BirdmAPEvaluator
 from harness.mask import apply_masks, estimated_flop_saving, mask_stage, stage_table
-from harness.model import restore, snapshot
+from harness.model import apply_uniform, restore, snapshot
 from harness.prune import make_prunable, structured_prune_per_stage
 
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -61,6 +61,11 @@ class ApplyReq(BaseModel):
 class RecoverReq(BaseModel):
     masks: dict[str, float] = {}
     epochs: int = 12
+
+
+class QuantReq(BaseModel):
+    bits: int = 8
+    group_size: int | None = 128
 
 
 RECOVER_PROGRESS = os.path.join(HERE, "runs", "recover_progress.json")
@@ -124,6 +129,26 @@ def sensitivity(probe: float = 0.25):
         restore(yolo.model, SNAP)
         yolo.predictor = None
         return {"probe": probe, "native_map": round(NATIVE_MAP_SCAN, 4), "stages": out}
+
+
+@app.post("/api/quantize")
+def quantize(req: QuantReq):
+    """Precision technique: fake-quantize every weight to `bits` and measure the
+    real mAP. Reports estimated on-disk size (bytes scale with bits)."""
+    with _lock:
+        restore(yolo.model, SNAP)
+        if req.bits < 16:
+            apply_uniform(yolo.model, req.bits, group_size=req.group_size)
+        yolo.predictor = None
+        m = ev.score(yolo)
+        return {
+            "bits": req.bits,
+            "map": round(m, 4),
+            "map_pct": round(100 * m / max(NATIVE_MAP, 1e-9)),
+            "size_mb": round(NATIVE_PARAMS * req.bits / 8 / 1e6, 2),
+            "native_mb": round(NATIVE_PARAMS * 16 / 8 / 1e6, 2),
+            "size_pct": round(100 * req.bits / 16),
+        }
 
 
 @app.post("/api/apply")
