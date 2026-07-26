@@ -59,6 +59,16 @@ FastAPI + node-grid front end, verified end-to-end in-browser:
   `runs/recover/weights/best.pt`. The whole cut-and-regrow loop, in one button.
   (Recover mAP is on the 125-img training-val set; the cockpit's live mAP is a
   40-img fast subset -- both real, different sample sizes.)
+- **Sensitivity scan** (`GET /api/sensitivity`, ~3.5s): probes every stage
+  (cut 25%, measure mAP drop on a 16-img subset), colors the grid green→red and
+  ranks by **value = FLOP / sensitivity**. Teaches cut-by-value: e.g. L16 (4%
+  FLOPs, sens 1) is nearly free to cut while L4 (5% FLOPs, sens 100) is
+  load-bearing. Foundation of the "k-cuts" method (probe → cut-by-value →
+  fine-tune → re-probe).
+- **Educational redesign**: teaching banner, encodings legend, per-stage verdict
+  badges (✂ safe / ⚠ careful / 🛑 costly), a live **Coach** that critiques your
+  cuts, an **efficiency-frontier** chart (compute-removed vs. mAP per Measure),
+  and a "Principles of carving" lesson.
 - Responsive (stacks on narrow viewports). Run: `uvicorn server:app --port 8000`.
 Deps added: fastapi, uvicorn.
 

@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from ultralytics import YOLO
 
 from harness.evaluate import BirdmAPEvaluator
-from harness.mask import apply_masks, estimated_flop_saving, stage_table
+from harness.mask import apply_masks, estimated_flop_saving, mask_stage, stage_table
 from harness.model import restore, snapshot
 from harness.prune import make_prunable, structured_prune_per_stage
 
@@ -40,6 +40,8 @@ _lock = threading.Lock()
 
 ev = BirdmAPEvaluator(os.path.join(HERE, "eval_set"), device=DEVICE,
                       max_images=LIVE_EVAL_IMAGES)
+ev_scan = BirdmAPEvaluator(os.path.join(HERE, "eval_set"), device=DEVICE,
+                           max_images=16)  # tiny subset -> fast per-stage probing
 yolo = YOLO(os.path.join(HERE, "yolov8n.pt"))
 yolo.model.to(DEVICE).eval()
 # Warm/fuse so snapshot + masking act on the exact weights inference uses.
@@ -49,6 +51,7 @@ TABLE = stage_table(yolo.model)
 _ex = torch.randn(1, 3, 640, 640, device=DEVICE)
 NATIVE_MACS, NATIVE_PARAMS = tp.utils.count_ops_and_params(yolo.model, _ex)
 NATIVE_MAP = ev.score(yolo)
+NATIVE_MAP_SCAN = ev_scan.score(yolo)
 
 
 class ApplyReq(BaseModel):
@@ -97,6 +100,30 @@ def structure():
         "eval_images": len(ev.images),
         "device": DEVICE,
     }
+
+
+@app.get("/api/sensitivity")
+def sensitivity(probe: float = 0.25):
+    """Probe every stage: cut `probe` of its channels, measure the mAP drop.
+    High drop = load-bearing (avoid); low drop = redundant (cut here). Combined
+    with FLOP share this teaches cut-by-value = FLOP / sensitivity."""
+    with _lock:
+        out = []
+        for t in TABLE:
+            restore(yolo.model, SNAP)
+            mask_stage(yolo.model, t["stage"], probe)
+            yolo.predictor = None
+            m = ev_scan.score(yolo)
+            drop = max(0.0, (NATIVE_MAP_SCAN - m) / max(NATIVE_MAP_SCAN, 1e-9))
+            value = t["flop_frac"] / (drop + 0.05)  # compute saved per accuracy lost
+            out.append({
+                "stage": t["stage"], "flop_frac": t["flop_frac"],
+                "channels": t["channels"], "sensitivity": round(drop, 3),
+                "value": round(value, 3),
+            })
+        restore(yolo.model, SNAP)
+        yolo.predictor = None
+        return {"probe": probe, "native_map": round(NATIVE_MAP_SCAN, 4), "stages": out}
 
 
 @app.post("/api/apply")

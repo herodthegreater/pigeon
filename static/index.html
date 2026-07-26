@@ -6,224 +6,305 @@
 <title>PIGEON — carving cockpit</title>
 <style>
   :root{
-    --bg:#0a0e12; --panel:#111820; --line:#1e2a35; --ink:#c9d6e0;
-    --dim:#5a6b78; --accent:#3fe0c8; --accent2:#7dd3fc; --bad:#ff5c6c; --good:#4ade80;
+    --bg:#080b10; --bg2:#0c1219; --panel:#0f1620; --card:#121b26; --line:#1e2b38;
+    --ink:#d3e0ea; --dim:#647684; --faint:#3a4653;
+    --accent:#3fe0c8; --accent2:#7dd3fc; --good:#4ade80; --warn:#f7b955; --bad:#ff5c6c;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);
-       font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
-  header{padding:18px 22px;border-bottom:1px solid var(--line);
-         display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
-  h1{margin:0;font-size:20px;letter-spacing:3px;color:var(--accent)}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#0e1a24,var(--bg));
+       color:var(--ink);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+  a{color:var(--accent2)}
+  header{padding:16px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+         border-bottom:1px solid var(--line);background:rgba(8,11,16,.6);backdrop-filter:blur(6px)}
+  h1{margin:0;font-size:19px;letter-spacing:2px;color:var(--accent);white-space:nowrap}
   h1 .b{color:var(--ink)}
-  .sub{color:var(--dim)}
-  .wrap{display:flex;gap:0;height:calc(100vh - 60px)}
-  .stage-area{flex:1;overflow:auto;padding:22px}
-  .grid{display:flex;gap:10px;align-items:flex-end;min-height:100%}
-  .col{display:flex;flex-direction:column;align-items:center;gap:6px;
-       min-width:44px}
-  .clabel{font-size:11px;color:var(--dim);text-align:center}
-  .cch{font-size:10px;color:var(--dim)}
-  .flopbar{height:3px;width:34px;background:#0d141b;border-radius:2px;overflow:hidden}
-  .flopbar > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
-  .flabel{font-size:9px;color:var(--accent2)}
+  .tag-line{color:var(--dim);font-size:12px;flex:1;min-width:180px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:11px;color:var(--dim);background:var(--card);border:1px solid var(--line);
+        border-radius:20px;padding:3px 10px;white-space:nowrap}
+  .chip b{color:var(--ink)}
+  .banner{padding:11px 22px;background:linear-gradient(90deg,rgba(63,224,200,.08),transparent);
+          border-bottom:1px solid var(--line);color:var(--ink);font-size:12.5px}
+  .banner b{color:var(--accent)}
+  .wrap{display:flex;gap:0;height:calc(100vh - 118px)}
+  .floor{flex:1;overflow:auto;padding:16px 20px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px;font-size:11px;color:var(--dim)}
+  .legend .k{display:flex;align-items:center;gap:6px}
+  .swatch{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .grid{display:flex;gap:9px;align-items:flex-end;min-height:calc(100% - 40px)}
+  .col{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:46px;
+       padding:6px 4px;border-radius:9px;border:1px solid transparent;transition:.15s}
+  .col:hover{background:rgba(125,211,252,.04)}
+  .col.scored{border-top:3px solid var(--top,transparent)}
+  .clabel{font-size:11px;color:var(--ink);font-weight:600}
+  .badge{font-size:9px;padding:1px 5px;border-radius:5px;white-space:nowrap}
+  .badge.good{background:#0f2a1c;color:var(--good);border:1px solid #235}
+  .badge.warn{background:#2a2410;color:var(--warn);border:1px solid #543}
+  .badge.bad{background:#2a1418;color:var(--bad);border:1px solid #533}
+  .badge.flat{background:var(--card);color:var(--accent2);border:1px solid var(--line)}
   .nodes{display:flex;flex-direction:column-reverse;gap:2px;padding:5px;
-         border:1px solid var(--line);border-radius:6px;background:#0c1218}
-  .node{width:22px;height:9px;border-radius:2px;background:#24313d;cursor:pointer;
-        transition:.08s}
+         border:1px solid var(--line);border-radius:7px;background:#0a0f15}
+  .node{width:24px;height:9px;border-radius:2px;background:#20303c;cursor:pointer;transition:.08s}
   .node:hover{outline:1px solid var(--accent2)}
-  .node.kept{background:linear-gradient(90deg,#2a6f63,#3fe0c8)}
-  .node.masked{background:#37202a;box-shadow:inset 0 0 0 1px #5a2530}
-  .panel{width:300px;border-left:1px solid var(--line);background:var(--panel);
-         padding:20px;display:flex;flex-direction:column;gap:18px;overflow:auto}
-  .metric .k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px}
-  .metric .v{font-size:30px;font-weight:600}
-  .bar{height:8px;background:#0c1218;border-radius:4px;overflow:hidden;margin-top:6px}
-  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--bad),var(--good));transition:.3s width}
-  .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)}
+  .node.kept{background:linear-gradient(90deg,#296b60,var(--accent))}
+  .node.masked{background:#3a1c24;box-shadow:inset 0 0 0 1px #5f2733}
+  .cch{font-size:9.5px;color:var(--faint)}
+  .panel{width:330px;border-left:1px solid var(--line);background:var(--panel);
+         padding:16px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px}
+  .k{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:1.2px}
+  .v{font-size:32px;font-weight:700;line-height:1.1}
+  .bar{height:8px;background:#0a0f15;border-radius:5px;overflow:hidden;margin-top:8px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--bad),var(--warn),var(--good));transition:.4s width}
+  .row{display:flex;justify-content:space-between;padding:5px 0}
+  .row + .row{border-top:1px solid var(--line)}
   .row .lab{color:var(--dim)}
-  button{font:inherit;padding:11px;border-radius:7px;border:1px solid var(--line);
-         background:#16212b;color:var(--ink);cursor:pointer;width:100%}
-  button.go{background:var(--accent);color:#04120f;border-color:var(--accent);font-weight:700}
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  button{font:inherit;font-size:12px;padding:11px 8px;border-radius:9px;border:1px solid var(--line);
+         background:#16212b;color:var(--ink);cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--accent2)}
   button:disabled{opacity:.5;cursor:wait}
-  #export{border-color:var(--accent2);color:var(--accent2)}
-  #exportout{font-size:12px;border:1px solid var(--line);border-radius:7px;
-             padding:4px 10px;background:#0c1218}
-  #exportout:empty{display:none}
+  #measure{grid-column:1/3;background:var(--accent);color:#04120f;border-color:var(--accent);font-weight:700}
+  #scan{grid-column:1/3;border-color:var(--accent2);color:var(--accent2)}
+  #export{border-color:var(--line)}
   #recover{border-color:var(--good);color:var(--good)}
-  #recoverout{font-size:12px;border:1px solid var(--line);border-radius:7px;
-              padding:4px 10px;background:#0c1218}
-  #recoverout:empty{display:none}
-  .note{font-size:11px;color:var(--dim);line-height:1.6}
-  .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px}
-  .tag.real{background:#123; color:var(--good);border:1px solid #274}
-  .tag.est{background:#210; color:#fb923c;border:1px solid #532}
+  .coach .ctitle{color:var(--accent2);font-size:11px;letter-spacing:1px;margin-bottom:6px}
+  .sub{font-size:11.5px;color:var(--dim);line-height:1.65}
+  .sub b{color:var(--ink)}
+  .tag{display:inline-block;padding:1px 6px;border-radius:5px;font-size:10px}
+  .tag.real{background:#0f2a1c;color:var(--good);border:1px solid #235}
+  .tag.est{background:#2a1c10;color:var(--warn);border:1px solid #543}
+  #exportout,#recoverout{font-size:12px}
+  #exportout:empty,#recoverout:empty{display:none}
   .spin{color:var(--accent);animation:p 1s infinite}
-  @keyframes p{50%{opacity:.4}}
-  @media (max-width:760px){
-    .wrap{flex-direction:column;height:auto}
-    .stage-area{height:50vh}
+  @keyframes p{50%{opacity:.35}}
+  details.lesson{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:0 14px}
+  details.lesson summary{cursor:pointer;padding:12px 0;color:var(--accent2);font-size:12px;letter-spacing:.5px}
+  details.lesson[open] summary{border-bottom:1px solid var(--line);margin-bottom:10px}
+  details.lesson ol{margin:0 0 12px;padding-left:18px}
+  details.lesson li{margin:7px 0;color:var(--dim);font-size:11.5px;line-height:1.6}
+  details.lesson li b{color:var(--ink)}
+  svg.frontier{width:100%;height:150px;display:block}
+  @media (max-width:820px){
+    .wrap{flex-direction:column;height:auto}.floor{height:52vh}
     .panel{width:auto;border-left:none;border-top:1px solid var(--line)}
-    header{padding:14px}
   }
 </style>
 </head>
 <body>
 <header>
   <h1>🐦 PIGEON<span class="b"> // carving cockpit</span></h1>
-  <span class="sub" id="native">loading…</span>
+  <span class="tag-line">reverse-training a detector — learn where to cut</span>
+  <span class="chips" id="chips"><span class="chip">loading…</span></span>
 </header>
+<div class="banner">
+  <b>The rule of carving:</b> cut where <b>compute is high</b> (bright, tall columns) and
+  <b>accuracy-cost is low</b> (green after a scan). Value = FLOP ÷ sensitivity.
+</div>
 <div class="wrap">
-  <div class="stage-area"><div class="grid" id="grid"></div></div>
-  <div class="panel">
-    <div class="metric">
+  <section class="floor">
+    <div class="legend">
+      <span class="k"><span class="swatch" style="background:linear-gradient(90deg,#296b60,#3fe0c8)"></span> kept channel (brightness = compute)</span>
+      <span class="k"><span class="swatch" style="background:#3a1c24"></span> masked / removed</span>
+      <span class="k"><span class="swatch" style="background:var(--good)"></span> low sensitivity → cut freely</span>
+      <span class="k"><span class="swatch" style="background:var(--bad)"></span> high sensitivity → load-bearing</span>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+  <aside class="panel">
+    <div class="card">
       <div class="k">bird mAP@50 <span class="tag real">REAL</span></div>
       <div class="v" id="mapv">—</div>
       <div class="bar"><i id="mapbar" style="width:100%"></i></div>
       <div class="sub" id="mappct"></div>
-    </div>
-    <div>
-      <div class="row"><span class="lab">est. FLOPs <span class="tag est">EST</span></span><span id="flops">—</span></div>
+      <div class="row" style="margin-top:8px"><span class="lab">est. FLOPs <span class="tag est">EST</span></span><span id="flops">—</span></div>
       <div class="row"><span class="lab">est. compute removed</span><span id="saving">0%</span></div>
-      <div class="row"><span class="lab">total channels masked</span><span id="masked">0%</span></div>
     </div>
-    <button class="go" id="measure">▶ Measure mAP</button>
-    <button id="export">⤓ Export real model</button>
-    <button id="recover">🌱 Export + Recover</button>
-    <button id="reset">↺ Reset</button>
-    <div id="exportout"></div>
+    <div class="actions">
+      <button id="scan">🔬 Scan sensitivity</button>
+      <button id="measure">▶ Measure mAP</button>
+      <button id="export">⤓ Export</button>
+      <button id="recover">🌱 Recover</button>
+      <button id="reset" style="grid-column:1/3">↺ Reset</button>
+    </div>
+    <div class="card coach" id="coach"></div>
+    <div class="card">
+      <div class="k">efficiency frontier</div>
+      <svg class="frontier" id="frontier" viewBox="0 0 280 150" preserveAspectRatio="none"></svg>
+      <div class="sub">each ▶ Measure plots compute-removed vs. accuracy. Stay top-left.</div>
+    </div>
     <div id="recoverout"></div>
-    <div class="note">
-      Each column is a real stage of YOLOv8n; each column is 20 nodes = 5% of its
-      channels. Brighter columns burn more compute — cut there first.
-      <br><br><b>mAP is measured for real</b> on <span id="nimg"></span> bird images.
-      <b>FLOPs are an estimate</b> of what a real Export removal would save
-      (masking zeros channels; it doesn't shrink the file — that's the Export step).
-    </div>
-  </div>
+    <div id="exportout"></div>
+    <details class="lesson">
+      <summary>▸ Principles of carving</summary>
+      <ol>
+        <li><b>Precision is cheap, structure is a cliff.</b> Dropping bits degrades gently; removing whole channels can kill the model in one cut — so pruning always needs regrowth.</li>
+        <li><b>Cut where the FLOPs are.</b> A handful of stages hold most of the compute; trimming the tiny ones changes nothing.</li>
+        <li><b>Cut where sensitivity is low.</b> <b>Scan</b> first: some stages are redundant, some are load-bearing. Value = FLOP ÷ sensitivity.</li>
+        <li><b>Cut a little, regrow, repeat.</b> Small cuts + fine-tune (Recover) beat one big cut. Re-scan after each round — the map shifts.</li>
+        <li><b>Trust FLOPs, not laptop latency.</b> On a Mac the speed win hides; the FLOP/param drop is the portable prize for edge hardware.</li>
+      </ol>
+    </details>
+  </aside>
 </div>
 <script>
-let STAGES=[], NODE_H=20, NATIVE={}, masks={}; // masks[stage] = node count 0..20
+let STAGES=[], NODE_H=20, NATIVE={}, masks={}, SENS=null, frontier=[];
 
 async function boot(){
   const s = await (await fetch('/api/structure')).json();
   STAGES=s.stages; NODE_H=s.node_height; NATIVE=s.native;
-  document.getElementById('native').textContent =
-    `yolov8n · ${NATIVE.params_m}M params · ${NATIVE.flops_g} GFLOPs · native mAP ${NATIVE.map} · ${s.device}`;
-  document.getElementById('nimg').textContent = s.eval_images;
-  render();
-  setMap(NATIVE.map);
-  updateEstimates();
+  document.getElementById('chips').innerHTML =
+    `<span class="chip">yolov8n</span><span class="chip"><b>${NATIVE.params_m}M</b> params</span>
+     <span class="chip"><b>${NATIVE.flops_g}</b> GFLOPs</span><span class="chip">native mAP <b>${NATIVE.map}</b></span>
+     <span class="chip">${s.device}</span>`;
+  render(); setMap(NATIVE.map); updateEstimates(); coach(); drawFrontier();
+}
+
+function sensColor(sv){ // 0 (green) -> 0.6+ (red)
+  const h = Math.max(0, 140 - 233*Math.min(sv,0.6));
+  return `hsl(${h},72%,55%)`;
+}
+function verdict(sv){
+  if(sv==null) return null;
+  if(sv<0.15) return {t:'✂ safe', c:'good'};
+  if(sv<0.40) return {t:'⚠ careful', c:'warn'};
+  return {t:'🛑 costly', c:'bad'};
 }
 
 function render(){
   const g=document.getElementById('grid'); g.innerHTML='';
   const maxF = Math.max(...STAGES.map(x=>x.flop_frac));
   for(const st of STAGES){
-    const col=document.createElement('div'); col.className='col';
-    const glow = 0.25 + 0.75*(st.flop_frac/maxF);
-    const nodes=document.createElement('div'); nodes.className='nodes';
+    const col=document.createElement('div');
+    const sv = SENS ? SENS[st.stage].sensitivity : null;
+    col.className='col'+(sv!=null?' scored':'');
+    if(sv!=null) col.style.setProperty('--top', sensColor(sv));
+    const glow = 0.30 + 0.70*(st.flop_frac/maxF);
     const lit = masks[st.stage]||0;
+    const vd = verdict(sv);
+    const badge = vd ? `<span class="badge ${vd.c}">${vd.t}</span>`
+                     : `<span class="badge flat">${(st.flop_frac*100).toFixed(0)}% flops</span>`;
+    col.innerHTML=`<div class="clabel">${st.stage.replace('model.','L')}</div>${badge}`;
+    const nodes=document.createElement('div'); nodes.className='nodes';
     for(let i=0;i<NODE_H;i++){
       const n=document.createElement('div');
       n.className='node '+(i<(NODE_H-lit)?'kept':'masked');
-      n.style.opacity = i<(NODE_H-lit)? (0.45+0.55*glow) : 1;
-      n.onclick=()=>{ masks[st.stage] = (lit===NODE_H-i)?0:(NODE_H-i); render(); updateEstimates(); };
+      if(i<(NODE_H-lit)) n.style.opacity=0.4+0.6*glow;
+      n.onclick=()=>{ masks[st.stage]=(lit===NODE_H-i)?0:(NODE_H-i); render(); updateEstimates(); coach(); };
       nodes.appendChild(n);
     }
-    col.innerHTML=`<div class="clabel">${st.stage.replace('model.','L')}</div>
-      <div class="flabel">${(st.flop_frac*100).toFixed(0)}%</div>
-      <div class="flopbar"><i style="width:${100*st.flop_frac/maxF}%"></i></div>`;
     col.appendChild(nodes);
-    col.insertAdjacentHTML('beforeend',`<div class="cch">${st.channels}ch</div>`);
+    col.insertAdjacentHTML('beforeend',
+      `<div class="cch">${st.channels}ch</div>`+
+      (sv!=null?`<div class="cch" style="color:${sensColor(sv)}">sens ${(sv*100).toFixed(0)}</div>`:''));
     g.appendChild(col);
   }
 }
 
 function fracs(){ const o={}; for(const k in masks) if(masks[k]>0) o[k]=masks[k]/NODE_H; return o; }
-
 function updateEstimates(){
-  const f=fracs();
-  let saving=0, maskedCh=0, n=0;
-  const byF=Object.fromEntries(STAGES.map(s=>[s.stage,s.flop_frac]));
-  for(const k in f){ saving += (byF[k]||0)*f[k]; maskedCh += f[k]; n++; }
-  const avgMasked = STAGES.length? 100*Object.values(f).reduce((a,b)=>a+b,0)/STAGES.length : 0;
-  document.getElementById('flops').textContent = (NATIVE.flops_g*(1-saving)).toFixed(3)+' G';
-  document.getElementById('saving').textContent = Math.round(100*saving)+'%';
-  document.getElementById('masked').textContent = Math.round(avgMasked)+'%';
+  const f=fracs(); const byF=Object.fromEntries(STAGES.map(s=>[s.stage,s.flop_frac]));
+  let saving=0; for(const k in f) saving+=(byF[k]||0)*f[k];
+  document.getElementById('flops').textContent=(NATIVE.flops_g*(1-saving)).toFixed(3)+' G';
+  document.getElementById('saving').textContent=Math.round(100*saving)+'%';
+  return Math.round(100*saving);
 }
-
 function setMap(m){
-  document.getElementById('mapv').textContent = m.toFixed(4);
-  const pct = 100*m/NATIVE.map;
-  document.getElementById('mapbar').style.width = Math.max(2,pct)+'%';
-  document.getElementById('mappct').textContent = `${pct.toFixed(0)}% of native`;
+  document.getElementById('mapv').textContent=m.toFixed(4);
+  const pct=100*m/NATIVE.map;
+  document.getElementById('mapbar').style.width=Math.max(2,pct)+'%';
+  document.getElementById('mappct').textContent=`${pct.toFixed(0)}% of native`;
 }
 
-document.getElementById('measure').onclick = async (e)=>{
-  const btn=e.target; btn.disabled=true; const old=btn.textContent;
-  btn.innerHTML='<span class="spin">measuring…</span>';
-  const r = await (await fetch('/api/apply',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({masks:fracs()})})).json();
+function coach(){
+  const el=document.getElementById('coach');
+  const title='<div class="ctitle">💡 COACH</div>';
+  if(!SENS){ el.innerHTML=title+`<div class="sub">Hit <b>🔬 Scan sensitivity</b> — it probes every stage and reveals where cutting is cheap vs. costly, so you can cut by <b>value = FLOP ÷ sensitivity</b> instead of guessing.</div>`; return; }
+  const ranked=[...STAGES].map(s=>({...s,...SENS[s.stage]})).sort((a,b)=>b.value-a.value);
+  const best=ranked.filter(s=>s.sensitivity<0.2).slice(0,3).map(s=>s.stage.replace('model.','L'));
+  const cut=Object.keys(masks).filter(k=>masks[k]>0);
+  const costly=cut.filter(k=>SENS[k]&&SENS[k].sensitivity>0.4).map(k=>k.replace('model.','L'));
+  let msg;
+  if(!cut.length) msg=`Best-value cuts: <b>${best.join(', ')||'—'}</b> — high compute, low accuracy-cost. Start there, then <b>Measure</b>.`;
+  else if(costly.length) msg=`⚠ You're cutting <b>${costly.join(', ')}</b>, which the bird task leans on — expect a steep drop. Move those cuts to <b>${best.join(', ')||'lower-sensitivity stages'}</b>.`;
+  else msg=`👍 Good targets — low-sensitivity, high-compute. Push deeper, then <b>Measure</b>, then <b>Recover</b> to regrow the lost accuracy.`;
+  el.innerHTML=title+`<div class="sub">${msg}</div>`;
+}
+
+function drawFrontier(){
+  const svg=document.getElementById('frontier'); const W=280,H=150,pad=26;
+  const xmax=60, ymax=Math.max(NATIVE.map*1.08,0.1);
+  const X=v=>pad+(Math.min(v,xmax)/xmax)*(W-pad-10);
+  const Y=v=>H-pad-(Math.min(v,ymax)/ymax)*(H-pad-12);
+  const pts=[{x:0,y:NATIVE.map,n:1}].concat(frontier.map(p=>({x:p.removed,y:p.map})));
+  const line=pts.slice().sort((a,b)=>a.x-b.x);
+  const path=line.map((p,i)=>(i?'L':'M')+X(p.x).toFixed(1)+' '+Y(p.y).toFixed(1)).join(' ');
+  const dots=pts.map(p=>`<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="${p.n?4:3}" fill="${p.n?'#7dd3fc':'#3fe0c8'}"/>`).join('');
+  svg.innerHTML=`
+    <line x1="${pad}" y1="${H-pad}" x2="${W-6}" y2="${H-pad}" stroke="#25333f"/>
+    <line x1="${pad}" y1="10" x2="${pad}" y2="${H-pad}" stroke="#25333f"/>
+    <text x="${pad}" y="${H-8}" fill="#647684" font-size="8">0%</text>
+    <text x="${W-30}" y="${H-8}" fill="#647684" font-size="8">compute ${xmax}%</text>
+    <text x="4" y="16" fill="#647684" font-size="8">mAP</text>
+    <path d="${path}" fill="none" stroke="#3fe0c8" stroke-width="1.5" opacity="0.7"/>${dots}`;
+}
+
+document.getElementById('scan').onclick=async(e)=>{
+  const b=e.target,old=b.textContent; b.disabled=true; b.innerHTML='<span class="spin">probing every stage…</span>';
+  const s=await (await fetch('/api/sensitivity')).json();
+  SENS=Object.fromEntries(s.stages.map(x=>[x.stage,x]));
+  render(); coach(); b.disabled=false; b.textContent=old;
+};
+document.getElementById('measure').onclick=async(e)=>{
+  const b=e.target,old=b.textContent; b.disabled=true; b.innerHTML='<span class="spin">measuring…</span>';
+  const r=await (await fetch('/api/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({masks:fracs()})})).json();
   setMap(r.map);
-  document.getElementById('flops').textContent = r.est_flops_g+' G';
-  document.getElementById('saving').textContent = r.est_saving_pct+'%';
-  btn.disabled=false; btn.textContent=old;
+  document.getElementById('flops').textContent=r.est_flops_g+' G';
+  document.getElementById('saving').textContent=r.est_saving_pct+'%';
+  frontier.push({removed:r.est_saving_pct, map:r.map}); drawFrontier();
+  b.disabled=false; b.textContent=old;
 };
-
-document.getElementById('export').onclick = async (e)=>{
-  const btn=e.target; btn.disabled=true; const old=btn.textContent;
-  btn.innerHTML='<span class="spin">removing channels…</span>';
-  const r=await (await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({masks:fracs()})})).json();
-  document.getElementById('exportout').innerHTML=
-    `<div class="row"><span class="lab">real params</span><span>${r.params_m}M · ${r.params_pct}%</span></div>
-     <div class="row"><span class="lab">real FLOPs</span><span>${r.flops_g}G · ${r.flops_pct}%</span></div>
-     <div class="row"><span class="lab">real latency</span><span>${r.latency_ms} ms</span></div>
-     <div class="sub" style="margin-top:8px">saved → <b>${r.path}</b><br>↳ fine-tune to recover accuracy — structural cuts hit the cliff.</div>`;
-  btn.disabled=false; btn.textContent=old;
+document.getElementById('export').onclick=async(e)=>{
+  const b=e.target,old=b.textContent; b.disabled=true; b.innerHTML='<span class="spin">removing…</span>';
+  const r=await (await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({masks:fracs()})})).json();
+  document.getElementById('exportout').innerHTML=`<div class="card">
+    <div class="k">exported model <span class="tag real">REAL</span></div>
+    <div class="row"><span class="lab">params</span><span>${r.params_m}M · ${r.params_pct}%</span></div>
+    <div class="row"><span class="lab">FLOPs</span><span>${r.flops_g}G · ${r.flops_pct}%</span></div>
+    <div class="row"><span class="lab">latency</span><span>${r.latency_ms} ms</span></div>
+    <div class="sub" style="margin-top:6px">saved → <b>${r.path}</b> · fine-tune to recover accuracy.</div></div>`;
+  b.disabled=false; b.textContent=old;
 };
-
-document.getElementById('recover').onclick = async ()=>{
-  const btn=document.getElementById('recover');
-  const r=await (await fetch('/api/recover',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({masks:fracs(), epochs:12})})).json();
-  if(!r.started){ document.getElementById('recoverout').innerHTML=`<div class="sub">${r.reason}</div>`; return; }
-  btn.disabled=true; pollRecover();
+document.getElementById('recover').onclick=async()=>{
+  const b=document.getElementById('recover');
+  const r=await (await fetch('/api/recover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({masks:fracs(),epochs:12})})).json();
+  if(!r.started){ document.getElementById('recoverout').innerHTML=`<div class="card sub">${r.reason}</div>`; return; }
+  b.disabled=true; pollRecover();
 };
-
 async function pollRecover(){
-  const s=await (await fetch('/api/recover_status')).json();
-  renderRecover(s);
+  const s=await (await fetch('/api/recover_status')).json(); renderRecover(s);
   if(s.status==='done'||s.status==='error'){ document.getElementById('recover').disabled=false; return; }
-  setTimeout(pollRecover, 2000);
+  setTimeout(pollRecover,2000);
 }
-
 function renderRecover(s){
   const el=document.getElementById('recoverout');
   if(!s.status||s.status==='idle'){ el.innerHTML=''; return; }
-  if(s.status==='error'){ el.innerHTML=`<div class="sub" style="color:var(--bad)">error: ${s.msg}</div>`; return; }
-  if(s.status==='starting'||s.status==='pruning'){
-    el.innerHTML=`<div class="sub"><span class="spin">pruning + spinning up training…</span></div>`; return; }
-  const done = s.status==='done';
-  const pct = 100*(s.map||0);   // absolute val mAP@50 scaled to a 0–100 bar
-  el.innerHTML = `
-    <div class="row"><span class="lab">🌱 recover</span><span>epoch ${Math.min(s.epoch,s.epochs)}/${s.epochs}${done?' ✓ done':' '+SPINCHAR()}</span></div>
-    <div class="k" style="margin-top:6px">recovered mAP@50 <span class="tag est">val set</span></div>
+  if(s.status==='error'){ el.innerHTML=`<div class="card sub" style="color:var(--bad)">error: ${s.msg}</div>`; return; }
+  if(s.status==='starting'||s.status==='pruning'){ el.innerHTML=`<div class="card sub"><span class="spin">pruning + spinning up training…</span></div>`; return; }
+  const done=s.status==='done', pct=100*(s.map||0);
+  el.innerHTML=`<div class="card">
+    <div class="k">🌱 recover <span class="tag est">val set</span></div>
+    <div class="row"><span class="lab">epoch</span><span>${Math.min(s.epoch,s.epochs)}/${s.epochs}${done?' ✓ done':' '+'<span class="spin">…training</span>'}</span></div>
     <div class="v" style="font-size:26px">${(s.map||0).toFixed(4)}</div>
-    <div class="bar"><i style="width:${Math.max(2,pct)}%;background:linear-gradient(90deg,#f59e0b,var(--good))"></i></div>
-    <div class="sub">pruned to ${s.params_m}M · ${s.flops_g}G ${done?'· saved '+s.best:''}</div>`;
+    <div class="bar"><i style="width:${Math.max(2,pct)}%"></i></div>
+    <div class="sub">pruned to ${s.params_m}M · ${s.flops_g}G${done?' · saved '+s.best:''}</div></div>`;
 }
-function SPINCHAR(){ return '<span class="spin">…training</span>'; }
-
-document.getElementById('reset').onclick = async ()=>{
-  masks={}; render(); updateEstimates();
-  document.getElementById('exportout').innerHTML='';
-  document.getElementById('recoverout').innerHTML='';
-  const r=await (await fetch('/api/reset',{method:'POST'})).json();
-  setMap(r.map);
+document.getElementById('reset').onclick=async()=>{
+  masks={}; render(); updateEstimates(); coach();
+  document.getElementById('exportout').innerHTML=''; document.getElementById('recoverout').innerHTML='';
+  frontier=[]; drawFrontier();
+  const r=await (await fetch('/api/reset',{method:'POST'})).json(); setMap(r.map);
 };
-
 boot();
 </script>
 </body>
