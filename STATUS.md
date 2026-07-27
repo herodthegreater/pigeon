@@ -44,7 +44,7 @@ reloaded (YOLO(best)) model no-ops (params flat at 2.775M across steps), so the
 "20% in 3 steps" is really ~12% in 1 step. Fix before building auto-prune mode;
 does not block the UI (single-prune + masking).
 
-## Carving cockpit (web UI) — BUILT (`server.py`, `static/index.html`, `harness/mask.py`)
+## Reverse-training cockpit (web UI) — BUILT (`server.py`, `static/index.html`, `harness/mask.py`)
 FastAPI + node-grid front end, verified end-to-end in-browser:
 - 17 real YOLOv8n stages as columns, 20 nodes = 5% each, FLOP-weighted glow.
 - Click nodes -> **mask** channels (zero lowest-L1; live, reversible, no crash).
@@ -68,7 +68,7 @@ FastAPI + node-grid front end, verified end-to-end in-browser:
 - **Educational redesign**: teaching banner, encodings legend, per-stage verdict
   badges (✂ safe / ⚠ careful / 🛑 costly), a live **Coach** that critiques your
   cuts, an **efficiency-frontier** chart (compute-removed vs. mAP per Measure),
-  and a "Principles of carving" lesson.
+  and a "Principles of reverse training" lesson.
 - **Technique-split, explanation-first redesign**: a persistent scoreboard
   (mAP / size / compute vs native) over three modules — **Precision** (quantize,
   `/api/quantize`), **Structure** (prune, scan+grid), **Regrow** (fine-tune).

@@ -1,6 +1,6 @@
 # pigeon
 
-**Carve a general object detector down until it does one thing — detect and
+**Reverse-train a general object detector down until it does one thing — detect and
 track birds — in the smallest, fastest form possible, and watch what every cut
 does to its accuracy in real time.**
 
@@ -33,7 +33,7 @@ generalist: most of its weights serve 79 classes you will never use. The goal of
 The concrete deliverable is a genuinely smaller, faster **bird-only** detector,
 plus the instrument that produced it. "Bird" (COCO class 14) is used as the
 single target — no custom dataset required — but the whole pipeline is
-task-agnostic: swap the class or the eval set and it carves toward something
+task-agnostic: swap the class or the eval set and it reverse-trains toward something
 else.
 
 ## The core idea: reverse training
@@ -79,7 +79,7 @@ Full running log of findings and gotchas lives in [`STATUS.md`](STATUS.md).
 
 ---
 
-## The carving cockpit (the flagship)
+## The reverse-training cockpit (the flagship)
 
 A local web app (`server.py` + `static/index.html`) that makes the whole loop
 tactile.
@@ -131,7 +131,7 @@ Export/Recover (real artifact).
 
 ## Architecture & components
 
-### `harness/` — the domain-agnostic carving instrument
+### `harness/` — the domain-agnostic reverse-training instrument
 
 | File | Responsibility |
 |---|---|
@@ -144,7 +144,7 @@ Export/Recover (real artifact).
 The harness began life as a **language-model** fake-quantization tool;
 `quant.py` is byte-for-byte the same. Fake-quantization doesn't care whether a
 weight belongs to an LLM or a conv filter — which is why the same instrument
-carves both (see *Provenance* below).
+reverse-trains both (see *Provenance* below).
 
 ### The cockpit
 
@@ -192,7 +192,7 @@ pip install -r requirements.txt
 python build_eval_set.py        # fetch the 125-image bird eval set (COCO subset)
 python build_finetune_set.py    # fetch the 400-image bird train set (for Recover)
 
-# launch the carving cockpit
+# launch the reverse-training cockpit
 uvicorn server:app --port 8000 --app-dir .   # open http://localhost:8000
 ```
 
@@ -224,5 +224,5 @@ The instrument started as a language-model quantization harness — `harness/`
 was retargeted to vision by adding `Conv2d` support and swapping the eval from
 perplexity to bird `mAP@50`. Because `fake_quantize` is weight-meaning-agnostic
 and the evaluator sits behind a small interface, the same cockpit could, in
-principle, carve an LLM toward a single benchmark — the reverse-training idea,
+principle, reverse-train an LLM toward a single benchmark — the same idea,
 applied to language. That's the parked Phase 2.

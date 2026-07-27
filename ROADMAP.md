@@ -1,6 +1,6 @@
 # pigeon — roadmap
 
-## Now: the pigeon carving cockpit
+## Now: the pigeon reverse-training cockpit
 Functional demo over the real `yolo11n`:
 - Node-grid UI, 20 nodes/column = 5% each, FLOP-weighted columns, snap-to-8.
 - Live-mask preview (instant accuracy) → **Apply** does real dependency-aware
@@ -9,7 +9,7 @@ Functional demo over the real `yolo11n`:
 - Auto-prune "training mode": shrink until the metric drops past a threshold.
 
 ## Phase 2 (PARKED, but keep the door open): LLM benchmark track
-Take a large-ish LLM, carve it with the *same harness* (`weight-harness/` is
+Take a large-ish LLM, reverse-train it with the *same harness* (`weight-harness/` is
 already the fake-quant instrument), and score it on a real benchmark harness —
 **`lm-evaluation-harness`** (MMLU / GSM8K / ARC), the tool behind the HF Open
 LLM Leaderboard. The on-thesis experiment: prune *toward one subject* and chart
