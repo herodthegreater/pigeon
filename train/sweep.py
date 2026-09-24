@@ -14,7 +14,7 @@ from pathlib import Path
 
 import torch
 
-from .dataset import load_split
+from .dataset import load_sheets
 from .export import fold_batchnorm
 from .metrics import predict, scoreboard
 from .model import Pigeon
@@ -46,7 +46,7 @@ def run(tag, model, ev, dev, ref):
 
 def main() -> None:
     dev = device()
-    ev = load_split("eval")
+    ev = load_sheets()  # the exact pixels the site evaluates
     base = Pigeon(pretrained=False)
     base.load_state_dict(torch.load(ROOT / "runs/pigeon_fp32.pt", map_location="cpu"))
     base = fold_batchnorm(base.eval()).to(dev)

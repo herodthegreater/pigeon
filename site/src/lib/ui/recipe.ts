@@ -1,0 +1,190 @@
+/**
+ * The Coop's recipe editor: presets plus a stack of editable steps.
+ * Vanilla DOM; calls `onChange(recipe)` after every edit.
+ */
+
+import type { Granularity } from "../compress/quant";
+import type { Kind, TensorMeta } from "../engine/model";
+import { ALL_KINDS, type Recipe, type Step } from "../engine/pipeline";
+
+export const PART_NAMES: Record<Kind, string> = {
+  conv: "First conv",
+  depthwise: "Depthwise",
+  pointwise: "Pointwise",
+  squeeze_excite: "Squeeze-excite",
+  head: "Head",
+};
+
+const ALL = [...ALL_KINDS];
+const chan: Granularity = { kind: "channel" };
+
+export const PRESETS: { id: string; name: string; hint: string; recipe: Recipe }[] = [
+  { id: "fp32", name: "Full precision", hint: "The untouched 32-bit Pigeon.", recipe: { steps: [] } },
+  { id: "fp16", name: "FP16", hint: "Half-precision floats. Almost always free.", recipe: { steps: [{ op: "float", parts: ALL, format: "fp16", scaling: { kind: "none" } }] } },
+  { id: "int8-tensor", name: "INT8, one scale", hint: "One scale for a whole tensor. Watch what happens.", recipe: { steps: [{ op: "int", parts: ALL, bits: 8, granularity: { kind: "tensor" }, symmetric: true }] } },
+  { id: "int8-channel", name: "INT8, per channel", hint: "A scale for every output channel.", recipe: { steps: [{ op: "int", parts: ALL, bits: 8, granularity: chan, symmetric: true }] } },
+  { id: "mixed", name: "Mixed precision", hint: "Squeeze-excite at 4-bit, everything else at 8-bit.", recipe: { steps: [
+    { op: "int", parts: ["conv", "depthwise", "pointwise", "head"], bits: 8, granularity: chan, symmetric: true },
+    { op: "int", parts: ["squeeze_excite"], bits: 4, granularity: chan, symmetric: true },
+  ] } },
+  { id: "mxfp4", name: "MXFP4", hint: "4-bit floats sharing a power-of-two scale per 32 weights.", recipe: { steps: [{ op: "float", parts: ALL, format: "fp4_e2m1", scaling: { kind: "mx", block: 32 } }] } },
+  { id: "sparse24", name: "2:4 sparsity", hint: "Keep the biggest 2 of every 4 weights.", recipe: { steps: [{ op: "prune", parts: ALL, method: "nm", amount: 0.5 }] } },
+  { id: "palette", name: "16-colour palette", hint: "k-means: every weight becomes one of 16 shared values.", recipe: { steps: [{ op: "cluster", parts: ALL, k: 16 }] } },
+];
+
+const clone = (r: Recipe): Recipe => JSON.parse(JSON.stringify(r));
+
+export function describeStep(s: Step): string {
+  const parts = s.parts.length === ALL.length ? "all" : s.parts.map((p) => PART_NAMES[p]).join(" + ");
+  switch (s.op) {
+    case "int": {
+      if (s.bits >= 16) return `off (${parts})`;
+      const g = s.granularity.kind === "group" ? `group ${s.granularity.size}` : `per ${s.granularity.kind}`;
+      return `${s.ternary ? "ternary" : `INT${s.bits}`} ${g}${s.symmetric ? "" : " asym"} · ${parts}`;
+    }
+    case "float": {
+      const sc = s.scaling.kind === "mx" ? ` MX/${s.scaling.block}` : s.scaling.kind === "nv" ? ` NV/${s.scaling.block}` : "";
+      return `${s.format.toUpperCase().replace("_", " ")}${sc} · ${parts}`;
+    }
+    case "prune":
+      return `${s.method === "nm" ? "2:4" : `${Math.round(s.amount * 100)}% ${s.method === "channels" ? "channels" : "pruned"}`} · ${parts}`;
+    case "cluster":
+      return `${s.k}-value palette · ${parts}`;
+  }
+}
+
+export function describeRecipe(r: Recipe): string {
+  return r.steps.length ? r.steps.map(describeStep).join(" → ") : "Full precision";
+}
+
+const STEP_TITLES = { int: "Quantize to integers", float: "Change number format", prune: "Prune", cluster: "Palettize (k-means)" } as const;
+
+function newStep(op: Step["op"]): Step {
+  switch (op) {
+    case "int": return { op, parts: [...ALL], bits: 8, granularity: chan, symmetric: true };
+    case "float": return { op, parts: [...ALL], format: "fp8_e4m3", scaling: { kind: "tensor" } };
+    case "prune": return { op, parts: [...ALL], method: "magnitude", amount: 0.2 };
+    case "cluster": return { op, parts: [...ALL], k: 16 };
+  }
+}
+
+export class RecipeEditor {
+  recipe: Recipe = { steps: [] };
+  private shares: Record<Kind, number>;
+
+  constructor(private root: HTMLElement, tensors: TensorMeta[], private onChange: (r: Recipe, label: string) => void) {
+    const w = tensors.filter((t) => t.role === "weight");
+    const total = w.reduce((a, t) => a + t.numel, 0);
+    this.shares = Object.fromEntries(ALL.map((k) => [k, w.filter((t) => t.kind === k).reduce((a, t) => a + t.numel, 0) / total])) as Record<Kind, number>;
+    root.addEventListener("input", (e) => this.onInput(e));
+    root.addEventListener("click", (e) => this.onClick(e));
+    this.render();
+  }
+
+  load(r: Recipe) {
+    this.recipe = clone(r);
+    this.render();
+    this.emit();
+  }
+
+  private emit() {
+    this.onChange(clone(this.recipe), describeRecipe(this.recipe));
+  }
+
+  private render() {
+    const presets = PRESETS.map((p) => `<button type="button" class="preset" data-preset="${p.id}" title="${p.hint}">${p.name}</button>`).join("");
+    const steps = this.recipe.steps.map((s, i) => this.stepHTML(s, i)).join("");
+    this.root.innerHTML = `
+      <div class="presets"><span class="label">Presets</span><div class="preset-row">${presets}</div></div>
+      <ol class="steps">${steps || `<li class="empty">No steps yet: this is the full-precision Pigeon. Add a step, or start from a preset.</li>`}</ol>
+      <div class="add"><span class="label">Add a step</span><div class="add-row">
+        ${(Object.keys(STEP_TITLES) as Step["op"][]).map((op) => `<button type="button" class="add-btn" data-add="${op}">+ ${STEP_TITLES[op]}</button>`).join("")}
+      </div></div>`;
+  }
+
+  private partsHTML(s: Step, i: number) {
+    return `<fieldset class="parts"><legend class="label">Applies to</legend>${ALL.map(
+      (k) => `<label class="part"><input type="checkbox" data-i="${i}" data-f="part" value="${k}" ${s.parts.includes(k) ? "checked" : ""}/>
+        <span>${PART_NAMES[k]}</span><span class="share num">${(this.shares[k] * 100).toFixed(k === "head" || k === "conv" ? 2 : 0)}%</span></label>`,
+    ).join("")}</fieldset>`;
+  }
+
+  private stepHTML(s: Step, i: number): string {
+    const id = (f: string) => `s${i}-${f}`;
+    let body = "";
+    if (s.op === "int") {
+      const g = s.granularity.kind;
+      body = `
+        <label for="${id("bits")}" class="field"><span>Bits per weight</span><output class="num">${s.ternary ? "1.58 (ternary)" : s.bits >= 16 ? "off" : s.bits}</output></label>
+        <input id="${id("bits")}" type="range" min="1" max="8" step="1" value="${Math.min(s.bits, 8)}" data-i="${i}" data-f="bits"/>
+        <div class="seg" role="radiogroup" aria-label="Scale granularity">${(["tensor", "channel", "group"] as const).map(
+          (k) => `<label><input type="radio" name="${id("g")}" value="${k}" data-i="${i}" data-f="gran" ${g === k ? "checked" : ""}/><span>${k === "tensor" ? "Per tensor" : k === "channel" ? "Per channel" : "Per group"}</span></label>`,
+        ).join("")}</div>
+        ${g === "group" ? `<label class="field" for="${id("gs")}"><span>Group size</span><select id="${id("gs")}" data-i="${i}" data-f="gsize">${[16, 32, 64, 128].map((n) => `<option ${s.granularity.kind === "group" && s.granularity.size === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>` : ""}
+        <label class="check"><input type="checkbox" data-i="${i}" data-f="asym" ${s.symmetric ? "" : "checked"}/> Asymmetric (scale + zero-point)</label>
+        ${s.bits === 2 ? `<label class="check"><input type="checkbox" data-i="${i}" data-f="ternary" ${s.ternary ? "checked" : ""}/> Ternary {−1, 0, +1} (BitNet-style)</label>` : ""}`;
+    } else if (s.op === "float") {
+      const sc = s.scaling.kind;
+      body = `
+        <label class="field" for="${id("fmt")}"><span>Format</span><select id="${id("fmt")}" data-i="${i}" data-f="format">${[
+          ["fp16", "FP16 (16 bits)"], ["bf16", "BF16 (16 bits)"], ["fp8_e4m3", "FP8 E4M3"], ["fp8_e5m2", "FP8 E5M2"], ["fp4_e2m1", "FP4 E2M1"],
+        ].map(([v, n]) => `<option value="${v}" ${s.format === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        <label class="field" for="${id("sc")}"><span>Scaling</span><select id="${id("sc")}" data-i="${i}" data-f="scaling">${[
+          ["none", "None (plain cast)"], ["tensor", "One scale per tensor"], ["mx", "MX: power-of-two per 32"], ["nv", "NVFP4: FP8 scale per 16"],
+        ].map(([v, n]) => `<option value="${v}" ${sc === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
+    } else if (s.op === "prune") {
+      body = `
+        <label class="field" for="${id("m")}"><span>Method</span><select id="${id("m")}" data-i="${i}" data-f="method">${[
+          ["magnitude", "Smallest weights (unstructured)"], ["nm", "2:4 pattern (semi-structured)"], ["channels", "Whole channels (structured)"],
+        ].map(([v, n]) => `<option value="${v}" ${s.method === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        ${s.method === "nm" ? "" : `<label for="${id("amt")}" class="field"><span>Remove</span><output class="num">${Math.round(s.amount * 100)}%</output></label>
+        <input id="${id("amt")}" type="range" min="0" max="${s.method === "channels" ? 60 : 95}" step="5" value="${Math.round(s.amount * 100)}" data-i="${i}" data-f="amount"/>`}`;
+    } else {
+      body = `
+        <label for="${id("k")}" class="field"><span>Palette size</span><output class="num">${s.k} values (${Math.log2(s.k)} bits)</output></label>
+        <input id="${id("k")}" type="range" min="1" max="8" step="1" value="${Math.log2(s.k)}" data-i="${i}" data-f="k"/>`;
+    }
+    return `<li class="step" data-op="${s.op}">
+      <div class="step-head"><span class="step-n num">${i + 1}</span><h3>${STEP_TITLES[s.op]}</h3>
+        <button type="button" class="remove" data-remove="${i}" aria-label="Remove step ${i + 1}">Remove</button></div>
+      <div class="step-body">${body}${this.partsHTML(s, i)}</div></li>`;
+  }
+
+  private onClick(e: Event) {
+    const t = (e.target as HTMLElement).closest("button");
+    if (!t) return;
+    if (t.dataset.preset) return this.load(PRESETS.find((p) => p.id === t.dataset.preset)!.recipe);
+    if (t.dataset.add) { this.recipe.steps.push(newStep(t.dataset.add as Step["op"])); this.render(); return this.emit(); }
+    if (t.dataset.remove) { this.recipe.steps.splice(Number(t.dataset.remove), 1); this.render(); return this.emit(); }
+  }
+
+  private onInput(e: Event) {
+    const el = e.target as HTMLInputElement;
+    const i = Number(el.dataset.i), f = el.dataset.f;
+    const s = this.recipe.steps[i];
+    if (!s || !f) return;
+    let rerender = false;
+    if (f === "part") {
+      s.parts = [...this.root.querySelectorAll<HTMLInputElement>(`input[data-i="${i}"][data-f="part"]:checked`)].map((x) => x.value as Kind);
+    } else if (s.op === "int") {
+      if (f === "bits") { const was = s.bits; s.bits = Number(el.value); if (s.bits !== 2) s.ternary = false; rerender = (was === 2) !== (s.bits === 2); }
+      if (f === "gran") { s.granularity = el.value === "group" ? { kind: "group", size: 32 } : { kind: el.value as "tensor" | "channel" }; rerender = true; }
+      if (f === "gsize") s.granularity = { kind: "group", size: Number(el.value) };
+      if (f === "asym") s.symmetric = !el.checked;
+      if (f === "ternary") s.ternary = el.checked;
+      const out = el.closest(".step")?.querySelector("output");
+      if (out && f !== "gran") out.textContent = s.ternary ? "1.58 (ternary)" : String(s.bits);
+    } else if (s.op === "float") {
+      if (f === "format") s.format = el.value as typeof s.format;
+      if (f === "scaling") s.scaling = el.value === "mx" ? { kind: "mx", block: 32 } : el.value === "nv" ? { kind: "nv", block: 16 } : { kind: el.value as "none" | "tensor" };
+    } else if (s.op === "prune") {
+      if (f === "method") { s.method = el.value as typeof s.method; if (s.method === "channels") s.amount = Math.min(s.amount, 0.6); rerender = true; }
+      if (f === "amount") { s.amount = Number(el.value) / 100; el.closest(".step")!.querySelector("output")!.textContent = `${el.value}%`; }
+    } else if (s.op === "cluster" && f === "k") {
+      s.k = 2 ** Number(el.value);
+      el.closest(".step")!.querySelector("output")!.textContent = `${s.k} values (${el.value} bits)`;
+    }
+    if (rerender) this.render();
+    this.emit();
+  }
+}

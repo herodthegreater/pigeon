@@ -1,0 +1,262 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+<Base title="The Coop · Pigeon" active="coop" description="A sandbox for compressing a real bird-spotting model in your browser.">
+  <main class="coop">
+    <section class="hero" aria-live="polite">
+      <div class="bird-card">
+        <div class="bird" id="bird"></div>
+        <div class="bird-meta">
+          <p class="label" id="bird-condition">Loading Pigeon…</p>
+          <h1 id="bird-name">Pigeon</h1>
+          <p class="latin" id="bird-latin"></p>
+          <p class="bird-note" id="bird-note">Fetching the model and 500 test photos.</p>
+        </div>
+      </div>
+
+      <div class="board">
+        <div class="status"><span id="status">Starting the engine…</span><span class="bar"><span id="bar"></span></span></div>
+        <dl class="metrics">
+          <div class="metric"><dt>Accuracy</dt><dd class="num"><span id="m-acc">–</span><small id="m-acc-d"></small></dd><p>bird / no bird, right or wrong</p></div>
+          <div class="metric"><dt>Pointing</dt><dd class="num"><span id="m-pt">–</span><small id="m-pt-d"></small></dd><p>heatmap peak lands on the real bird</p></div>
+          <div class="metric"><dt>Agreement</dt><dd class="num"><span id="m-ag">–</span></dd><p>same answer as the original Pigeon</p></div>
+          <div class="metric"><dt>Size</dt><dd class="num"><span id="m-size">–</span><small id="m-ratio"></small></dd><p>real bytes, scales and indices included</p></div>
+        </dl>
+        <p class="best" id="best">No working compressed Pigeon yet. The line to beat: ≥ 90% accuracy and ≥ 75% pointing.</p>
+      </div>
+    </section>
+
+    <div class="work">
+      <aside class="recipe-col">
+        <h2>Recipe</h2>
+        <p class="intro">Stack steps top to bottom, the way a real compression pipeline runs. Every change re-scores Pigeon on its test photos.</p>
+        <div id="recipe"></div>
+      </aside>
+
+      <div class="results">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Everything you've tried</h2>
+            <button type="button" class="ghost" id="clear">Clear history</button>
+          </div>
+          <div class="chart" id="pareto"></div>
+          <p class="caption">Each dot is one full 500-photo scoring run. Filled dots still work. The magenta line joins the best tradeoffs: nothing else you tried is both smaller <em>and</em> more accurate.</p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Specimen drawer</h2>
+            <label class="check"><input type="checkbox" id="heat" checked /> Show where Pigeon looks</label>
+          </div>
+          <div class="specimens heat" id="specimens"></div>
+          <p class="caption">Magenta shows what drives Pigeon's answer, and the ring marks its hottest point. Teal boxes are where the birds really are. A dashed border means this setting changed Pigeon's answer compared with the original.</p>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <style is:global>
+    .coop { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 64px; display: flex; flex-direction: column; gap: 28px; }
+    .coop h2 { font-size: var(--step-2); }
+
+    .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; }
+    .bird-card { background: var(--card); border: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: center; gap: 8px; padding: 12px 20px 12px 8px; }
+    .bird svg { width: 100%; height: auto; display: block; }
+    .bird { transition: opacity 0.25s; }
+    .bird.swap { opacity: 0; }
+    .bird-meta { display: flex; flex-direction: column; gap: 4px; }
+    .bird-meta h1 { font-size: var(--step-3); }
+    .latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
+    .bird-note { color: var(--muted); font-size: 0.93rem; margin-top: 6px; }
+    #bird-condition[data-c="healthy"] { color: var(--good); }
+    #bird-condition[data-c="emaciated"] { color: var(--warn); }
+    #bird-condition[data-c="skeleton"] { color: var(--bad); }
+
+    .board { display: flex; flex-direction: column; gap: 14px; }
+    .status { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: var(--muted); font-family: var(--mono); }
+    .bar { flex: 1; height: 3px; background: var(--sunk); max-width: 220px; }
+    .bar span { display: block; height: 100%; width: 0; background: var(--teal); transition: width 0.15s; }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: 0; border: 1px solid var(--rule); background: var(--card); }
+    .metric { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+    .metric + .metric { border-left: 1px solid var(--rule); }
+    .metric dt { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    .metric dd { margin: 0; font-family: var(--display); font-size: var(--step-3); font-weight: 600; line-height: 1.1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+    .metric dd small { font-family: var(--mono); font-size: 0.78rem; font-weight: 400; }
+    .metric dd small.down { color: var(--bad); } .metric dd small.up { color: var(--good); } .metric dd small.flat { color: var(--muted); }
+    .metric p { font-size: 0.8rem; color: var(--muted); line-height: 1.35; }
+    .best { font-size: 0.93rem; padding: 10px 14px; border-left: 3px solid var(--magenta); background: var(--magenta-wash); }
+
+    .work { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 28px; align-items: start; }
+    .recipe-col { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; padding-right: 4px; }
+    .intro { color: var(--muted); font-size: 0.93rem; }
+    .presets, .add { display: flex; flex-direction: column; gap: 6px; }
+    .preset-row, .add-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .preset, .add-btn, .ghost, .remove {
+      border: 1px solid var(--rule); background: var(--card); padding: 5px 10px; cursor: pointer; border-radius: var(--radius); font-size: 0.85rem;
+    }
+    .preset:hover, .add-btn:hover, .ghost:hover { border-color: var(--teal); }
+    .add-btn { border-style: dashed; }
+    .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 12px; border: 1px dashed var(--rule); }
+    .step { border: 1px solid var(--rule); background: var(--card); }
+    .step-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+    .step-head h3 { font-size: 1.05rem; flex: 1; }
+    .step-n { font-family: var(--mono); font-size: 0.75rem; width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--ink); border-radius: 50%; }
+    .remove { font-size: 0.75rem; padding: 2px 8px; color: var(--muted); }
+    .step-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .field { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.88rem; }
+    .field output { font-family: var(--mono); color: var(--teal); }
+    .field select { max-width: 60%; background: var(--paper); border: 1px solid var(--rule); padding: 3px 6px; border-radius: var(--radius); }
+    input[type="range"] { width: 100%; accent-color: var(--teal); }
+    .seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+    .seg label { position: relative; }
+    .seg input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+    .seg span { display: block; text-align: center; font-size: 0.8rem; padding: 5px 4px; }
+    .seg label + label span { border-left: 1px solid var(--rule); }
+    .seg input:checked + span { background: var(--teal-wash); color: var(--ink); font-weight: 600; }
+    .seg input:focus-visible + span { outline: 2px solid var(--magenta); outline-offset: -2px; }
+    .check { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; }
+    .check input { accent-color: var(--teal); }
+    .parts { border: 0; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 3px; }
+    .parts legend { margin-bottom: 4px; }
+    .part { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 0.85rem; }
+    .part input { accent-color: var(--teal); }
+    .share { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+
+    .results { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+    .panel { display: flex; flex-direction: column; gap: 10px; }
+    .panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .caption { font-size: 0.85rem; color: var(--muted); max-width: 70ch; }
+    .chart { background: var(--card); border: 1px solid var(--rule); padding: 8px; }
+    .chart svg { width: 100%; height: auto; display: block; }
+    .chart .tick { font: 11px var(--mono); fill: var(--muted); }
+    .chart .axis { font: 12px var(--body); fill: var(--muted); }
+    .chart .works { font: 600 12px var(--body); fill: var(--teal); }
+
+    .specimens { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .specimen { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+    .frame { position: relative; aspect-ratio: 1; max-width: 100%; background-repeat: no-repeat; border: 2px solid transparent; }
+    .specimen[data-correct="false"] .frame { border-color: var(--bad); }
+    .specimen[data-flipped="true"] .frame { border-style: dashed; }
+    .frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: auto; opacity: 0; transition: opacity 0.2s; mix-blend-mode: multiply; }
+    .heat .frame canvas { opacity: 1; }
+    .boxes { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .boxes rect { fill: none; stroke: #3fd1b4; stroke-width: 0.8; vector-effect: non-scaling-stroke; }
+    .peak { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.5); opacity: 0; }
+    .heat .peak { opacity: 1; }
+    .specimen figcaption { display: flex; flex-direction: column; font-size: 0.78rem; line-height: 1.3; }
+    .truth { font-weight: 600; }
+    .verdict { color: var(--muted); }
+    .specimen[data-correct="false"] .verdict { color: var(--bad); }
+    .credit { font-size: 0.68rem; color: var(--faint); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    @media (max-width: 1000px) {
+      .hero, .work { grid-template-columns: 1fr; }
+      .recipe-col { position: static; max-height: none; overflow: visible; }
+    }
+    @media (max-width: 640px) {
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric:nth-child(3) { border-left: 0; }
+      .metric:nth-child(n + 3) { border-top: 1px solid var(--rule); }
+      .bird-card { grid-template-columns: 1fr; padding: 12px; }
+      .specimens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+
+  <script>
+    import { Engine, QUICK } from "../../lib/engine/client";
+    import type { Result } from "../../lib/engine/worker";
+    import { RecipeEditor } from "../../lib/ui/recipe";
+    import { mascotSVG, DODO } from "../../lib/ui/mascot";
+    import { paretoSVG, smallestWorking, formatSize, type Attempt } from "../../lib/ui/pareto";
+    import { Specimens } from "../../lib/ui/specimens";
+
+    const $ = (id: string) => document.getElementById(id)!;
+    const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+    const STORE = "pigeon.coop.attempts";
+
+    let attempts: Attempt[] = [];
+    try { attempts = JSON.parse(localStorage.getItem(STORE) ?? "[]"); } catch {}
+    const save = () => { try { localStorage.setItem(STORE, JSON.stringify(attempts.slice(-200))); } catch {} };
+
+    const engine = new Engine();
+    const { images, baseline, tensors } = await engine.ready;
+    const base = baseline;
+    const sheet = (s: number) => `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}testset/sheet-${s}.webp`;
+    const specimens = new Specimens($("specimens"), images, sheet, 10);
+    let label = "Full precision";
+    let current: Attempt | null = null;
+    let shownSpecies = "";
+
+    function delta(el: HTMLElement, v: number, ref: number) {
+      const d = (v - ref) * 100;
+      el.textContent = Math.abs(d) < 0.05 ? "±0.0" : `${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(1)} pts`;
+      el.className = Math.abs(d) < 0.05 ? "flat" : d > 0 ? "up" : "down";
+    }
+
+    function show(r: Result, final: boolean) {
+      const s = r.score;
+      $("m-acc").textContent = pct(s.accuracy); delta($("m-acc-d"), s.accuracy, base.score.accuracy);
+      $("m-pt").textContent = pct(s.pointing); delta($("m-pt-d"), s.pointing, base.score.pointing);
+      $("m-ag").textContent = pct(s.agreement);
+      $("m-size").textContent = formatSize(r.totalBytes);
+      $("m-ratio").textContent = `${(r.originalBytes / r.totalBytes).toFixed(2)}× smaller`;
+      $("m-ratio").className = "flat";
+      const m = mascotSVG({ ratio: r.originalBytes / r.totalBytes, accuracy: s.accuracy, pointing: s.pointing });
+      const bird = $("bird");
+      const key = m.dodo ? "dodo" : m.species.id;
+      if (key !== shownSpecies && shownSpecies) {
+        bird.classList.add("swap");
+        setTimeout(() => { bird.innerHTML = m.svg; bird.classList.remove("swap"); }, 180);
+      } else bird.innerHTML = m.svg;
+      shownSpecies = key;
+      const cond = $("bird-condition");
+      cond.dataset.c = m.condition;
+      cond.textContent = m.condition === "healthy" ? "Healthy · still works" : m.condition === "emaciated" ? `Starving · ${Math.round(m.starve * 100)}% of the way to bones` : "Skeleton · broken";
+      $("bird-name").textContent = m.dodo ? DODO.name : m.species.name;
+      $("bird-latin").textContent = `${m.dodo ? DODO.latin : m.species.latin}${m.dodo ? "" : ` · about ${m.species.grams} g`}`;
+      $("bird-note").textContent = m.dodo ? DODO.note : m.condition === "skeleton" ? "This setting broke Pigeon: it's guessing." : m.species.note;
+      if (final) specimens.update(r.logits, r.cams, base.logits);
+    }
+
+    function redrawChart() {
+      $("pareto").innerHTML = paretoSVG(attempts, current);
+      const best = smallestWorking(attempts, base.totalBytes);
+      $("best").innerHTML = best
+        ? `Smallest working Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${(base.totalBytes / best.bytes).toFixed(1)}× smaller, ${pct(best.accuracy)} accurate): <em>${best.label.replace(/[<>&]/g, "")}</em>`
+        : "No working compressed Pigeon yet. The line to beat: ≥ 90% accuracy and ≥ 75% pointing.";
+    }
+
+    const editor = new RecipeEditor($("recipe"), tensors, (recipe, l) => {
+      label = l;
+      $("status").textContent = `Scoring on ${QUICK} photos…`;
+      engine.evaluate(recipe, {
+        onProgress: (done, total, stage) => {
+          ($("bar") as HTMLElement).style.width = `${(done / total) * 100}%`;
+          $("status").textContent = stage === "quick" ? `Scoring on ${QUICK} photos…` : `Quick estimate shown · confirming on all ${total}… ${done}/${total}`;
+        },
+        onQuick: (r) => show(r, false),
+        onFull: (r) => {
+          show(r, true);
+          $("status").textContent = `Scored on all ${r.score.n} photos · ${Math.round(r.ms.infer)} ms`;
+          current = { label, bytes: r.totalBytes, accuracy: r.score.accuracy, pointing: r.score.pointing };
+          const dup = attempts.findIndex((a) => a.label === label);
+          if (dup >= 0) attempts.splice(dup, 1);
+          attempts.push(current);
+          save();
+          redrawChart();
+        },
+      });
+    });
+
+    show(base, true);
+    current = { label, bytes: base.totalBytes, accuracy: base.score.accuracy, pointing: base.score.pointing };
+    if (!attempts.some((a) => a.label === label)) attempts.push(current);
+    redrawChart();
+    $("status").textContent = `Scored on all ${base.score.n} photos · ready`;
+
+    $("heat").addEventListener("change", (e) => $("specimens").classList.toggle("heat", (e.target as HTMLInputElement).checked));
+    $("clear").addEventListener("click", () => { attempts = current ? [current] : []; save(); redrawChart(); });
+    void editor;
+  </script>
+</Base>

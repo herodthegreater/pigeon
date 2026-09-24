@@ -31,15 +31,15 @@ The model: a general ImageNet classifier, specialized to one job — **is there 
 
 ## The mascot
 
-**Species ← compression ratio vs the original 10 MB FP32 model** (every step is a genuinely lighter real bird):
+**Species ← compression ratio vs the specialized FP32 Pigeon (3.69 MB)**, so the Coop starts with a fat bird. Thresholds sit just under the round numbers so that INT8 (3.8× once scales and FP32 biases are counted) reaches the swift:
 
 | Ratio | Species | Real mass |
 |---|---|---|
 | 1× | Rock Pigeon, extra chonky | ~350 g |
-| ≥2× | Mourning Dove | ~120 g |
-| ≥4× | Common Swift | ~40 g |
-| ≥8× | Barn Swallow | ~18 g |
-| ≥16× | Ruby-throated Hummingbird | ~3 g |
+| ≥1.8× | Mourning Dove | ~120 g |
+| ≥3.5× | Common Swift | ~40 g |
+| ≥7× | Barn Swallow | ~18 g |
+| ≥14× | Ruby-throated Hummingbird | ~3 g |
 
 **Condition ← metrics:** healthy (meets the "still works" line) · emaciated (below it, above chance; worsens continuously) · skeleton (accuracy ≲ 60 % or pointing collapses). Easter egg: breaking the uncompressed pigeon shows a dodo skeleton.
 
@@ -98,8 +98,8 @@ Key technical choices:
 ## Phases
 
 0. Archive v0, scaffold v1 — *done*
-1. Training pipeline: data, specialized Pigeon, fixed test set, baseline metrics
-2. Browser engine: live quantize / prune, scoreboard, Pareto chart, mascot
+1. Training pipeline: data, specialized Pigeon, fixed test set, baseline metrics — *done*
+2. Browser engine: live quantize / prune, scoreboard, Pareto chart, mascot — *core done* (Coop live; speed estimates move to Phase 5; photo upload pending)
 3. Flight School (12 lessons)
 4. Field Guide Tier 2 + LLM wing + DIY code
 5. Precomputed variants (QAT, KD, prune + fine-tune) + real-hardware benchmarks

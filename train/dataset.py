@@ -57,6 +57,30 @@ def load_split(name: str) -> Split:
     )
 
 
+def load_sheets() -> Split:
+    """The eval set exactly as the site sees it: decoded from the shipped WebP sprite sheets.
+
+    Every published number is computed on these pixels, so Python and browser agree.
+    """
+    root = ROOT / "site/public/testset"
+    meta = json.loads((root / "testset.json").read_text())
+    g, s = meta["grid"], meta["size"]
+    sheets: dict[int, np.ndarray] = {}
+    crops = []
+    for r in meta["images"]:
+        if r["sheet"] not in sheets:
+            sheets[r["sheet"]] = np.asarray(Image.open(root / f"sheet-{r['sheet']}.webp").convert("RGB"))
+        y, x = divmod(r["cell"], g)
+        crops.append(sheets[r["sheet"]][y * s : (y + 1) * s, x * s : (x + 1) * s])
+    return Split(
+        images=torch.from_numpy(np.stack(crops)).permute(0, 3, 1, 2).contiguous(),
+        labels=torch.tensor([r["label"] for r in meta["images"]], dtype=torch.float32),
+        hard=torch.tensor([r["hard"] for r in meta["images"]], dtype=torch.bool),
+        boxes=[r["boxes"] for r in meta["images"]],
+        ids=[r["id"] for r in meta["images"]],
+    )
+
+
 def to_input(u8: torch.Tensor) -> torch.Tensor:
     """Eval preprocessing: uint8 256 px -> float [0, 1] at 224 px (whole image, squashed)."""
     x = u8.float() / 255.0

@@ -20,7 +20,7 @@ import pandas as pd
 import torch
 from PIL import Image
 
-from .dataset import INPUT, load_split
+from .dataset import INPUT, load_sheets, load_split
 from .metrics import predict
 from .model import Pigeon
 from .train import device
@@ -54,11 +54,6 @@ def main() -> None:
     df = pd.read_csv(ROOT / "data/pigeon/manifest.csv")
     df = df[df.split == "eval"].set_index("image_id").loc[ev.ids]
 
-    dev = device()
-    model = Pigeon(pretrained=False).to(dev)
-    model.load_state_dict(torch.load(ROOT / "runs/pigeon_fp32.pt", map_location=dev))
-    logits, _ = predict(model, ev, dev)
-
     order = balanced_order(ev.labels.int().tolist(), ev.hard.int().tolist())
     records, sheets = [], {}
     for pos, i in enumerate(order):
@@ -75,7 +70,6 @@ def main() -> None:
                 "label": int(ev.labels[i]),
                 "hard": bool(ev.hard[i]),
                 "boxes": ev.boxes[i],
-                "ref_logit": round(float(logits[i]), 5),
                 "credit": {
                     "author": None if pd.isna(row.Author) else row.Author,
                     "title": None if pd.isna(row.Title) else row.Title,
@@ -87,8 +81,17 @@ def main() -> None:
     total = 0
     for s, im in sheets.items():
         p = OUT / f"sheet-{s}.webp"
-        im.save(p, quality=82, method=6)
+        im.save(p, quality=90, method=6)
         total += p.stat().st_size
+    (OUT / "testset.json").write_text(json.dumps({"grid": GRID, "size": INPUT, "images": records}))
+
+    # reference logits on the exact shipped pixels: the browser must reproduce these
+    dev = device()
+    model = Pigeon(pretrained=False).to(dev)
+    model.load_state_dict(torch.load(ROOT / "runs/pigeon_fp32.pt", map_location=dev))
+    logits, _ = predict(model, load_sheets(), dev)
+    for r, lg in zip(records, logits.tolist()):
+        r["ref_logit"] = round(lg, 5)
     (OUT / "testset.json").write_text(json.dumps({"grid": GRID, "size": INPUT, "images": records}))
     print(f"wrote {len(records)} images in {len(sheets)} sheets ({total/1e6:.1f} MB) to {OUT}")
 

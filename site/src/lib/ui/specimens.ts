@@ -1,0 +1,69 @@
+/**
+ * Specimen drawer: test images with Pigeon's verdict, its heatmap, the peak it
+ * points at, and the real bird boxes, so people can watch the model "lose its
+ * eyesight" as they compress it.
+ */
+
+import { camPeak } from "../engine/metrics";
+import { CAM } from "../engine/constants";
+import type { TestImage } from "../engine/testset";
+
+const sigmoid = (v: number) => 1 / (1 + Math.exp(-v));
+
+export class Specimens {
+  private tiles: { el: HTMLElement; canvas: HTMLCanvasElement; verdict: HTMLElement; peak: HTMLElement }[] = [];
+
+  constructor(private root: HTMLElement, private images: TestImage[], sheetUrl: (s: number) => string, grid: number, count = 24) {
+    const pick = images.slice(0, count);
+    root.innerHTML = pick
+      .map((img, i) => {
+        const col = img.cell % grid, row = Math.floor(img.cell / grid);
+        const boxes = img.boxes
+          .map(([x0, y0, x1, y1]) => `<rect x="${x0 * 100}" y="${y0 * 100}" width="${(x1 - x0) * 100}" height="${(y1 - y0) * 100}"/>`)
+          .join("");
+        const credit = img.credit.author ? `Photo: ${img.credit.author}` : "Photo: Open Images";
+        return `<figure class="specimen" data-i="${i}">
+          <div class="frame" style="background-image:url('${sheetUrl(img.sheet)}');background-size:${grid * 100}% ${grid * 100}%;background-position:${(col / (grid - 1)) * 100}% ${(row / (grid - 1)) * 100}%">
+            <canvas width="${CAM}" height="${CAM}" aria-hidden="true"></canvas>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="boxes" aria-hidden="true">${boxes}</svg>
+            <span class="peak" aria-hidden="true"></span>
+          </div>
+          <figcaption><span class="truth">${img.label ? "Bird" : img.hard ? "Tricky non-bird" : "No bird"}</span><span class="verdict num"></span></figcaption>
+          <a class="credit" href="${img.credit.url}" target="_blank" rel="noopener">${credit.replace(/[<>&]/g, "")}</a>
+        </figure>`;
+      })
+      .join("");
+    this.tiles = [...root.querySelectorAll<HTMLElement>(".specimen")].map((el) => ({
+      el,
+      canvas: el.querySelector("canvas")!,
+      verdict: el.querySelector(".verdict")!,
+      peak: el.querySelector(".peak")!,
+    }));
+  }
+
+  update(logits: Float32Array, cams: Float32Array, refLogits: Float32Array) {
+    this.tiles.forEach((t, i) => {
+      const img = this.images[i];
+      const p = sigmoid(logits[i]);
+      const pred = logits[i] > 0 ? 1 : 0;
+      const flipped = pred !== (refLogits[i] > 0 ? 1 : 0);
+      t.el.dataset.correct = String(pred === img.label);
+      t.el.dataset.flipped = String(flipped);
+      t.verdict.textContent = `${pred ? "says bird" : "says no bird"} · ${Math.round((pred ? p : 1 - p) * 100)}%${flipped ? " · changed its mind" : ""}`;
+      // heatmap: per-image min-max of the logit map, drawn as magenta evidence
+      const ctx = t.canvas.getContext("2d")!;
+      const off = i * CAM * CAM;
+      let lo = Infinity, hi = -Infinity;
+      for (let k = 0; k < CAM * CAM; k++) { lo = Math.min(lo, cams[off + k]); hi = Math.max(hi, cams[off + k]); }
+      const imgData = ctx.createImageData(CAM, CAM);
+      for (let k = 0; k < CAM * CAM; k++) {
+        const v = hi > lo ? (cams[off + k] - lo) / (hi - lo) : 0;
+        imgData.data.set([214, 66, 150, Math.round(Math.pow(v, 1.6) * 200)], k * 4);
+      }
+      ctx.putImageData(imgData, 0, 0);
+      const [x, y] = camPeak(cams, i);
+      t.peak.style.left = `${x * 100}%`;
+      t.peak.style.top = `${y * 100}%`;
+    });
+  }
+}

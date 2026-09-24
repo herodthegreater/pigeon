@@ -1,0 +1,73 @@
+/* Pigeon design tokens: a field guide on sage paper, inked in slate, with the
+   rock pigeon's iridescent neck (teal <-> magenta) as the only accent pair. */
+
+:root {
+  --paper: #eef1eb;
+  --card: #f7f9f5;
+  --sunk: #e3e8e1;
+  --ink: #1c2a33;
+  --muted: #586970;
+  --faint: #8a979a;
+  --rule: #c9d2ca;
+  --teal: #2b7a6c;
+  --teal-wash: #dceae4;
+  --magenta: #924070;
+  --magenta-wash: #f0dfe8;
+  --good: #2b7a6c;
+  --warn: #a8651e;
+  --bad: #a83a3a;
+  --bird-line: #2a2f33;
+  --bird-rib: #5b4a3c;
+  --bird-shadow: rgba(28, 42, 51, 0.08);
+  --bone: #efe8d8;
+
+  --display: "Newsreader", Georgia, "Times New Roman", serif;
+  --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --step--1: 0.8rem;
+  --step-0: 1rem;
+  --step-1: 1.2rem;
+  --step-2: 1.55rem;
+  --step-3: 2.1rem;
+  --step-4: 3rem;
+  --radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121a1e; --card: #182227; --sunk: #0e1417; --ink: #e2e8e2; --muted: #9aaaa8; --faint: #6d7c7c;
+    --rule: #2e3c40; --teal: #6cc1af; --teal-wash: #1b3230; --magenta: #d88ab8; --magenta-wash: #35202d;
+    --good: #6cc1af; --warn: #e0a15c; --bad: #e07a7a;
+    --bird-line: #0d1113; --bird-rib: #3b2f27; --bird-shadow: rgba(0, 0, 0, 0.35); --bone: #d9d2c2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #121a1e; --card: #182227; --sunk: #0e1417; --ink: #e2e8e2; --muted: #9aaaa8; --faint: #6d7c7c;
+  --rule: #2e3c40; --teal: #6cc1af; --teal-wash: #1b3230; --magenta: #d88ab8; --magenta-wash: #35202d;
+  --good: #6cc1af; --warn: #e0a15c; --bad: #e07a7a;
+  --bird-line: #0d1113; --bird-rib: #3b2f27; --bird-shadow: rgba(0, 0, 0, 0.35); --bone: #d9d2c2;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: var(--step-0);
+  line-height: 1.55;
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.15; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+a { color: var(--teal); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--magenta); outline-offset: 2px; }
+.label {
+  font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+}
+.num { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

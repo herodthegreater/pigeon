@@ -10,7 +10,7 @@ from pathlib import Path
 
 import torch
 
-from .dataset import load_split, to_input
+from .dataset import load_sheets, to_input
 from .metrics import predict, scoreboard
 from .model import Pigeon, general_model, imagenet_bird_classes, param_count
 from .train import device
@@ -36,7 +36,7 @@ def general_zero_shot(split, dev, bs=128) -> torch.Tensor:
 
 def main() -> None:
     dev = device()
-    ev = load_split("eval")
+    ev = load_sheets()  # the exact pixels the site evaluates
 
     g_pred = general_zero_shot(ev, dev)
     g_acc = (g_pred == ev.labels).float().mean().item()
