@@ -16,7 +16,7 @@ import torch
 from ultralytics import YOLO
 
 from harness.evaluate import BirdmAPEvaluator
-from harness.model import apply_uniform, restore, snapshot
+from harness.model import apply_uniform, fuse, restore, snapshot
 
 LADDER = [16, 8, 6, 4, 3, 2, 1]
 EVAL_ROOT = "eval_set"
@@ -36,11 +36,7 @@ def main() -> None:
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     yolo = YOLO(args.weights)
     yolo.model.to(device).eval()
-    # Fuse explicitly before we snapshot/carve: some Ultralytics versions'
-    # predict() fuses only a private copy, leaving yolo.model unfused.
-    yolo.model.fuse(verbose=False)
-    yolo.predict(source=EVAL_ROOT + "/images/val", classes=[14],
-                 conf=0.25, device=device, verbose=False, stream=True).__next__()
+    fuse(yolo)  # fold conv+bn before we snapshot/carve
     snap = snapshot(yolo.model)
 
     ev = BirdmAPEvaluator(EVAL_ROOT, device=device)
