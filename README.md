@@ -213,6 +213,23 @@ The cockpit deliberately separates a **cheap, live editing layer** from an
   makes the model smaller/faster — but is slower, structurally constrained, and
   needs fine-tuning after. You only pay that cost when you commit.
 
+### Web edition (no server)
+
+`build_web.py` packs the fused YOLOv8n (fp16 weights), its layer graph, and 32
+eval photos into `web/`, and assembles `web/index.html`: the same cockpit, with
+the detector running **in the browser** via TensorFlow.js (WebGL).
+`web/engine.js` is a line-for-line port of the forward pass, Ultralytics NMS,
+the AP@50 scorer, masking and the precision lab. Its raw head outputs match
+PyTorch to 1e-4, and its mAP matches the Python harness to four decimals on
+every recipe tested. It measures at 416 px on 32 photos, so its numbers differ
+a little from the server's (640 px, 40 photos). Training and real channel
+removal can't run in a tab, so Regrow and Export replay recorded server runs.
+
+```bash
+python build_web.py                      # -> web/index.html + model.json + weights.txt + photos/
+python -m http.server -d web 8765        # open http://localhost:8765
+```
+
 ## Architecture & components
 
 ### `harness/` — the domain-agnostic reverse-training instrument
