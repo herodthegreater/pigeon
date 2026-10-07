@@ -1,7 +1,8 @@
-"""Masking = zero the lowest-L1 output channels of a stage's convs. Shapes stay
-fixed, so it is always safe and reversible (via snapshot/restore) -- this is the
-live, interactive layer of the UI. It shows REAL accuracy impact; the size/speed
-numbers it implies are ESTIMATES of what a real Export removal would yield.
+"""Masking = zero exactly the output channels a real Export would remove (the
+plan comes from `prune.removal_plan`). Shapes stay fixed, so it is always safe
+and reversible (via snapshot/restore) -- this is the live, interactive layer of
+the UI. Its accuracy is the exported model's accuracy before fine-tuning; it
+does not itself make the model smaller or faster.
 """
 
 from __future__ import annotations
@@ -18,17 +19,26 @@ def top_stage(name: str) -> str | None:
     return None
 
 
-def stage_table(model, imgsz: int = 640, exclude=("model.23",)):
-    """One forward with hooks -> per-stage {channels, flop_frac}, backbone+neck
-    only (the head is excluded from masking to keep outputs sane)."""
+def head_stage(model) -> str:
+    """Name of the detection head: the last stage of an Ultralytics model
+    ('model.22' on YOLOv8n, 'model.23' on YOLO11n)."""
+    return f"model.{len(model.model) - 1}"
+
+
+def stage_table(model, imgsz: int = 640, exclude=None):
+    """One forward with hooks -> per-stage {channels, flop_frac} (MAC share),
+    backbone+neck only. `exclude` defaults to the head, which Export never
+    prunes either."""
+    if exclude is None:
+        exclude = (head_stage(model),)
     flops: dict[str, int] = {}
     hooks = []
 
     def mk(name):
         def h(m, inp, out):
-            x = inp[0]
+            # one MAC per output pixel per kernel tap: stride-2 convs do 1/4 the work
             k = m.kernel_size[0] * m.kernel_size[1]
-            flops[name] = x.shape[-2] * x.shape[-1] * m.in_channels * m.out_channels * k // m.groups
+            flops[name] = out.shape[-2] * out.shape[-1] * m.in_channels * m.out_channels * k // m.groups
         return h
 
     for n, m in model.named_modules():
@@ -54,42 +64,24 @@ def stage_table(model, imgsz: int = 640, exclude=("model.23",)):
         stage_f[st] = stage_f.get(st, 0) + flops.get(n, 0)
         stage_ch[st] = max(stage_ch.get(st, 0), m.out_channels)
 
-    total = sum(stage_f.values()) or 1
+    # share of the WHOLE model's conv compute (head included), so a stage's
+    # flop_frac times its cut fraction is a fraction of the native MACs
+    total = sum(flops.values()) or 1
     return [
         {"stage": st, "channels": stage_ch[st], "flop_frac": stage_f[st] / total}
         for st in sorted(stage_f, key=lambda s: int(s.split(".")[1]))
     ]
 
 
-def _stage_convs(model, stage):
-    return [m for n, m in model.named_modules()
-            if isinstance(m, nn.Conv2d) and top_stage(n) == stage]
-
-
 @torch.no_grad()
-def mask_stage(model, stage: str, frac: float) -> None:
-    """Zero the lowest-L1 output channels (by `frac`) of every conv in `stage`."""
-    if frac <= 0:
-        return
-    for m in _stage_convs(model, stage):
-        w = m.weight.data
-        out = w.shape[0]
-        k = min(int(round(frac * out)), out - 1)  # always keep >=1 channel
-        if k <= 0:
-            continue
-        l1 = w.abs().flatten(1).sum(1)
-        idx = torch.argsort(l1)[:k]
-        w[idx] = 0.0
+def apply_plan(model, plan: dict[str, list[int]]) -> None:
+    """Zero the weight AND bias of each listed output channel of a fused model.
+    With the bias zeroed too the channel outputs SiLU(0) = 0, exactly what its
+    consumers would see if it were removed. `plan` is `prune.removal_plan`."""
+    mods = dict(model.named_modules())
+    for name, idx in plan.items():
+        m = mods[name]
+        m.weight[idx] = 0.0
+        if m.bias is not None:
+            m.bias[idx] = 0.0
 
-
-@torch.no_grad()
-def apply_masks(model, masks: dict[str, float]) -> None:
-    for stage, frac in masks.items():
-        mask_stage(model, stage, float(frac))
-
-
-def estimated_flop_saving(table, masks: dict[str, float]) -> float:
-    """First-order estimate of the FLOP fraction a real removal would save
-    (conservative: counts each stage's own compute, not downstream coupling)."""
-    frac_by_stage = {t["stage"]: t["flop_frac"] for t in table}
-    return sum(frac_by_stage.get(s, 0.0) * float(f) for s, f in masks.items())

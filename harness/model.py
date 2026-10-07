@@ -26,14 +26,22 @@ def iter_weight_modules(model):
 
 
 def snapshot(model) -> dict[str, torch.Tensor]:
-    """Clone every quantizable weight so we can restore native precision."""
-    return {name: mod.weight.detach().clone() for name, mod in iter_weight_modules(model)}
+    """Clone every quantizable weight (and bias, which masking zeroes) so we
+    can restore the native model."""
+    snap = {}
+    for name, mod in iter_weight_modules(model):
+        snap[name] = mod.weight.detach().clone()
+        if getattr(mod, "bias", None) is not None:
+            snap[name + ".bias"] = mod.bias.detach().clone()
+    return snap
 
 
 def restore(model, snap: dict[str, torch.Tensor]) -> None:
-    """Copy the native weights back in, undoing any quantization in place."""
+    """Copy the native weights back in, undoing any quantization or masking."""
     for name, mod in iter_weight_modules(model):
         mod.weight.data.copy_(snap[name])
+        if name + ".bias" in snap:
+            mod.bias.data.copy_(snap[name + ".bias"])
 
 
 @torch.no_grad()
@@ -45,7 +53,8 @@ def apply_uniform(
 ) -> int:
     """Fake-quantize every quantizable weight to ``bits``. Returns how many
     modules were touched. ``skip`` matches on substrings of the module name
-    (e.g. ``("model.23",)`` to spare the detection head).
+    (e.g. ``(".dfl.",)`` to spare the head's fixed DFL bin positions, or
+    ``("model.22",)`` to spare the whole YOLOv8n head).
     """
     touched = 0
     for name, mod in iter_weight_modules(model):

@@ -4,11 +4,13 @@ space) and export it in YOLO format under eval_set/. Reusable: change N.
     python build_eval_set.py
 """
 
+import os
+
 import fiftyone as fo
 import fiftyone.zoo as foz
 
 N = 150
-OUT = "/Users/jarodferkin/Projects/pigeon/eval_set"
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eval_set")
 
 ds = foz.load_zoo_dataset(
     "coco-2017",

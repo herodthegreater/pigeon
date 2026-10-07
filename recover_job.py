@@ -10,6 +10,7 @@ polls that file; the UI watches mAP climb off the cliff.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import sys
@@ -51,19 +52,29 @@ def main() -> None:
         macs, params = tp.utils.count_ops_and_params(
             y.model, torch.randn(1, 3, 640, 640, device=device))
 
-        state = {"status": "training", "epoch": 0, "epochs": a.epochs, "map": 0.0,
-                 "params_m": round(params / 1e6, 3), "flops_g": round(macs / 1e9, 3),
-                 "curve": [0.0]}
+        # Starting point of the curve: the pruned model's mAP before any
+        # fine-tuning, on the same val set and metric as the per-epoch numbers.
+        # Validated on a copy because validation fuses conv+bn in place.
+        data = os.path.join(HERE, "finetune_data", "data.yaml")
+        write(pf, {"status": "measuring", "epoch": 0, "epochs": a.epochs})
+        m0 = float(copy.deepcopy(y).val(data=data, imgsz=640, batch=16, device=device,
+                                        plots=False, verbose=False).box.map50)
+        state = {"status": "training", "epoch": 0, "epochs": a.epochs,
+                 "map": round(m0, 4), "start_map": round(m0, 4),
+                 "params_m": round(params / 1e6, 3), "macs_g": round(macs / 1e9, 3),
+                 "curve": [round(m0, 4)]}
         write(pf, state)
 
         trainer = y._smart_load("trainer")(overrides=dict(
             model=os.path.join(HERE, "yolov8n.pt"),
-            data=os.path.join(HERE, "finetune_data", "data.yaml"),
+            data=data,
             epochs=a.epochs, imgsz=640, batch=16, device=device,
             workers=0, amp=False, verbose=False, plots=False, cache=False,
             project=os.path.join(HERE, "runs"), name="recover", exist_ok=True,
         ))
         trainer.model = y.model.to(device)
+
+        stopped = []
 
         def on_epoch(tr):
             m = 0.0
@@ -71,6 +82,14 @@ def main() -> None:
                 m = float(tr.metrics.get("metrics/mAP50(B)", 0.0))
             except Exception:
                 pass
+            # final_eval re-validates best.pt and fires this callback once more
+            # with epoch + 1; record it as the best score, not as another epoch
+            if tr.epoch + 1 > a.epochs or stopped:
+                state["best_map"] = round(m, 4)
+                write(pf, state)
+                return
+            if tr.stop:
+                stopped.append(True)
             state["epoch"] = tr.epoch + 1
             state["map"] = round(m, 4)
             state["curve"].append(round(m, 4))

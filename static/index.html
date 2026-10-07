@@ -147,12 +147,12 @@
     <dl class="glossary">
       <dt>Weight / parameter</dt><dd>a single number the model learned.</dd>
       <dt>Channel / filter</dt><dd>a bundle of weights that detects one kind of feature; removing one shrinks the layer <em>and</em> speeds it up.</dd>
-      <dt>Stage (L0–L22)</dt><dd>a block of the network — one column in the grid.</dd>
+      <dt>Stage (L0–L21)</dt><dd>a block of the network — one column in the grid. (L22 is the detection head, which is never cut.)</dd>
       <dt>Quantization (bits)</dt><dd>fewer bits per weight (16→8→4…). Smaller file, same shape. Degrades gracefully.</dd>
-      <dt>Pruning</dt><dd>removing capacity. <b>Structural</b> = whole channels (real speedup). <b>Masking</b> = zeroing them (safe live preview — identical accuracy, no speed change until Export).</dd>
+      <dt>Pruning</dt><dd>removing capacity. <b>Structural</b> = whole channels (real speedup). <b>Masking</b> = zeroing the exact channels Export would remove (safe live preview — same accuracy as the exported model before regrowing, no speed change until Export).</dd>
       <dt>Sensitivity</dt><dd>how much mAP drops when you cut a stage. Low = redundant (safe); high = load-bearing (avoid).</dd>
       <dt>Value = FLOP ÷ sensitivity</dt><dd>the payoff of a cut: much compute saved, little accuracy lost. Cut high-value stages first.</dd>
-      <dt>FLOPs</dt><dd>compute per image — the portable measure of speed (trust it over laptop latency).</dd>
+      <dt>MACs / FLOPs</dt><dd>compute per image — the portable measure of speed (trust it over laptop latency). One multiply-accumulate (MAC) = 2 FLOPs; numbers here are in GMACs.</dd>
       <dt>mAP@50</dt><dd>detection accuracy: how well it finds birds (higher is better).</dd>
       <dt>The cliff</dt><dd>structural pruning kills accuracy suddenly, unlike quantization's gentle slope — which is why you must regrow.</dd>
       <dt>Fine-tune / regrow</dt><dd>retraining the wounded model to recover the accuracy a cut cost.</dd>
@@ -175,7 +175,7 @@
     </div>
     <div class="stat">
       <div class="k">compute <span class="tag est">est</span></div>
-      <div class="v" id="flopv">— <span class="u">GFLOP</span></div>
+      <div class="v" id="flopv">— <span class="u">GMAC</span></div>
       <div class="sub" id="flopsub">native</div>
     </div>
   </div>
@@ -187,7 +187,7 @@
       <div>
         <div class="mtitle">Precision <span class="badge b-graceful">graceful</span></div>
         <div class="mwhat">Store each weight in fewer <b>bits</b>. Same network shape — just a smaller file.
-          Degrades gently: ~free at 8-bit, only breaks below ~4-bit. Saves <b>size</b>, not speed.</div>
+          Degrades gently: ~free at 8-bit, a modest loss at 6-bit, breaks at 4-bit. Saves <b>size</b>, not speed.</div>
       </div>
     </div>
     <div class="mbody">
@@ -200,14 +200,14 @@
       <div class="result" id="q-result"></div>
       <details class="more">
         <summary>Tune it yourself</summary>
-        <div class="sub">Pick a bit-width — watch the graceful curve, then the cliff below 4-bit.</div>
+        <div class="sub">Pick a bit-width — watch the graceful curve, then the cliff at 4-bit.</div>
         <div class="ladder" id="q-ladder"></div>
         <div class="sub">scale sharing:</div>
         <div class="toggle" id="q-group">
           <button data-g="128" class="on">per-group (128)</button>
           <button data-g="0">per-tensor (crude)</button>
         </div>
-        <div class="sub">Per-group scales keep 6-bit alive; per-tensor falls off a cliff at 6-bit. Try both.</div>
+        <div class="sub">Per-group scales hold 6-bit near native; one scale per tensor loses far more at 6-bit and 8-bit. Try both.</div>
       </details>
     </div>
   </div>
@@ -227,7 +227,7 @@
       <div class="suggest">
         <div class="stxt"><div class="slbl">suggested</div>
           <div class="sval" id="p-sugtext">Scan to find the safe, high-value cuts</div>
-          <div class="swhy" id="p-sugwhy">a 3-second probe reveals which stages are redundant</div></div>
+          <div class="swhy" id="p-sugwhy">a few-second probe reveals which stages are redundant</div></div>
         <button id="p-scan">🔬 Scan</button>
         <button class="go" id="p-apply" style="display:none">Apply cut</button>
       </div>
@@ -304,12 +304,12 @@ let qGroup=128, rEpochs=12;
 
 async function boot(){
   const s=await (await fetch('/api/structure')).json();
-  STAGES=s.stages; NODE_H=s.node_height; NATIVE=s.native; NATIVE_MB=+(NATIVE.params_m*2).toFixed(2);
+  STAGES=s.stages; NODE_H=s.node_height; NATIVE=s.native; NATIVE_MB=NATIVE.size_mb;
   document.getElementById('chips').innerHTML=
     `<span class="chip">yolov8n</span><span class="chip"><b>${NATIVE.params_m}M</b></span>
-     <span class="chip"><b>${NATIVE.flops_g}</b> GFLOP</span><span class="chip">mAP <b>${NATIVE.map}</b></span><span class="chip">${s.device}</span>`;
+     <span class="chip"><b>${NATIVE.macs_g}</b> GMAC</span><span class="chip">mAP <b>${NATIVE.map}</b></span><span class="chip">${s.device}</span>`;
   buildLadder(); render(); coach(); drawFrontier();
-  setScore(NATIVE.map, NATIVE_MB, NATIVE.flops_g, 'native', 'native');
+  setScore(NATIVE.map, NATIVE_MB, NATIVE.macs_g, 'native', 'native');
 }
 
 function setScore(map,size,flops,sizeSub,flopSub){
@@ -318,7 +318,7 @@ function setScore(map,size,flops,sizeSub,flopSub){
   document.getElementById('mapbar').style.width=Math.max(2,pct)+'%';
   document.getElementById('mappct').textContent=`${pct.toFixed(0)}% of native`;
   document.getElementById('sizev').innerHTML=`${size} <span class="u">MB</span>`;
-  document.getElementById('flopv').innerHTML=`${flops} <span class="u">GFLOP</span>`;
+  document.getElementById('flopv').innerHTML=`${flops} <span class="u">GMAC</span>`;
   document.getElementById('sizesub').textContent=sizeSub;
   document.getElementById('flopsub').textContent=flopSub;
 }
@@ -338,7 +338,7 @@ async function quantize(bits,btn){
   document.getElementById('q-result').innerHTML=
     `<b>${bits}-bit</b> → mAP <b>${r.map}</b> (${r.map_pct}% of native) · size <b>${r.size_mb} MB</b> (${r.size_pct}%)`;
   masks={}; render();               // quant is measured from native; clear any prune
-  setScore(r.map, r.size_mb, NATIVE.flops_g, `${bits}-bit`, 'native');
+  setScore(r.map, r.size_mb, NATIVE.macs_g, `${bits}-bit`, 'native');
 }
 document.getElementById('q-apply').onclick=async e=>{ e.target.disabled=true;
   await quantize(8,[...document.querySelectorAll('#q-ladder button')].find(b=>b.textContent==='8b')); e.target.disabled=false; };
@@ -381,9 +381,9 @@ document.getElementById('p-apply').onclick=async()=>{ masks={}; bestCuts().forEa
 document.getElementById('p-measure').onclick=measurePrune;
 async function measurePrune(){
   const r=await (await fetch('/api/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({masks:fracs()})})).json();
-  document.getElementById('p-result').innerHTML=`this cut → mAP <b>${r.map}</b> (${r.map_pct}% of native) · compute removed <b>${r.est_saving_pct}%</b>`;
-  setScore(r.map, NATIVE_MB, r.est_flops_g, 'native', `${r.est_saving_pct}% cut`);
-  frontier.push({removed:r.est_saving_pct,map:r.map}); drawFrontier();
+  document.getElementById('p-result').innerHTML=`this cut → mAP <b>${r.map}</b> (${r.map_pct}% of native) · compute removed <b>${r.saving_pct}%</b>`;
+  setScore(r.map, NATIVE_MB, r.macs_g, 'native', `${r.saving_pct}% cut`);
+  frontier.push({removed:r.saving_pct,map:r.map}); drawFrontier();
 }
 function coach(){
   const el=document.getElementById('coach'), T='<div class="ct">💡 COACH</div>';
@@ -423,20 +423,20 @@ function renderRecover(s){
   if(s.status==='error'){ el.innerHTML=`<span style="color:var(--bad)">error: ${s.msg}</span>`; return; }
   if(s.status==='starting'||s.status==='pruning'){ el.innerHTML=`<span class="spin">pruning + starting training…</span>`; return; }
   const done=s.status==='done';
-  el.innerHTML=`epoch ${Math.min(s.epoch,s.epochs)}/${s.epochs}${done?' ✓ done':' <span class="spin">…training</span>'} · recovered mAP <b>${(s.map||0).toFixed(4)}</b> <span class="tag est">val</span> · pruned to ${s.params_m}M${done?' · saved '+s.best:''}`;
-  if(done) setScore(NATIVE.map, NATIVE_MB, s.flops_g, 'native', 'pruned + regrown');
+  el.innerHTML=`epoch ${Math.min(s.epoch,s.epochs)}/${s.epochs}${done?' ✓ done':' <span class="spin">…training</span>'} · mAP <b>${(s.start_map||0).toFixed(4)}</b> after the cut → <b>${(s.map||0).toFixed(4)}</b> <span class="tag est">val</span> · pruned to ${s.params_m}M${done?' · saved '+s.best:''}`;
+  if(done) setScore(NATIVE.map, NATIVE_MB, s.macs_g, 'native', 'pruned + regrown');
 }
 
 /* ---------- GLOBALS ---------- */
 document.getElementById('export').onclick=async e=>{ const b=e.target,o=b.textContent; b.disabled=true; b.innerHTML='<span class="spin">removing…</span>';
   const r=await (await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({masks:fracs()})})).json();
-  document.getElementById('e-result').innerHTML=`Exported: <b>${r.params_m}M</b> params (${r.params_pct}%) · <b>${r.flops_g}G</b> (${r.flops_pct}%) · ${r.latency_ms}ms · saved <b>${r.path}</b> — fine-tune to recover accuracy.`;
+  document.getElementById('e-result').innerHTML=`Exported: <b>${r.params_m}M</b> params (${r.params_pct}%) · <b>${r.macs_g} GMAC</b> (${r.macs_pct}%) · ${r.latency_ms}ms · saved <b>${r.path}</b> — fine-tune to recover accuracy.`;
   b.disabled=false; b.textContent=o; };
 document.getElementById('reset').onclick=async()=>{ masks={}; SENS=null; frontier=[]; render(); coach(); drawFrontier();
   ['q-result','p-result','r-result','e-result'].forEach(id=>document.getElementById(id).innerHTML='');
   document.getElementById('p-apply').style.display='none';
   document.getElementById('p-sugtext').innerHTML='Scan to find the safe, high-value cuts';
-  await fetch('/api/reset',{method:'POST'}); setScore(NATIVE.map,NATIVE_MB,NATIVE.flops_g,'native','native'); };
+  await fetch('/api/reset',{method:'POST'}); setScore(NATIVE.map,NATIVE_MB,NATIVE.macs_g,'native','native'); };
 
 boot();
 </script>
