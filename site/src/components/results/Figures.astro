@@ -1,0 +1,63 @@
+---
+import { figureUrl } from "../../lib/lab/data";
+import { figureText, plotSpecs, pngSize } from "./figures";
+
+interface Props {
+  exp: { name: string; title: string; figures: string[]; refs?: Record<string, Record<string, number>> };
+}
+const { exp } = Astro.props;
+const specs = plotSpecs(exp.name);
+const figures = exp.figures.map((rel, i) => ({
+  src: figureUrl(rel),
+  size: pngSize(rel),
+  ...figureText(rel, i, exp.figures.length, exp, specs),
+}));
+---
+{figures.length ? (
+  <div class="figs">
+    {figures.map((f, i) => (
+      <figure class="plate fig" style={f.size ? `--w: ${f.size.width}px` : undefined}>
+        <img
+          src={f.src}
+          alt={f.alt}
+          width={f.size?.width}
+          height={f.size?.height}
+          loading={i === 0 ? undefined : "lazy"}
+          decoding="async"
+        />
+        <p class="state error fig-error" hidden>
+          This figure did not load: the file is missing or the connection dropped. Reload the page to try again; the table below has the same numbers.
+        </p>
+        <figcaption>{f.name}</figcaption>
+      </figure>
+    ))}
+  </div>
+) : (
+  <p class="gap">No figures for this experiment. The table below has its numbers.</p>
+)}
+
+<script>
+  // A figure that fails to load says so, instead of leaving a broken image.
+  for (const fig of document.querySelectorAll<HTMLElement>(".fig")) {
+    const img = fig.querySelector("img");
+    const msg = fig.querySelector<HTMLElement>(".fig-error");
+    if (!img || !msg) continue;
+    const fail = () => {
+      img.hidden = true;
+      msg.hidden = false;
+    };
+    img.addEventListener("error", fail);
+    // An eager image may have failed before this script ran.
+    if (img.loading !== "lazy" && img.complete && img.naturalWidth === 0) fail();
+  }
+</script>
+
+<style>
+  .figs { display: flex; flex-direction: column; gap: var(--space-5); }
+  /* A plate is never wider than its figure plus the plate's padding and border,
+     so a figure shows at its drawn size or smaller, never stretched. The plate
+     stays light in both themes (DESIGN.md: figures on light plates), so tokens
+     inside it resolve to their light values and keep their contrast there. */
+  .fig { max-width: calc(var(--w, 900px) + 2 * var(--space-3) + 2px); color-scheme: light; }
+  .fig-error { padding-block: var(--space-4); max-width: var(--measure); }
+</style>
