@@ -68,9 +68,16 @@ function newStep(op: Step["op"]): Step {
   }
 }
 
+const NO_PRESET = "Pick a preset to load its steps, or build your own below.";
+const presetHint = (id: string | null) => {
+  const p = PRESETS.find((x) => x.id === id);
+  return p ? `${p.name}: ${p.hint}` : NO_PRESET;
+};
+
 export class RecipeEditor {
   recipe: Recipe = { steps: [] };
   private shares: Record<Kind, number>;
+  private active: string | null = "fp32"; // preset the recipe still matches; null once edited
 
   constructor(private root: HTMLElement, tensors: TensorMeta[], private onChange: (r: Recipe, label: string) => void) {
     const w = tensors.filter((t) => t.role === "weight");
@@ -78,13 +85,26 @@ export class RecipeEditor {
     this.shares = Object.fromEntries(ALL.map((k) => [k, w.filter((t) => t.kind === k).reduce((a, t) => a + t.numel, 0) / total])) as Record<Kind, number>;
     root.addEventListener("input", (e) => this.onInput(e));
     root.addEventListener("click", (e) => this.onClick(e));
+    // Hovering or focusing a preset previews its explanation; leaving shows the active one again.
+    const preview = (e: Event) => this.setHint((e.target as HTMLElement).closest<HTMLElement>(".preset")?.dataset.preset ?? this.active);
+    root.addEventListener("mouseover", preview);
+    root.addEventListener("focusin", preview);
+    root.addEventListener("mouseleave", () => this.setHint(this.active));
+    root.addEventListener("focusout", () => this.setHint(this.active));
     this.render();
   }
 
-  load(r: Recipe) {
+  load(r: Recipe, preset: string | null = null) {
     this.recipe = clone(r);
+    this.active = preset;
     this.render();
+    if (preset) this.root.querySelector<HTMLElement>(`[data-preset="${preset}"]`)?.focus();
     this.emit();
+  }
+
+  private setHint(id: string | null) {
+    const el = this.root.querySelector(".preset-hint");
+    if (el) el.textContent = presetHint(id);
   }
 
   private emit() {
@@ -92,10 +112,10 @@ export class RecipeEditor {
   }
 
   private render() {
-    const presets = PRESETS.map((p) => `<button type="button" class="preset" data-preset="${p.id}" title="${p.hint}">${p.name}</button>`).join("");
+    const presets = PRESETS.map((p) => `<button type="button" class="preset" data-preset="${p.id}" aria-pressed="${p.id === this.active}" aria-describedby="preset-hint">${p.name}</button>`).join("");
     const steps = this.recipe.steps.map((s, i) => this.stepHTML(s, i)).join("");
     this.root.innerHTML = `
-      <div class="presets"><span class="label">Presets</span><div class="preset-row">${presets}</div></div>
+      <div class="presets"><span class="label">Presets</span><div class="preset-row">${presets}</div><p class="preset-hint" id="preset-hint">${presetHint(this.active)}</p></div>
       <ol class="steps">${steps || `<li class="empty">No steps yet: this is the full-precision Pigeon. Add a step, or start from a preset.</li>`}</ol>
       <div class="add"><span class="label">Add a step</span><div class="add-row">
         ${(Object.keys(STEP_TITLES) as Step["op"][]).map((op) => `<button type="button" class="add-btn" data-add="${op}">+ ${STEP_TITLES[op]}</button>`).join("")}
@@ -153,7 +173,8 @@ export class RecipeEditor {
   private onClick(e: Event) {
     const t = (e.target as HTMLElement).closest("button");
     if (!t) return;
-    if (t.dataset.preset) return this.load(PRESETS.find((p) => p.id === t.dataset.preset)!.recipe);
+    if (t.dataset.preset) return this.load(PRESETS.find((p) => p.id === t.dataset.preset)!.recipe, t.dataset.preset);
+    this.active = null;
     if (t.dataset.add) { this.recipe.steps.push(newStep(t.dataset.add as Step["op"])); this.render(); return this.emit(); }
     if (t.dataset.remove) { this.recipe.steps.splice(Number(t.dataset.remove), 1); this.render(); return this.emit(); }
   }
@@ -163,6 +184,7 @@ export class RecipeEditor {
     const i = Number(el.dataset.i), f = el.dataset.f;
     const s = this.recipe.steps[i];
     if (!s || !f) return;
+    this.active = null;
     let rerender = false;
     if (f === "part") {
       s.parts = [...this.root.querySelectorAll<HTMLInputElement>(`input[data-i="${i}"][data-f="part"]:checked`)].map((x) => x.value as Kind);
@@ -185,6 +207,8 @@ export class RecipeEditor {
       el.closest(".step")!.querySelector("output")!.textContent = `${s.k} values (${el.value} bits)`;
     }
     if (rerender) this.render();
+    else this.root.querySelectorAll(".preset[aria-pressed='true']").forEach((b) => b.setAttribute("aria-pressed", "false"));
+    this.setHint(null);
     this.emit();
   }
 }

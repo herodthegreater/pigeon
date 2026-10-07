@@ -11,22 +11,24 @@ import Base from "../../layouts/Base.astro";
           <h1 id="bird-name">Pigeon</h1>
           <p class="latin" id="bird-latin"></p>
           <p class="bird-note" id="bird-note">Fetching the model and 500 test photos.</p>
+          <button type="button" class="retry" id="retry" hidden>Reload the page</button>
         </div>
       </div>
 
-      <div class="board">
+      <div class="board" id="board" data-state="busy">
         <div class="status"><span id="status">Starting the engine…</span><span class="bar"><span id="bar"></span></span></div>
-        <dl class="metrics">
+        <dl class="metrics" id="metrics">
           <div class="metric"><dt>Accuracy</dt><dd class="num"><span id="m-acc">–</span><small id="m-acc-d"></small></dd><p>bird / no bird, right or wrong</p></div>
           <div class="metric"><dt>Pointing</dt><dd class="num"><span id="m-pt">–</span><small id="m-pt-d"></small></dd><p>heatmap peak lands on the real bird</p></div>
           <div class="metric"><dt>Agreement</dt><dd class="num"><span id="m-ag">–</span></dd><p>same answer as the original Pigeon</p></div>
           <div class="metric"><dt>Size</dt><dd class="num"><span id="m-size">–</span><small id="m-ratio"></small></dd><p>real bytes, scales and indices included</p></div>
         </dl>
+        <p class="basis" id="basis"></p>
         <p class="best" id="best">No working compressed Pigeon yet. The line to beat: ≥ 90% accuracy and ≥ 75% pointing.</p>
       </div>
     </section>
 
-    <div class="work">
+    <div class="work" id="work">
       <aside class="recipe-col">
         <h2>Recipe</h2>
         <p class="intro">Stack steps top to bottom, the way a real compression pipeline runs. Every change re-scores Pigeon on its test photos.</p>
@@ -40,6 +42,10 @@ import Base from "../../layouts/Base.astro";
             <button type="button" class="ghost" id="clear">Clear history</button>
           </div>
           <div class="chart" id="pareto"></div>
+          <details class="runs">
+            <summary>Show every run as a table</summary>
+            <div class="runs-scroll" id="pareto-table"></div>
+          </details>
           <p class="caption">Each dot is one full 500-photo scoring run. Filled dots still work. The magenta line joins the best tradeoffs: nothing else you tried is both smaller <em>and</em> more accurate.</p>
         </section>
 
@@ -70,12 +76,15 @@ import Base from "../../layouts/Base.astro";
     .bird-note { color: var(--muted); font-size: 0.93rem; margin-top: 6px; }
     #bird-condition[data-c="healthy"] { color: var(--good); }
     #bird-condition[data-c="emaciated"] { color: var(--warn); }
-    #bird-condition[data-c="skeleton"] { color: var(--bad); }
+    #bird-condition[data-c="skeleton"], #bird-condition[data-c="error"] { color: var(--bad); }
+    .retry { align-self: start; margin-top: 8px; padding: 8px 14px; border: 0; border-radius: var(--radius); background: var(--teal); color: var(--paper); font-weight: 600; cursor: pointer; }
 
     .board { display: flex; flex-direction: column; gap: 14px; }
     .status { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: var(--muted); font-family: var(--mono); }
     .bar { flex: 1; height: 3px; background: var(--sunk); max-width: 220px; }
     .bar span { display: block; height: 100%; width: 0; background: var(--teal); transition: width 0.15s; }
+    .board[data-state="error"] .status { color: var(--bad); }
+    .board[data-state="error"] .bar { display: none; }
     .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: 0; border: 1px solid var(--rule); background: var(--card); }
     .metric { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
     .metric + .metric { border-left: 1px solid var(--rule); }
@@ -84,6 +93,9 @@ import Base from "../../layouts/Base.astro";
     .metric dd small { font-family: var(--mono); font-size: 0.78rem; font-weight: 400; }
     .metric dd small.down { color: var(--bad); } .metric dd small.up { color: var(--good); } .metric dd small.flat { color: var(--muted); }
     .metric p { font-size: 0.8rem; color: var(--muted); line-height: 1.35; }
+    .metrics.estimate dd > span:first-child { color: var(--muted); }
+    .basis { font-size: 0.85rem; color: var(--muted); margin-top: -6px; }
+    .basis:empty { display: none; }
     .best { font-size: 0.93rem; padding: 10px 14px; border-left: 3px solid var(--magenta); background: var(--magenta-wash); }
 
     .work { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 28px; align-items: start; }
@@ -95,6 +107,8 @@ import Base from "../../layouts/Base.astro";
       border: 1px solid var(--rule); background: var(--card); padding: 5px 10px; cursor: pointer; border-radius: var(--radius); font-size: 0.85rem;
     }
     .preset:hover, .add-btn:hover, .ghost:hover { border-color: var(--teal); }
+    .preset[aria-pressed="true"] { background: var(--teal-wash); border-color: var(--teal); font-weight: 600; }
+    .preset-hint { font-size: 0.85rem; color: var(--muted); min-height: 2.6em; }
     .add-btn { border-style: dashed; }
     .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
     .empty { color: var(--muted); font-size: 0.9rem; padding: 12px; border: 1px dashed var(--rule); }
@@ -132,9 +146,17 @@ import Base from "../../layouts/Base.astro";
     .chart .tick { font: 11px var(--mono); fill: var(--muted); }
     .chart .axis { font: 12px var(--body); fill: var(--muted); }
     .chart .works { font: 600 12px var(--body); fill: var(--teal); }
+    .runs summary { cursor: pointer; font-size: 0.85rem; color: var(--teal); width: fit-content; }
+    .runs-scroll { overflow-x: auto; margin-top: 8px; }
+    .runs table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+    .runs th, .runs td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); }
+    .runs th { font-weight: 600; }
+    .runs td.num, .runs th.num { text-align: right; }
+    .runs tr[aria-current="true"] td { background: var(--teal-wash); }
 
     .specimens { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-    .specimen { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+    .specimen { margin: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
+    .specimen:has(.credit:focus-visible) { outline: 2px solid var(--magenta); outline-offset: 2px; }
     .frame { position: relative; aspect-ratio: 1; max-width: 100%; background-repeat: no-repeat; border: 2px solid transparent; }
     .specimen[data-correct="false"] .frame { border-color: var(--bad); }
     .specimen[data-flipped="true"] .frame { border-style: dashed; }
@@ -148,7 +170,22 @@ import Base from "../../layouts/Base.astro";
     .truth { font-weight: 600; }
     .verdict { color: var(--muted); }
     .specimen[data-correct="false"] .verdict { color: var(--bad); }
-    .credit { font-size: 0.68rem; color: var(--faint); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .credit { font-size: 0.75rem; color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .credit:focus-visible { outline: none; }
+    /* The whole tile is the link to the source photo, so the tap target is the photo, not a 12px line of text. */
+    .credit::after { content: ""; position: absolute; inset: 0; }
+    .specimen:hover .credit { text-decoration: underline; }
+
+    /* Touch: every control gets a 44px target. */
+    @media (pointer: coarse), (max-width: 640px) {
+      .preset, .add-btn, .ghost, .remove, .retry { min-height: 44px; }
+      .remove { padding-inline: 12px; }
+      .seg span { min-height: 44px; display: grid; place-items: center; }
+      .check, .part { min-height: 44px; }
+      .field select { min-height: 44px; }
+      input[type="range"] { height: 44px; }
+      .runs summary { min-height: 44px; display: flex; align-items: center; }
+    }
 
     @media (max-width: 1000px) {
       .hero, .work { grid-template-columns: 1fr; }
@@ -164,11 +201,11 @@ import Base from "../../layouts/Base.astro";
   </style>
 
   <script>
-    import { Engine, QUICK } from "../../lib/engine/client";
+    import { Engine, QUICK, type Ready } from "../../lib/engine/client";
     import type { Result } from "../../lib/engine/worker";
     import { RecipeEditor } from "../../lib/ui/recipe";
     import { mascotSVG, DODO } from "../../lib/ui/mascot";
-    import { paretoSVG, smallestWorking, formatSize, type Attempt } from "../../lib/ui/pareto";
+    import { paretoSVG, paretoTable, smallestWorking, formatSize, type Attempt } from "../../lib/ui/pareto";
     import { Specimens } from "../../lib/ui/specimens";
 
     const $ = (id: string) => document.getElementById(id)!;
@@ -179,84 +216,128 @@ import Base from "../../layouts/Base.astro";
     try { attempts = JSON.parse(localStorage.getItem(STORE) ?? "[]"); } catch {}
     const save = () => { try { localStorage.setItem(STORE, JSON.stringify(attempts.slice(-200))); } catch {} };
 
-    const engine = new Engine();
-    const { images, baseline, tensors } = await engine.ready;
-    const base = baseline;
-    const sheet = (s: number) => `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}testset/sheet-${s}.webp`;
-    const specimens = new Specimens($("specimens"), images, sheet, 10);
-    let label = "Full precision";
-    let current: Attempt | null = null;
-    let shownSpecies = "";
+    const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
+    const bar = $("bar") as HTMLElement;
+    const status = (text: string, state: "busy" | "ok" | "error" = "busy") => {
+      $("status").textContent = text;
+      $("board").dataset.state = state;
+    };
 
-    function delta(el: HTMLElement, v: number, ref: number) {
-      const d = (v - ref) * 100;
-      el.textContent = Math.abs(d) < 0.05 ? "±0.0" : `${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(1)} pts`;
-      el.className = Math.abs(d) < 0.05 ? "flat" : d > 0 ? "up" : "down";
-    }
-
-    function show(r: Result, final: boolean) {
-      const s = r.score;
-      $("m-acc").textContent = pct(s.accuracy); delta($("m-acc-d"), s.accuracy, base.score.accuracy);
-      $("m-pt").textContent = pct(s.pointing); delta($("m-pt-d"), s.pointing, base.score.pointing);
-      $("m-ag").textContent = pct(s.agreement);
-      $("m-size").textContent = formatSize(r.totalBytes);
-      $("m-ratio").textContent = `${(r.originalBytes / r.totalBytes).toFixed(2)}× smaller`;
-      $("m-ratio").className = "flat";
-      const m = mascotSVG({ ratio: r.originalBytes / r.totalBytes, accuracy: s.accuracy, pointing: s.pointing });
-      const bird = $("bird");
-      const key = m.dodo ? "dodo" : m.species.id;
-      if (key !== shownSpecies && shownSpecies) {
-        bird.classList.add("swap");
-        setTimeout(() => { bird.innerHTML = m.svg; bird.classList.remove("swap"); }, 180);
-      } else bird.innerHTML = m.svg;
-      shownSpecies = key;
-      const cond = $("bird-condition");
-      cond.dataset.c = m.condition;
-      cond.textContent = m.condition === "healthy" ? "Healthy · still works" : m.condition === "emaciated" ? `Starving · ${Math.round(m.starve * 100)}% of the way to bones` : "Skeleton · broken";
-      $("bird-name").textContent = m.dodo ? DODO.name : m.species.name;
-      $("bird-latin").textContent = `${m.dodo ? DODO.latin : m.species.latin}${m.dodo ? "" : ` · about ${m.species.grams} g`}`;
-      $("bird-note").textContent = m.dodo ? DODO.note : m.condition === "skeleton" ? "This setting broke Pigeon: it's guessing." : m.species.note;
-      if (final) specimens.update(r.logits, r.cams, base.logits);
-    }
-
-    function redrawChart() {
-      $("pareto").innerHTML = paretoSVG(attempts, current);
-      const best = smallestWorking(attempts, base.totalBytes);
-      $("best").innerHTML = best
-        ? `Smallest working Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${(base.totalBytes / best.bytes).toFixed(1)}× smaller, ${pct(best.accuracy)} accurate): <em>${best.label.replace(/[<>&]/g, "")}</em>`
-        : "No working compressed Pigeon yet. The line to beat: ≥ 90% accuracy and ≥ 75% pointing.";
-    }
-
-    const editor = new RecipeEditor($("recipe"), tensors, (recipe, l) => {
-      label = l;
-      $("status").textContent = `Scoring on ${QUICK} photos…`;
-      engine.evaluate(recipe, {
-        onProgress: (done, total, stage) => {
-          ($("bar") as HTMLElement).style.width = `${(done / total) * 100}%`;
-          $("status").textContent = stage === "quick" ? `Scoring on ${QUICK} photos…` : `Quick estimate shown · confirming on all ${total}… ${done}/${total}`;
-        },
-        onQuick: (r) => show(r, false),
-        onFull: (r) => {
-          show(r, true);
-          $("status").textContent = `Scored on all ${r.score.n} photos · ${Math.round(r.ms.infer)} ms`;
-          current = { label, bytes: r.totalBytes, accuracy: r.score.accuracy, pointing: r.score.pointing };
-          const dup = attempts.findIndex((a) => a.label === label);
-          if (dup >= 0) attempts.splice(dup, 1);
-          attempts.push(current);
-          save();
-          redrawChart();
-        },
-      });
+    const engine = new Engine((b) => {
+      if (b.stage === "download") status(`Downloading the model and test photos · ${mb(b.bytes)} so far`);
+      else {
+        bar.style.width = `${(b.done / b.total) * 100}%`;
+        status(`Scoring the original Pigeon on ${b.total} photos… ${b.done}/${b.total}`);
+      }
     });
 
-    show(base, true);
-    current = { label, bytes: base.totalBytes, accuracy: base.score.accuracy, pointing: base.score.pointing };
-    if (!attempts.some((a) => a.label === label)) attempts.push(current);
-    redrawChart();
-    $("status").textContent = `Scored on all ${base.score.n} photos · ready`;
+    function failLoad(err: unknown) {
+      const cond = $("bird-condition");
+      cond.dataset.c = "error";
+      cond.textContent = "Couldn't load";
+      $("bird-note").textContent = `The engine stopped: ${err instanceof Error ? err.message : String(err)}. Check your connection and reload. If it keeps failing, try a recent Chrome, Firefox or Safari.`;
+      $("retry").hidden = false;
+      $("best").hidden = true;
+      bar.style.width = "0";
+      status("Engine stopped", "error");
+      $("work").hidden = true;
+      return null;
+    }
+    $("retry").addEventListener("click", () => location.reload());
 
-    $("heat").addEventListener("change", (e) => $("specimens").classList.toggle("heat", (e.target as HTMLInputElement).checked));
-    $("clear").addEventListener("click", () => { attempts = current ? [current] : []; save(); redrawChart(); });
-    void editor;
+    const ready = await engine.ready.catch(failLoad);
+    if (ready) start(ready);
+
+    function start({ images, baseline, tensors }: Ready) {
+      const base = baseline;
+      const sheet = (s: number) => `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}testset/sheet-${s}.webp`;
+      const specimens = new Specimens($("specimens"), images, sheet, 10);
+      let label = "Full precision";
+      let current: Attempt | null = null;
+      let shownSpecies = "";
+
+      function delta(el: HTMLElement, v: number, ref: number) {
+        const d = (v - ref) * 100;
+        el.textContent = Math.abs(d) < 0.05 ? "±0.0" : `${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(1)} pts`;
+        el.className = Math.abs(d) < 0.05 ? "flat" : d > 0 ? "up" : "down";
+      }
+
+      // Quick results come from the first 100 photos: mark them with ≈ until the 500-photo score lands.
+      function show(r: Result, final: boolean) {
+        const s = r.score;
+        const est = final ? "" : "≈ ";
+        $("metrics").classList.toggle("estimate", !final);
+        $("basis").textContent = final ? `Measured on all ${s.n} photos.` : `≈ Estimate from the first ${s.n} photos. Confirming on all ${images.length}…`;
+        $("m-acc").textContent = est + pct(s.accuracy); delta($("m-acc-d"), s.accuracy, base.score.accuracy);
+        $("m-pt").textContent = est + pct(s.pointing); delta($("m-pt-d"), s.pointing, base.score.pointing);
+        $("m-ag").textContent = est + pct(s.agreement);
+        $("m-size").textContent = formatSize(r.totalBytes);
+        $("m-ratio").textContent = `${(r.originalBytes / r.totalBytes).toFixed(2)}× smaller`;
+        $("m-ratio").className = "flat";
+        const m = mascotSVG({ ratio: r.originalBytes / r.totalBytes, accuracy: s.accuracy, pointing: s.pointing });
+        const bird = $("bird");
+        const key = m.dodo ? "dodo" : m.species.id;
+        if (key !== shownSpecies && shownSpecies) {
+          bird.classList.add("swap");
+          setTimeout(() => { bird.innerHTML = m.svg; bird.classList.remove("swap"); }, 180);
+        } else bird.innerHTML = m.svg;
+        shownSpecies = key;
+        const cond = $("bird-condition");
+        cond.dataset.c = m.condition;
+        const condition = m.condition === "healthy" ? "Healthy · still works" : m.condition === "emaciated" ? `Starving · ${Math.round(m.starve * 100)}% of the way to bones` : "Skeleton · broken";
+        cond.textContent = final ? condition : `Early read · ${condition}`;
+        $("bird-name").textContent = m.dodo ? DODO.name : m.species.name;
+        $("bird-latin").textContent = `${m.dodo ? DODO.latin : m.species.latin}${m.dodo ? "" : ` · about ${m.species.grams} g`}`;
+        $("bird-note").textContent = m.dodo ? DODO.note : m.condition === "skeleton" ? "This setting broke Pigeon: it's guessing." : m.species.note;
+        if (final) specimens.update(r.logits, r.cams, base.logits);
+      }
+
+      function redrawChart() {
+        $("pareto").innerHTML = paretoSVG(attempts, current);
+        $("pareto-table").innerHTML = paretoTable(attempts, current);
+        const best = smallestWorking(attempts, base.totalBytes);
+        $("best").innerHTML = best
+          ? `Smallest working Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${(base.totalBytes / best.bytes).toFixed(1)}× smaller, ${pct(best.accuracy)} accurate): <em>${best.label.replace(/[<>&]/g, "")}</em>`
+          : "No working compressed Pigeon yet. The line to beat: ≥ 90% accuracy and ≥ 75% pointing.";
+      }
+
+      const editor = new RecipeEditor($("recipe"), tensors, (recipe, l) => {
+        label = l;
+        bar.style.width = "0";
+        status(`Scoring on ${QUICK} photos…`);
+        engine.evaluate(recipe, {
+          onProgress: (done, total, stage) => {
+            bar.style.width = `${(done / total) * 100}%`;
+            status(stage === "quick" ? `Scoring on ${QUICK} photos… ${done}/${total}` : `Quick estimate shown · confirming on all ${total}… ${done}/${total}`);
+          },
+          onQuick: (r) => show(r, false),
+          onFull: (r) => {
+            show(r, true);
+            status(`Scored on all ${r.score.n} photos · ${Math.round(r.ms.infer)} ms`, "ok");
+            current = { label, bytes: r.totalBytes, accuracy: r.score.accuracy, pointing: r.score.pointing };
+            const dup = attempts.findIndex((a) => a.label === label);
+            if (dup >= 0) attempts.splice(dup, 1);
+            attempts.push(current);
+            save();
+            redrawChart();
+          },
+          onError: (message) => {
+            bar.style.width = "0";
+            $("metrics").classList.add("estimate");
+            status(`Scoring failed (${message}). The numbers below are from the last run that finished. Change the recipe to try again.`, "error");
+          },
+        });
+      });
+
+      show(base, true);
+      current = { label, bytes: base.totalBytes, accuracy: base.score.accuracy, pointing: base.score.pointing };
+      if (!attempts.some((a) => a.label === label)) attempts.push(current);
+      redrawChart();
+      status(`Scored on all ${base.score.n} photos · ready`, "ok");
+
+      $("heat").addEventListener("change", (e) => $("specimens").classList.toggle("heat", (e.target as HTMLInputElement).checked));
+      $("clear").addEventListener("click", () => { attempts = current ? [current] : []; save(); redrawChart(); });
+      void editor;
+    }
   </script>
 </Base>

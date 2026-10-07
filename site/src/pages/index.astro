@@ -11,7 +11,7 @@ const bones = mascotSVG({ ratio: 4, accuracy: 0.5, pointing: 0.2 });
       <p class="label">A field guide to model compression</p>
       <h1>Shrink a real model with your own hands, and watch what it costs.</h1>
       <p class="sub">Pigeon is a small image model with one job: <em>is there a bird, and where?</em> Quantize it, prune it, palettize it, right here in your browser, on 500 real photos. Keep it accurate and it slims from a pigeon into a hummingbird. Push too far and it starves.</p>
-      <div class="cta"><a class="go" href={`${base}coop/`}>Open the Coop</a><a class="alt" href={`${base}school/`}>Start Flight School</a></div>
+      <div class="cta"><a class="go" href={`${base}coop/`}>Open the Coop</a><a class="alt" href={`${base}school/`}>Preview the Flight School syllabus</a></div>
     </section>
 
     <section class="ladder" aria-label="The species ladder">
@@ -28,9 +28,9 @@ const bones = mascotSVG({ ratio: 4, accuracy: 0.5, pointing: 0.2 });
     </section>
 
     <section class="three">
-      <a href={`${base}school/`}><h2>Flight School</h2><p>Twelve short lessons on the building blocks: number formats, scales, bits, outliers, pruning, distillation.</p></a>
-      <a href={`${base}coop/`}><h2>The Coop</h2><p>A sandbox. Stack methods, watch accuracy and size move live, and find the smallest Pigeon that still works.</p></a>
-      <a href={`${base}guide/`}><h2>Field Guide</h2><p>Every technique that matters in 2026, from INT8 to GGUF k-quants to NVFP4, with code for your own models.</p></a>
+      <a href={`${base}school/`}><h2>Flight School</h2><p class="state">Coming next</p><p>Twelve short lessons on the building blocks: number formats, scales, bits, outliers, pruning, distillation. The syllabus is posted; the lessons are still being written.</p></a>
+      <a href={`${base}coop/`}><h2>The Coop</h2><p class="state open">Open now</p><p>A sandbox. Stack methods, watch accuracy and size move live, and find the smallest Pigeon that still works.</p></a>
+      <a href={`${base}guide/`}><h2>Field Guide</h2><p class="state">Coming next</p><p>The compression techniques people use in 2026, from INT8 to GGUF k-quants to NVFP4. The list is posted; the write-ups and code for your own models are on the way.</p></a>
     </section>
   </main>
   <style>
@@ -53,6 +53,8 @@ const bones = mascotSVG({ ratio: 4, accuracy: 0.5, pointing: 0.2 });
     .three a:hover h2 { color: var(--teal); }
     .three h2 { font-size: var(--step-2); }
     .three p { color: var(--muted); font-size: 0.95rem; }
+    .three .state { font-size: 0.85rem; font-style: italic; margin-top: -4px; }
+    .three .state.open { color: var(--teal); }
     @media (max-width: 760px) {
       .ladder { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .three { grid-template-columns: 1fr; }

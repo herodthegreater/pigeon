@@ -1,6 +1,7 @@
 /** The fixed eval set: 500 images packed into 10 x 10 WebP sprite sheets. */
 
 import { INPUT } from "./constants";
+import { fetchOk } from "./fetch";
 
 export interface TestImage {
   id: string;
@@ -22,8 +23,8 @@ export interface TestSet {
 
 const base = () => (import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
 
-async function decodeSheet(url: string): Promise<ImageData> {
-  const blob = await fetch(url).then((r) => r.blob());
+async function decodeSheet(url: string, onBytes?: (n: number) => void): Promise<ImageData> {
+  const blob = await fetchOk(url, onBytes).then((r) => r.blob());
   const bmp = await createImageBitmap(blob);
   const canvas = new OffscreenCanvas(bmp.width, bmp.height);
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
@@ -32,12 +33,12 @@ async function decodeSheet(url: string): Promise<ImageData> {
 }
 
 /** Load the first `count` images (sheets are balanced, so any prefix of 100 is a fair sample). */
-export async function loadTestSet(count = 500): Promise<TestSet> {
-  const meta = await fetch(`${base()}testset/testset.json`).then((r) => r.json());
+export async function loadTestSet(count = 500, onBytes?: (n: number) => void): Promise<TestSet> {
+  const meta = await fetchOk(`${base()}testset/testset.json`, onBytes).then((r) => r.json());
   const images: TestImage[] = meta.images.slice(0, count);
   const sheets = [...new Set(images.map((i) => i.sheet))];
   const sheetUrl = (s: number) => `${base()}testset/sheet-${s}.webp`;
-  const data = new Map(await Promise.all(sheets.map(async (s) => [s, await decodeSheet(sheetUrl(s))] as const)));
+  const data = new Map(await Promise.all(sheets.map(async (s) => [s, await decodeSheet(sheetUrl(s), onBytes)] as const)));
   const plane = INPUT * INPUT;
   const pixels = images.map((img) => {
     const d = data.get(img.sheet)!;

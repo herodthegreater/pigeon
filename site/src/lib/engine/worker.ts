@@ -23,12 +23,14 @@ export interface Result {
 }
 
 export type Message =
+  | { type: "boot"; bytes: number }
   | { type: "ready"; images: TestSet["images"]; baseline: Result; tensors: PigeonModel["tensors"] }
   | { type: "progress"; id: number; done: number; total: number }
   | { type: "result"; result: Result }
   | { type: "error"; id?: number; message: string };
 
 const BATCH = 25;
+const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 let model: PigeonModel;
 let testset: TestSet;
 let refPred: Uint8Array;
@@ -43,8 +45,13 @@ async function pump() {
   while (pending) {
     const req = pending;
     pending = null;
-    const result = await evaluate(req.id, req.recipe, req.count);
-    if (result) self.postMessage({ type: "result", result } satisfies Message);
+    // A failed run reports and moves on, so the queue never jams.
+    try {
+      const result = await evaluate(req.id, req.recipe, req.count);
+      if (result) self.postMessage({ type: "result", result } satisfies Message);
+    } catch (err) {
+      self.postMessage({ type: "error", id: req.id, message: errText(err) } satisfies Message);
+    }
   }
   running = false;
 }
@@ -80,7 +87,9 @@ self.onmessage = async (e: MessageEvent<Request>) => {
   const msg = e.data;
   try {
     if (msg.type === "init") {
-      [model, testset] = await Promise.all([loadModel(), loadTestSet()]);
+      let bytes = 0;
+      const onBytes = (n: number) => self.postMessage({ type: "boot", bytes: (bytes += n) } satisfies Message);
+      [model, testset] = await Promise.all([loadModel(onBytes), loadTestSet(undefined, onBytes)]);
       const baseline = (await evaluate(0, { steps: [] }))!;
       refPred = predictions(baseline.logits);
       baseline.score.agreement = 1;
@@ -91,6 +100,6 @@ self.onmessage = async (e: MessageEvent<Request>) => {
       await pump();
     }
   } catch (err) {
-    self.postMessage({ type: "error", id: "id" in msg ? msg.id : undefined, message: String(err) } satisfies Message);
+    self.postMessage({ type: "error", id: "id" in msg ? msg.id : undefined, message: errText(err) } satisfies Message);
   }
 };

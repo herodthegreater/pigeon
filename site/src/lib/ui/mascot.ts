@@ -273,6 +273,18 @@ export interface MascotState {
   pointing: number;
 }
 
+let halos = 0;
+
+/** A light rim around the bird's silhouette (only visible where --bird-halo is set, i.e. dark mode). */
+function haloFilter(id: string, k: number): string {
+  return `<filter id="${id}" x="-10%" y="-10%" width="120%" height="120%">
+    <feMorphology in="SourceAlpha" operator="dilate" radius="${(1.2 / k).toFixed(2)}" result="grow"/>
+    <feFlood style="flood-color: var(--bird-halo, transparent)"/>
+    <feComposite in2="grow" operator="in" result="rim"/>
+    <feMerge><feMergeNode in="rim"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>`;
+}
+
 export function mascotSVG(state: MascotState): { svg: string; species: Species; condition: Condition; starve: number; dodo: boolean } {
   const species = speciesFor(state.ratio);
   const starve = starvation(state.accuracy, state.pointing);
@@ -280,10 +292,12 @@ export function mascotSVG(state: MascotState): { svg: string; species: Species; 
   const dodo = condition === "skeleton" && state.ratio < 1.3;
   const inner = condition === "skeleton" ? drawSkeleton(species, dodo) : drawLiving(species, starve);
   const k = dodo ? 1 : species.scale;
+  const halo = `halo-${++halos}`;
   const svg = `<svg viewBox="22 38 ${W - 30} ${H - 30}" role="img" aria-label="${dodo ? "Dodo" : species.name}, ${condition}">
+    <defs>${haloFilter(halo, k)}</defs>
     <ellipse cx="135" cy="${GROUND + 2}" rx="${70 * k}" ry="5" fill="var(--bird-shadow)"/>
     <line x1="30" x2="230" y1="${GROUND + 2}" y2="${GROUND + 2}" stroke="var(--rule)" stroke-width="1"/>
-    <g transform="translate(${130 * (1 - k)} ${GROUND * (1 - k)}) scale(${k})">${inner}</g>
+    <g transform="translate(${130 * (1 - k)} ${GROUND * (1 - k)}) scale(${k})" filter="url(#${halo})">${inner}</g>
   </svg>`;
   return { svg, species, condition, starve, dodo };
 }

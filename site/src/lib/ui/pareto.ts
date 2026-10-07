@@ -38,7 +38,7 @@ export function paretoSVG(all: Attempt[], current: Attempt | null): string {
   const p: string[] = [];
   p.push(`<rect x="${M.l}" y="${M.t}" width="${W - M.l - M.r}" height="${y(WORKS.accuracy) - M.t}" fill="var(--teal-wash)" opacity="0.55"/>`);
   for (const t of yt) p.push(`<line x1="${M.l}" x2="${W - M.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--rule)" stroke-width="1"/><text x="${M.l - 8}" y="${y(t) + 4}" text-anchor="end" class="tick">${Math.round(t * 100)}%</text>`);
-  for (const t of xt) p.push(`<line x1="${x(t)}" x2="${x(t)}" y1="${H - M.b}" y2="${H - M.b + 5}" stroke="var(--faint)"/><text x="${x(t)}" y="${H - M.b + 18}" text-anchor="middle" class="tick">${kb(t)}</text>`);
+  for (const t of xt) p.push(`<line x1="${x(t)}" x2="${x(t)}" y1="${H - M.b}" y2="${H - M.b + 5}" stroke="var(--muted)"/><text x="${x(t)}" y="${H - M.b + 18}" text-anchor="middle" class="tick">${kb(t)}</text>`);
   p.push(`<text x="${(M.l + W - M.r) / 2}" y="${H - 4}" text-anchor="middle" class="axis">model size (log scale) → smaller is to the left</text>`);
   p.push(`<text transform="translate(12 ${(M.t + H - M.b) / 2}) rotate(-90)" text-anchor="middle" class="axis">accuracy</text>`);
   p.push(`<line x1="${M.l}" x2="${W - M.r}" y1="${y(WORKS.accuracy)}" y2="${y(WORKS.accuracy)}" stroke="var(--teal)" stroke-dasharray="5 4" stroke-width="1.5"/>`);
@@ -49,7 +49,18 @@ export function paretoSVG(all: Attempt[], current: Attempt | null): string {
     p.push(`<circle cx="${x(a.bytes)}" cy="${y(a.accuracy)}" r="4.5" fill="${ok ? "var(--teal)" : "var(--card)"}" stroke="${ok ? "var(--teal)" : "var(--warn)"}" stroke-width="1.6"><title>${esc(a.label)}: ${kb(a.bytes)}, ${(a.accuracy * 100).toFixed(1)}% accuracy, ${(a.pointing * 100).toFixed(0)}% pointing</title></circle>`);
   }
   if (current) p.push(`<circle cx="${x(current.bytes)}" cy="${y(current.accuracy)}" r="9" fill="none" stroke="var(--ink)" stroke-width="1.5"/>`);
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Size versus accuracy of every setting tried">${p.join("")}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Size versus accuracy of every setting tried. The table below lists every point.">${p.join("")}</svg>`;
+}
+
+/** The chart's data as a table, smallest first, so keyboard, touch and screen-reader users get every point. */
+export function paretoTable(all: Attempt[], current: Attempt | null): string {
+  const best = new Set(frontier(all));
+  const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+  const rows = [...all]
+    .sort((a, b) => a.bytes - b.bytes)
+    .map((a) => `<tr${a === current ? ' aria-current="true"' : ""}><td>${esc(a.label)}</td><td class="num">${kb(a.bytes)}</td><td class="num">${pct(a.accuracy)}</td><td class="num">${pct(a.pointing)}</td><td>${works(a) ? "Works" : "Broken"}${best.has(a) ? " · best tradeoff" : ""}</td></tr>`)
+    .join("");
+  return `<table><thead><tr><th scope="col">Recipe</th><th scope="col" class="num">Size</th><th scope="col" class="num">Accuracy</th><th scope="col" class="num">Pointing</th><th scope="col">Verdict</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 /** Smallest attempt that still works — and is actually compressed (under `baselineBytes`). */

@@ -4,6 +4,7 @@
  */
 
 import * as ort from "onnxruntime-web/wasm";
+import { fetchOk } from "./fetch";
 
 export type Kind = "conv" | "depthwise" | "pointwise" | "squeeze_excite" | "head";
 
@@ -35,13 +36,13 @@ import { INPUT } from "./constants";
 
 const base = () => (import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
 
-export async function loadModel(): Promise<PigeonModel> {
+export async function loadModel(onBytes?: (n: number) => void): Promise<PigeonModel> {
   // ORT finds its wasm runtime next to its own module; Vite emits it as an asset in the build.
   ort.env.wasm.numThreads = globalThis.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
   const [graph, tensors, bin] = await Promise.all([
-    fetch(`${base()}model/pigeon.onnx`).then((r) => r.arrayBuffer()),
-    fetch(`${base()}model/weights.json`).then((r) => r.json() as Promise<TensorMeta[]>),
-    fetch(`${base()}model/weights.bin`).then((r) => r.arrayBuffer()),
+    fetchOk(`${base()}model/pigeon.onnx`, onBytes).then((r) => r.arrayBuffer()),
+    fetchOk(`${base()}model/weights.json`, onBytes).then((r) => r.json() as Promise<TensorMeta[]>),
+    fetchOk(`${base()}model/weights.bin`, onBytes).then((r) => r.arrayBuffer()),
   ]);
   const session = await ort.InferenceSession.create(graph, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
   const original: Weights = new Map();

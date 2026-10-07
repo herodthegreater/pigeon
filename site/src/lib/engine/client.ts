@@ -19,36 +19,73 @@ export interface LiveHandlers {
   onQuick?: (r: Result) => void;
   onFull: (r: Result) => void;
   onProgress?: (done: number, total: number, stage: "quick" | "full") => void;
+  onError?: (message: string) => void;
 }
+
+/** Start-up progress: downloading the files, then scoring the original Pigeon. */
+export type Boot = { stage: "download"; bytes: number } | { stage: "score"; done: number; total: number };
 
 export const QUICK = 100;
 
 export class Engine {
-  private worker: Worker;
+  private worker: Worker | null;
   private nextId = 1;
   private current: { quick: number; full: number; recipe: Recipe; h: LiveHandlers } | null = null;
   readonly ready: Promise<Ready>;
 
-  constructor() {
-    this.worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-    this.ready = new Promise((resolve, reject) => {
-      this.worker.onmessage = (e: MessageEvent<Message>) => {
+  constructor(private onBoot?: (b: Boot) => void) {
+    if (typeof Worker === "undefined" || typeof WebAssembly === "undefined") {
+      this.worker = null;
+      this.ready = Promise.reject(new Error("this browser can't run Web Workers with WebAssembly"));
+      return;
+    }
+    const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    this.worker = worker;
+    let booted = false;
+    this.ready = new Promise((resolve, rejectReady) => {
+      // A start-up failure is final: stop the worker so straggling downloads can't report progress.
+      const reject = (err: Error) => {
+        worker.terminate();
+        this.onBoot = undefined;
+        rejectReady(err);
+      };
+      worker.onmessage = (e: MessageEvent<Message>) => {
         const m = e.data;
-        if (m.type === "ready") resolve({ images: m.images, baseline: m.baseline, tensors: m.tensors });
-        else if (m.type === "error") (this.current ? console.error(m.message) : reject(new Error(m.message)));
-        else this.route(m);
+        if (m.type === "ready") {
+          booted = true;
+          resolve({ images: m.images, baseline: m.baseline, tensors: m.tensors });
+        } else if (m.type === "error") {
+          if (!booted) reject(new Error(m.message));
+          else this.fail(m.message, m.id);
+        } else this.route(m);
+      };
+      // The worker script itself failed to load or crashed outside a request.
+      worker.onerror = (e) => {
+        e.preventDefault();
+        const message = e.message || "the engine worker crashed";
+        if (!booted) reject(new Error(message));
+        else this.fail(message);
       };
     });
-    this.worker.postMessage({ type: "init" });
+    worker.postMessage({ type: "init" });
+  }
+
+  private fail(message: string, id?: number) {
+    const c = this.current;
+    if (!c || (id !== undefined && id !== c.quick && id !== c.full)) return; // stale run
+    this.current = null;
+    c.h.onError?.(message);
   }
 
   evaluate(recipe: Recipe, h: LiveHandlers) {
     const quick = this.nextId++, full = this.nextId++;
     this.current = { quick, full, recipe, h };
-    this.worker.postMessage({ type: "evaluate", id: quick, recipe, count: QUICK });
+    this.worker?.postMessage({ type: "evaluate", id: quick, recipe, count: QUICK });
   }
 
   private route(m: Message) {
+    if (m.type === "boot") return this.onBoot?.({ stage: "download", bytes: m.bytes });
+    if (m.type === "progress" && m.id === 0) return this.onBoot?.({ stage: "score", done: m.done, total: m.total });
     const c = this.current;
     if (!c) return;
     if (m.type === "progress") {
@@ -57,7 +94,7 @@ export class Engine {
     } else if (m.type === "result") {
       if (m.result.id === c.quick) {
         c.h.onQuick?.(m.result);
-        this.worker.postMessage({ type: "evaluate", id: c.full, recipe: c.recipe });
+        this.worker?.postMessage({ type: "evaluate", id: c.full, recipe: c.recipe });
       } else if (m.result.id === c.full) {
         c.h.onFull(m.result);
       }
