@@ -7,7 +7,7 @@ A convolution layer outputs a stack of feature maps called *channels*, one per f
 1. Rewrite: replace each Ultralytics `C2f` block with `C2f_v2`, which computes the same thing in a form the tracer can follow.
 2. Trace: mark every weight as trainable, switch to training mode, and run one example image through the model. torch-pruning follows the autograd graph to record which layer feeds which.
 3. Group: for each output channel, collect everything tied to it: the conv filter, its batch-norm (BN) entries, the input slice of each consumer, and anything joined by a residual add or a concatenation.
-4. Score each channel in a group by the L2 norm (square root of the sum of squares) of its weights across all the group's layers.
+4. Score each channel in a group by the size of its weights (an L2, sum-of-squares criterion), combined across all the group's layers. A small score means little signal flows through it.
 5. Remove the lowest-scoring fraction of every group by slicing the tensors, so they physically shrink. The fraction is either one number for the whole model or one per stage.
 6. Never remove output channels of the Detect head (the layer that emits boxes and class scores).
 
@@ -15,22 +15,21 @@ Example: YOLOv8's Bottleneck computes `x + cv2(cv1(x))`. Cutting channel 7 from 
 
 ## The code, line by line
 
-`C2f` splits one 1x1 conv's output in half with `chunk(2, 1)`. The module docstring records what happens without a fix: the tracer can't follow `chunk`, and a generic pruner removes zero channels.
+`C2f` splits one 1x1 conv's output in half with `chunk(2, 1)`; the module docstring records that the tracer can't follow it, so a generic pruner removes zero channels.
 
-`C2f_v2.__init__` builds two convs instead, `self.cv0 = Conv(c1, self.c, 1, 1)` and `self.cv1 = Conv(c1, self.c, 1, 1)`, where `self.c = int(c2 * e)` is half the output width. `self.cv2` takes the concatenation of `2 + n` branches back to `c2` channels, and `self.m` holds `n` Bottlenecks. `forward` builds `y = [self.cv0(x), self.cv1(x)]`, runs each Bottleneck on the newest entry (`y.extend(m(y[-1]) for m in self.m)`) and returns `self.cv2(torch.cat(y, 1))`. Every split is now a separate layer the tracer can see.
+`C2f_v2.__init__` builds two convs instead, `self.cv0` and `self.cv1`, each producing `self.c = int(c2 * e)` channels. `self.cv2` maps the concatenation of `2 + n` branches back to `c2` channels. `forward` builds `y = [self.cv0(x), self.cv1(x)]`, runs each Bottleneck on the newest entry (`y.extend(m(y[-1]) for m in self.m)`) and returns `self.cv2(torch.cat(y, 1))`. Every split is now a separate layer the tracer can see.
 
-The helpers make the swap exact. `transfer_weights` reuses the old `cv2` and `m` modules outright, splits the old `cv1.conv.weight` by output row (`old_weight[:half]` to `cv0`, `old_weight[half:]` to `cv1`), splits the BN's `weight`, `bias`, `running_mean` and `running_var` the same way, and copies plain attributes such as `c` and Ultralytics' routing tags `f` and `i`. `replace_c2f_with_c2f_v2` reads each block's settings from the live module (`n=len(child.m)`, `e=child.c / child.cv2.conv.out_channels`), and `make_prunable` runs it on `yolo.model`.
+`transfer_weights` makes the swap exact: it reuses the old `cv2` and `m`, gives `old_weight[:half]` of `cv1.conv.weight` to `cv0` and `old_weight[half:]` to `cv1`, splits the BN tensors the same way, and copies plain attributes such as `c` and Ultralytics' routing tags `f` and `i`. `make_prunable` swaps every `C2f` in `yolo.model`.
 
 Both prune functions build their pruner with `_pruner`:
 
-- `model.requires_grad_(True)` comes first. Ultralytics checkpoints load with `requires_grad=False`, and the tracer only sees layers autograd tracks. Its docstring records the two failures this fixes: a reloaded checkpoint pruned nothing, and a fresh model never pruned stages 0-1, which sit before the first newly built `C2f_v2`.
-- `example` defaults to `torch.randn(1, 3, 640, 640)`, moved to the model's device.
+- `model.requires_grad_(True)` comes first. Ultralytics checkpoints load with `requires_grad=False`, and the tracer only sees layers autograd tracks. The docstring records the two failures this fixes: a reloaded checkpoint pruned nothing, and a fresh model never pruned stages 0-1, which sit before the first newly built `C2f_v2`.
 - `ignored` lists every `Detect` module, so the head's outputs are never cut.
 - `getattr(tp.pruner, "GroupNormPruner", tp.pruner.MetaPruner)` uses whichever class the installed torch-pruning has. `GroupMagnitudeImportance()` does the scoring.
 - `model.train()` runs before construction, because in training mode the head returns raw feature maps, which trace cleanly. The `finally` block restores the old mode with `model.train(was)`.
 - `iterative_steps=1` means the whole ratio comes off in one `step()`.
 
-`structured_prune(yolo, ratio)` is one line: `_pruner(yolo.model, example, pruning_ratio=ratio).step()`. Every group loses the same fraction. `prune_sweep.py`, `real_prune_test.py`, `finetune.py` and `iterative_prune.py` use it.
+`structured_prune(yolo, ratio)` is one line, `_pruner(yolo.model, example, pruning_ratio=ratio).step()`: every group loses the same fraction. The headless scripts (`prune_sweep.py`, `finetune.py`, `iterative_prune.py`) use it.
 
 `structured_prune_per_stage(yolo, stage_fracs)` is what the cockpit's Export and Regrow call. `_stage_pruner` collects `head`, the ids of every module inside `Detect`. For each other `Conv2d`, `top_stage(name)` maps `model.5.cv1.conv` to `model.5`; if that stage has a fraction, the conv goes into `ratio_dict` with `min(float(stage_fracs[st]), 0.9)`, a cap that keeps a stage from vanishing. `pruning_ratio=0.0` leaves every other group alone. Groups cross stage boundaries, so cutting one stage's outputs also shrinks the next stage's inputs. `removal_plan` builds the same pruner to list the channels without removing them (see prune_and_regrow).
 
@@ -54,8 +53,8 @@ Halving the width with no recovery drops accuracy to 0.4247, the same kind of cl
 - Fewer operations did not mean faster on a Mac. STATUS.md records a 30% prune that cut MACs (multiply-accumulates) by 35% yet made MPS latency 6% worse. After the `requires_grad` fix the same prune gives 1.81M params and 2.78G MACs, from 3.16M and 4.40G.
 - Only YOLOv8's `C2f` has a traceable rewrite. YOLO11's `C3k2` and `C2PSA` blocks have none.
 - `transfer_weights` reads `cv1.bn`, so `make_prunable` must run before `fuse` folds BN into the convs. server.py does it in that order.
-- Coupling makes a stage's cost hard to guess: STATUS.md records stages 15 and 21 at 25% estimated at 2% of compute saved, while Export saved 8%.
+- Coupling makes a cut's saving hard to guess: STATUS.md records stages 15 and 21 at 25% once estimated at 2% of compute saved, while Export saved 8%.
 
 ## Going further
 
-To run it, install `requirements.txt`, run `python build_eval_set.py`, then `uvicorn server:app --port 8000 --app-dir .` and open http://localhost:8000. In Structure, press Scan (it masks 10% of each stage and measures the drop), then "Apply cut" or click nodes (each is 5% of that stage's channels). Press "Export real pruned model": `/api/export` loads a fresh `yolov8n.pt`, calls `make_prunable` and `structured_prune_per_stage`, reports params, GMACs, latency and the real mAP before regrow, and saves `runs/pigeon_pruned.pt`. The browser edition in `web/` can't run torch-pruning, so its Export replays recorded server runs. The toy version is `lab/compress.py:structured_prune`.
+To run it, install `requirements.txt`, run `python build_eval_set.py`, then `uvicorn server:app --port 8000 --app-dir .` and open http://localhost:8000. In Structure, press Scan (it masks 10% of each stage and measures the drop), then "Apply cut" or click nodes (each is 5% of a stage's channels). "Export real pruned model" posts to `/api/export`, which prunes a fresh `yolov8n.pt` with `structured_prune_per_stage`, reports params, GMACs, latency and real mAP before regrow, and saves `runs/pigeon_pruned.pt`. The toy version is `lab/compress.py:structured_prune`.

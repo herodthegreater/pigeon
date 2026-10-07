@@ -361,35 +361,59 @@ stand-in for negatives.
 
 ## What this means for pigeon
 
-pigeon's loop is: prune YOLOv8n's channels, then fine-tune on 400 COCO images
-that all contain birds, and measure bird mAP. The toy can't promise numbers
-for YOLO, but it points at concrete things to try, roughly in order of
-expected payoff:
+pigeon's loop is: cut YOLOv8n (remove channels, round weights to fewer bits,
+or both), then fine-tune on 400 COCO images that all contain birds, with the
+quantizer inside the training loop (QAT) when the recipe quantizes, and
+measure bird mAP@50. The toy can't promise numbers for YOLO, but it points at
+concrete things to try, roughly in order of expected payoff:
 
 1. **Put non-bird images in the recovery set.** The single biggest effect in
    section 6 (0.797 → 0.962 bird AP) comes from adding negatives to an
-   all-positive recovery set. A detector sees background boxes inside bird
-   images, which is partial protection the toy doesn't have, but whole images
-   without birds are what teach it not to fire on cats and kites. Adding an
-   equal number of random COCO images is cheap.
+   all-positive recovery set. A detector sees background inside bird images,
+   which is partial protection the toy doesn't have; `build_finetune_set.py`
+   keeps only the bird boxes, so other objects in those photos already count
+   as background. Whole images without birds are what teach it not to fire on
+   cats and kites. Adding an equal number of random COCO images is cheap.
 2. **Recover by distilling from the unpruned model, on more images than you
    have labels for.** KD from the original YOLOv8n's outputs needs no labels,
    so any unlabeled images (COCO train, video frames) become recovery data.
-   That was worth 1.5 points with 8k labels and 22 points with 250.
-3. **Give recovery the same budget you'd give training from scratch before
-   concluding anything.** Here, short recovery made pruning look up to 15 points
-   worse than it is. STATUS.md's 40-epoch recovery reaching 0.07 may be a
-   budget or learning-rate effect rather than a limit of the method.
+   That was worth 1.5 points with 8k labels and 22 points with 250. The
+   Ultralytics trainer `recover_job.py` drives has no distillation term yet;
+   that is the code to add.
+3. **Cut in small steps and give each step a real recovery budget.** Here,
+   short recovery made pruning look up to 15 points worse than it is. pigeon's
+   own runs (STATUS.md) point the same way, more strongly: one 20% cut plus
+   40 epochs recovered only to 0.0706, while three 7.2% cuts with 15 epochs
+   after each kept 0.2874 (native 0.4284) with 31% fewer params. The toy's
+   gradual unstructured pruning only helped at 99% sparsity, so on this
+   question trust the detector. Each step lost more than the last
+   (0.3943, 0.3377, 0.2874), and STATUS.md names more data and epochs per step
+   as the next lever. Those recovered numbers lean optimistic: `best.pt` is
+   picked on the same 125 images they are scored on.
 4. **Collapse the head to the task.** Keeping 80 class outputs costs capacity
    a small model doesn't have (section 6). A bird-only (or bird +
    "everything else") head, distilled from the teacher's grouped scores, is
-   the detector version of the specialist head.
+   the detector version of the specialist head. pigeon still trains the
+   80-class head.
 5. **Expect quantization to be the cheap win and structure to be the hard
-   one.** 8 bits was free everywhere; low bits need group scales and QAT, and
-   hurt small models far more than big ones. Prune first, quantize last.
+   one.** 8 bits was free everywhere in the toy; low bits need group scales
+   and QAT, and hurt small models far more than big ones. The detector agrees:
+   with group-128 scales 8-bit costs 0.5% of YOLOv8n's bird mAP@50 and plain
+   4-bit rounding collapses, while a one-shot 5% channel cut scores 0.000
+   before fine-tuning (README.md). Better schemes push the precision cliff
+   back: FP4 levels with one scale per output channel keep 79% of native mAP,
+   92% with stages 0-2 left at 8 bits (4.04 bits per weight), and QAT took a
+   3.16-bit recipe from about 0% to 70% of native in 3 epochs (README.md,
+   measured on a stand-in bird set, so read them as relative). The toy's order
+   holds: Regrow prunes first and then fine-tunes with the quantizer in the
+   loop.
 6. **Don't trust gradient-based importance computed on training images.** The
    model's loss there is near zero; measure importance on held-out images, or
-   use L1, which was best or tied here.
+   use L1, which was best or tied here. pigeon's Export already ranks channels
+   by weight magnitude, and its structure scan measures each stage's mAP drop
+   on evaluation images rather than training images.
+
+---
 
 ## Mistakes caught while running this
 

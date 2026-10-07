@@ -1,18 +1,20 @@
 ## The idea
 
-Quantization stores each weight in fewer bits, for example as an 8-bit integer instead of a 16-bit float. pigeon measures the cost with *fake quantization*: round every weight to the nearest value an N-bit format could hold, but keep it as a float. The normal forward pass then gives the accuracy a real N-bit export with the same scheme would have. What keeps low bit-widths alive is the shared *scale*: each group of weights gets one float multiplier, and smaller groups fit their weights more tightly.
+Quantization stores each weight in fewer bits, for example as an 8-bit integer instead of a 16-bit float. pigeon measures the cost with *fake quantization*: round every weight to the nearest value an N-bit format could hold, but keep it as a float. The normal forward pass then gives the accuracy a real N-bit export with the same scheme would have. What keeps low bit-widths alive is the shared *scale*: each group of weights gets one float multiplier, and smaller groups fit their weights more tightly. For a CNN, round the weights inference actually uses, which means folding batch norm into each conv first.
 
 ## How it works
 
-1. Flatten the weight tensor and cut it into groups of `group_size` consecutive values, or use one group for the whole tensor (*per-tensor*).
-2. For each group, `scale = max(|w|) / qmax`, where `qmax = 2^(bits-1) - 1` (127 at 8 bits, 7 at 4 bits).
-3. `q = clamp(round(w / scale), -qmax, qmax)` is the integer a real file would store.
-4. `w_hat = q * scale` is the float the model uses.
+1. Fuse: fold each batch-norm (BN) layer into the conv before it, so `w' = w * γ / sqrt(var + eps)` per output channel and the BN shift becomes the conv's bias (see bn_folding).
+2. Flatten the weight tensor and cut it into groups of `group_size` consecutive values, or use one group for the whole tensor (*per-tensor*).
+3. For each group, `scale = max(|w|) / qmax`, where `qmax = 2^(bits-1) - 1` (127 at 8 bits, 7 at 4 bits).
+4. `q = clamp(round(w / scale), -qmax, qmax)` is the integer a real file would store, and `w_hat = q * scale` is the float the model uses.
 5. At 1 bit there is no zero level: `w_hat = sign(w) * mean(|w|)`.
 
 Example at 4 bits, one group `[0.50, -0.20, 0.03]`: `scale = 0.5 / 7 ≈ 0.0714`, `q = [7, -3, 0]`, `w_hat = [0.50, -0.214, 0.0]`. The 0.03 vanished: the largest weight sets the step for the whole group.
 
 ## The code, line by line
+
+`fuse(yolo)` in harness/model.py calls Ultralytics' `yolo.model.fuse(verbose=False)` unless `yolo.model.is_fused()`, folding every BN into its conv in place; calling it twice is harmless. It is explicit because newer Ultralytics `predict()` fuses a private copy and leaves `yolo.model` unfused. STATUS.md records that before this fix the cockpit rounded pre-BN weights.
 
 `_pos_levels(bits)` returns `(1 << (bits - 1)) - 1`, so 127 for 8 bits. Dropping the -128 level keeps zero exactly in the middle.
 
@@ -24,37 +26,36 @@ Example at 4 bits, one group `[0.50, -0.20, 0.03]`: `scale = 0.5 / 7 ≈ 0.0714`
 - Otherwise `pad = (-n) % group_size` zero-pads to a whole number of groups and `groups = flat.reshape(-1, group_size)`.
 - Multi-bit branch: `scale = groups.abs().amax(dim=1, keepdim=True).clamp_min(1e-12) / qmax`. The clamp stops an all-zero group from dividing by zero. Then `q = torch.clamp(torch.round(groups / scale), -qmax, qmax)` and `deq = q * scale`.
 - 1-bit branch: `scale` is the mean absolute value, `q = torch.sign(groups)`, and `torch.where(q == 0, ...)` maps exact zeros to +1.
-- `out[:-pad]` drops the padding, then shape and dtype are restored.
+- `out[:-pad]` drops the padding, then shape and dtype are restored. With `group_size == 1` every weight comes back unchanged, a deliberate no-op.
 
-With `group_size == 1` every weight comes back unchanged, a deliberate no-op per the docstring.
+`apply_uniform(model, bits, group_size, skip)` covers the whole network. `iter_weight_modules` yields every module in `QUANTIZABLE = (nn.Conv2d, nn.Linear, nn.Embedding)` that has a weight; biases stay native. For each module whose name contains no `skip` substring, `mod.weight.data.copy_(fake_quantize(mod.weight.data, bits, group_size))` overwrites the weight in place under `@torch.no_grad()`. It returns how many modules it touched. `carve.py` calls `fuse`, then `snapshot` once, then for each bit-width `restore` (weights and biases) followed by `apply_uniform` with `skip=(".dfl.",)`.
 
-`apply_uniform(model, bits, group_size, skip)` in harness/model.py covers the whole network. `iter_weight_modules` yields every module in `QUANTIZABLE = (nn.Conv2d, nn.Linear, nn.Embedding)` that has a weight; biases and batch-norm stay native. For each module whose name contains no `skip` substring, `mod.weight.data.copy_(fake_quantize(mod.weight.data, bits, group_size))` overwrites the weight in place under `@torch.no_grad()`. It returns how many modules it touched.
-
-Because this is destructive, `snapshot` clones every quantizable weight once and `restore` copies them back. `/api/quantize` in server.py calls `restore(yolo.model, SNAP)` before each `apply_uniform`, so every bit-width starts from native. server.py also runs one `predict` before `snapshot`, which (per its comment) fuses each conv with its batch norm, so the cockpit quantizes the folded weights a deployed model would store (see bn_folding).
+The cockpit no longer calls `apply_uniform`. Its Precision module uses `apply_precision` from harness/precision.py, a richer dial: scales per tensor, per output channel, or per group of 32 or 16 weights *inside* one output channel; evenly spaced INT levels or an FP grid (at 4 bits, E2M1, dense near zero); a max-fit or MSE-clipped range; per-stage bit-widths; and storage counted with a 16-bit cost per scale. It always spares the DFL conv.
 
 ## What the simulations show
 
-The toy-MLP analogue, not YOLO, is `quantization` (lab/results/quantization.json), using a NumPy twin of `fake_quantize` with groups of 16. The table gives 20-class accuracy after rounding, no retraining. In float, the teacher (3x256) scores 0.9139 and the student (2x32) 0.8009.
+The toy-MLP analogue, not YOLO, is `quantization` (lab/results/quantization.json), using a NumPy twin of `fake_quantize` with groups of 16. The table gives 20-class accuracy after rounding, no retraining. In float, the teacher (3x256) scores 0.9139 and the KD-trained student (2x32) 0.8281.
 
 | bits | teacher, per-tensor | teacher, group-16 | student, per-tensor | student, group-16 |
 |---|---|---|---|---|
-| 8 | 0.914 | 0.9138 | 0.801 | 0.8014 |
-| 6 | 0.9139 | 0.9133 | 0.7966 | 0.7965 |
-| 4 | 0.8998 | 0.9128 | 0.7186 | 0.767 |
-| 3 | 0.7766 | 0.897 | 0.4461 | 0.6283 |
-| 2 | 0.0707 | 0.6098 | 0.0764 | 0.2173 |
+| 8 | 0.914 | 0.9138 | 0.8276 | 0.8282 |
+| 6 | 0.9139 | 0.9133 | 0.8238 | 0.828 |
+| 4 | 0.8998 | 0.9128 | 0.7229 | 0.7944 |
+| 3 | 0.7766 | 0.897 | 0.4851 | 0.6397 |
+| 2 | 0.0707 | 0.6098 | 0.0686 | 0.1683 |
 
-The shape matches the detector's: 8 bits are free, per-group scales extend the range, then a cliff. The small student breaks earlier, and YOLOv8n is a small model. Fine-tuning with the rounding in the loop (quantization-aware training, with KD) brought the 2-bit teacher back to 0.91165. The toy's cliff sits at 2 to 3 bits, not the detector's 4, so don't carry the exact bit-width over.
+8 bits are free, per-group scales extend the range, then a cliff, and the small student breaks first. Training with the rounding in the loop (QAT) plus KD brought the 2-bit teacher back to 0.91705 but the 2-bit student only to 0.488. The toy's cliff sits lower than the detector's, so don't carry the exact bit-width over.
 
 ## When it breaks
 
-- The real result (STATUS.md, from `carve.py`): 8-bit is about free, 6-bit survives only with `group_size=128`, 4-bit collapses. `carve.py` loads `yolo11n.pt`, so these were measured on YOLO11n, not the cockpit's YOLOv8n.
-- Groups ignore filter boundaries. A 3x3 conv with 16 inputs has 144 values per filter, so a 128-value group can straddle two filters. Most deployment formats use one scale per output channel instead.
-- `skip` is a substring match: `"model.2"` also matches `model.20`, `model.21` and `model.22`. The docstring's `("model.23",)` spares YOLO11n's head; YOLOv8n's head is `model.22`. The cockpit's `/api/quantize` passes no `skip`, so the head is always quantized.
-- The head's DFL layer (it decodes each box edge from 16 bins) is a `Conv2d` with fixed weights 0 to 15. It is quantized too, so at low bits box decoding is distorted regardless of the learned weights.
+- The real curve (README.md, `carve.py`, 125 images, DFL spared): YOLOv8n per-tensor scores 0.4088 at 8 bits, 0.3031 at 6 and 0.0000 at 4, from 0.4284 native; with `--group-size 128`, 0.4263, 0.3905 and 0.0379. YOLO11n collapses at 6-bit per-tensor (0.0136), where the original "6-bit needs groups" finding came from.
+- Groups ignore filter boundaries. A 3x3 conv with 16 inputs has 144 values per filter, so a 128-value group can straddle two filters. precision.py's in-channel groups avoid this.
+- `skip` is a substring match: `"model.2"` also matches `model.20`, `model.21` and `model.22`, YOLOv8n's head.
+- The DFL conv (it decodes each box edge from 16 bins) holds fixed weights 0 to 15. Sparing it did not rescue 4-bit: group-128 went from 0.0191 to 0.0379, per-tensor stayed 0.0000 (STATUS.md).
+- Uniform INT rounding is the weak scheme. In the precision lab, 4-bit with one scale per output channel kept 16% of native mAP; FP4 levels kept 79%; FP4 with stages 0-2 at 8 bits kept 92% at 4.04 bits per weight; MSE clipping cut FP4 from 79% to 18% (README.md, measured on a VOC-2007 bird stand-in set, so read them as relative).
 - Activations stay in float; a real int8 deployment also quantizes them.
-- File size and speed don't change until you export to a real integer format. The cockpit's size estimate `NATIVE_PARAMS * bits / 8` ignores the stored scales.
+- File size doesn't change until you pack the weights. The cockpit's size (weight bits plus 16 bits per scale) is an estimate.
 
 ## Going further
 
-In the cockpit (`uvicorn server:app --port 8000`), the Precision module has "Apply 8-bit", a ladder of bit-widths from 16b to 1b, and a scale-sharing toggle, "per-group (128)" or "per-tensor (crude)". Each click posts to `/api/quantize` and scores the real detector on the 40-image live subset. Headless, `python carve.py --group-size 128` sweeps the same ladder on the 125-image set. For a real small file, export to a runtime with integer kernels and match its scheme so these numbers transfer. The toy version is `lab/compress.py:quantize`.
+In the cockpit (`uvicorn server:app --port 8000 --app-dir .`), the Precision module has "Apply 8-bit", a bits ladder from 16 to 1, the scheme knobs above, a weight microscope, a mixed-precision grid with a fragility scan and Auto-mix, and confession curves. Each change posts the recipe to `/api/measure`, which scores the real detector on 40 images. Below about 3.5 bits rounding alone can't save it (README.md); Regrow then fine-tunes with the quantizer in the loop (see qat). Headless, `python carve.py --group-size 128` sweeps the ladder with `fake_quantize`. For a real small file, STATUS.md's next step is packing weights and scales, for example as ONNX QDQ. The toy version is `lab/compress.py:quantize`.
