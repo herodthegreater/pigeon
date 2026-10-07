@@ -3,12 +3,15 @@
 #   lab/   the simulation lab, trained and pre-rendered into site/public/lab/ so the
 #          Astro build ships it under /lab/ (it runs in the visitor's browser via
 #          Pyodide, so Pages needs no server)
+# Pull requests get the same build (tests, lab, site) without the deploy.
 # One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
 name: website
 
 on:
   push:
     branches: [main]
+    paths: ["site/**", "lab/**", ".github/workflows/pages.yml"]
+  pull_request:
     paths: ["site/**", "lab/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
@@ -53,12 +56,15 @@ jobs:
         working-directory: site
 
       - uses: actions/configure-pages@v6
+        if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
         with:
           path: site/dist
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
