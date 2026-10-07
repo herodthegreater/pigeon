@@ -10,8 +10,17 @@ import type { TestImage } from "../engine/testset";
 
 const sigmoid = (v: number) => 1 / (1 + Math.exp(-v));
 
+/** The heatmap's color, read from the --heat token ("r g b") so the palette stays in tokens.css. */
+function heatRGB(): [number, number, number] {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--heat").trim();
+  const rgb = raw.split(/[\s,]+/).map(Number);
+  if (rgb.length !== 3 || rgb.some((v) => !Number.isFinite(v))) throw new Error(`the --heat token should be three numbers ("r g b"), got "${raw}"`);
+  return rgb as [number, number, number];
+}
+
 export class Specimens {
   private tiles: { el: HTMLElement; canvas: HTMLCanvasElement; verdict: HTMLElement; peak: HTMLElement }[] = [];
+  private heat = heatRGB();
 
   constructor(private root: HTMLElement, private images: TestImage[], sheetUrl: (s: number) => string, grid: number, count = 24) {
     const pick = images.slice(0, count);
@@ -29,7 +38,7 @@ export class Specimens {
             <span class="peak" aria-hidden="true"></span>
           </div>
           <figcaption><span class="truth">${img.label ? "Bird" : img.hard ? "Tricky non-bird" : "No bird"}</span><span class="verdict num"></span></figcaption>
-          <a class="credit" href="${img.credit.url}" target="_blank" rel="noopener">${credit.replace(/[<>&]/g, "")}</a>
+          <a class="credit" href="${img.credit.url}" target="_blank" rel="noopener">${credit.replace(/[<>&]/g, "")}<span class="visually-hidden"> (source photo, opens in a new tab)</span></a>
         </figure>`;
       })
       .join("");
@@ -50,7 +59,7 @@ export class Specimens {
       t.el.dataset.correct = String(pred === img.label);
       t.el.dataset.flipped = String(flipped);
       t.verdict.textContent = `${pred ? "says bird" : "says no bird"} · ${Math.round((pred ? p : 1 - p) * 100)}%${flipped ? " · changed its mind" : ""}`;
-      // heatmap: per-image min-max of the logit map, drawn as magenta evidence
+      // heatmap: per-image min-max of the logit map, drawn in the --heat color
       const ctx = t.canvas.getContext("2d")!;
       const off = i * CAM * CAM;
       let lo = Infinity, hi = -Infinity;
@@ -58,7 +67,7 @@ export class Specimens {
       const imgData = ctx.createImageData(CAM, CAM);
       for (let k = 0; k < CAM * CAM; k++) {
         const v = hi > lo ? (cams[off + k] - lo) / (hi - lo) : 0;
-        imgData.data.set([214, 66, 150, Math.round(Math.pow(v, 1.6) * 200)], k * 4);
+        imgData.data.set([...this.heat, Math.round(Math.pow(v, 1.6) * 200)], k * 4);
       }
       ctx.putImageData(imgData, 0, 0);
       const [x, y] = camPeak(cams, i);

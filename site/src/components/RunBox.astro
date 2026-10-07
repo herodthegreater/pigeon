@@ -1,0 +1,219 @@
+---
+/**
+ * The run box on a runnable method's page: one field per parameter, Run and
+ * Reset, a one-line status (the only live region) and the result. The run itself
+ * happens in the visitor's browser through lib/lab/python.ts.
+ */
+import "../styles/prose.css";
+import type { Param } from "../lib/lab/data";
+
+interface Props { id: string; params: Param[] }
+const { id, params } = Astro.props;
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const fid = (p: Param) => `run-${p.name}`;
+const helpId = (p: Param) => (p.help ? `${fid(p)}-help` : undefined);
+const step = (p: Param) => p.step ?? (p.kind === "int" ? 1 : 0.01);
+const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind })));
+---
+<section class="panel runbox" id="run" aria-labelledby="run-title" data-runbox data-method={id} data-params={kinds}>
+  <h2 id="run-title">Run it in your browser</h2>
+  <form class="run-form">
+    {params.length === 0 && <p>This method has no settings: Run uses the lab's defaults.</p>}
+    {params.map((p) => (
+      <div class="field">
+        {p.kind === "choice" && (
+          <>
+            <label for={fid(p)}>{cap(p.label)}</label>
+            <select id={fid(p)} name={p.name} aria-describedby={helpId(p)}>
+              {(p.choices ?? []).map((c) => <option value={c} selected={c === p.default}>{c}</option>)}
+            </select>
+          </>
+        )}
+        {p.kind === "bool" && (
+          <label class="check">
+            <input type="checkbox" id={fid(p)} name={p.name} checked={p.default === true} aria-describedby={helpId(p)} />
+            <span>{cap(p.label)}</span>
+          </label>
+        )}
+        {(p.kind === "int" || p.kind === "float") && (
+          <>
+            <label for={fid(p)} class="range-label">
+              <span>{cap(p.label)}</span>{" "}
+              <output id={`${fid(p)}-out`} for={fid(p)}>{String(p.default)}</output>
+            </label>
+            <input
+              type="range" id={fid(p)} name={p.name}
+              min={p.lo ?? undefined} max={p.hi ?? undefined} step={step(p)} value={String(p.default)}
+              aria-describedby={helpId(p)}
+            />
+          </>
+        )}
+        {p.help && <p class="help" id={helpId(p)}>{p.help}</p>}
+      </div>
+    ))}
+    <div class="run-actions">
+      <button class="btn" type="submit" data-run>Run</button>
+      <button class="btn secondary" type="reset">Reset to defaults</button>
+    </div>
+  </form>
+  <p class="run-status state"><span aria-live="polite" data-msg>Not run yet.</span><span data-tick></span></p>
+  <div class="run-results" data-results>
+    <p class="run-idle">
+      A run trains and evaluates real models on the lab's toy problem, here in your browser. The first run
+      downloads Python (about 20 MB); most runs then take 5 to 60 seconds.
+    </p>
+  </div>
+  <noscript><p class="run-idle">Running needs JavaScript, which is turned off in this browser.</p></noscript>
+</section>
+
+<script>
+  import { run, onStatus, isReady } from "../lib/lab/python";
+  import { resultView } from "../lib/lab/results";
+  import { esc } from "../lib/lab/markdown";
+
+  type Kind = "int" | "float" | "choice" | "bool";
+
+  function setup(box: HTMLElement) {
+    const mid = box.dataset.method!;
+    const kinds: { name: string; kind: Kind }[] = JSON.parse(box.dataset.params || "[]");
+    const form = box.querySelector("form")!;
+    const btn = box.querySelector<HTMLButtonElement>("[data-run]")!;
+    const msg = box.querySelector<HTMLElement>("[data-msg]")!;
+    const tick = box.querySelector<HTMLElement>("[data-tick]")!;
+    const out = box.querySelector<HTMLElement>("[data-results]")!;
+    let running = false;
+
+    const say = (text: string) => { msg.textContent = text; };
+    const syncOutput = (r: HTMLInputElement) => {
+      const o = box.querySelector<HTMLOutputElement>(`output[for="${r.id}"]`);
+      if (o) o.value = r.value;
+    };
+
+    if (typeof Worker === "undefined" || typeof WebAssembly === "undefined") {
+      btn.disabled = true;
+      say("This browser can't run Python here.");
+      out.innerHTML = `<p class="run-idle">Running needs Web Workers and WebAssembly, which this browser doesn't have. A current Firefox, Chrome, Edge or Safari has both.</p>`;
+      return;
+    }
+
+    form.addEventListener("input", (e) => {
+      const t = e.target as HTMLInputElement;
+      if (t.type === "range") syncOutput(t);
+    });
+    form.addEventListener("reset", () => {
+      // The browser restores the fields after this event; read them on the next task.
+      setTimeout(() => {
+        form.querySelectorAll<HTMLInputElement>('input[type="range"]').forEach(syncOutput);
+        if (!running) say("Settings are back to their defaults.");
+      });
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (running) return;
+      const params: Record<string, unknown> = {};
+      for (const { name, kind } of kinds) {
+        const el = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
+        if (!el) continue;
+        params[name] = kind === "bool" ? (el as HTMLInputElement).checked : kind === "choice" ? el.value : Number(el.value);
+      }
+
+      running = true;
+      btn.disabled = true;
+      btn.textContent = "Running";
+      out.setAttribute("aria-busy", "true");
+      out.replaceChildren();
+      tick.textContent = "";
+
+      // Loading Python reports its own steps; once it is ready, count the training time.
+      let t0 = 0;
+      const showTick = () => { tick.textContent = `, ${Math.floor((performance.now() - t0) / 1000)} s so far`; };
+      const startTraining = () => {
+        if (t0) return;
+        t0 = performance.now();
+        say("Training");
+        showTick();
+      };
+      const stop = onStatus((text) => (isReady() ? startTraining() : say(text)));
+      if (isReady()) startTraining();
+      else say("Starting Python");
+      const timer = setInterval(() => {
+        if (!t0 && isReady()) startTraining();
+        else if (t0) showTick();
+      }, 1000);
+
+      try {
+        const res = await run(mid, params);
+        out.innerHTML = resultView(res);
+        tick.textContent = "";
+        say(`Done in ${res.seconds.toFixed(1)} s`);
+      } catch (err) {
+        const why = String((err as Error)?.message ?? err).trim().replace(/[.\s]+$/, "") || "no reason was given";
+        tick.textContent = "";
+        out.innerHTML = `<div class="error-box"><p>The run failed: ${esc(why)}. Change a setting or run it again.</p></div>`;
+        say("The run failed. The reason is below.");
+      } finally {
+        clearInterval(timer);
+        stop();
+        running = false;
+        btn.disabled = false;
+        btn.textContent = "Run";
+        out.removeAttribute("aria-busy");
+      }
+    });
+  }
+
+  document.querySelectorAll<HTMLElement>("[data-runbox]").forEach(setup);
+</script>
+
+<style>
+  .run-form { display: flex; flex-direction: column; gap: var(--space-4); }
+  .field { display: flex; flex-direction: column; gap: var(--space-1); }
+  .field label { font-size: var(--step--1); font-weight: 600; color: var(--ink); }
+  .range-label { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
+  output { font-family: var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .help { font-size: var(--step--1); color: var(--muted); }
+  select {
+    min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--rule-strong); border-radius: var(--radius);
+    background: var(--card); color: var(--ink); width: 100%;
+  }
+  input[type="range"] { width: 100%; margin: 0; min-height: 28px; accent-color: var(--teal); }
+  .check { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; cursor: pointer; }
+  .check input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--teal); }
+  .run-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .run-status { overflow-wrap: anywhere; }
+  .run-results { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+  .run-idle { font-size: var(--step--1); color: var(--muted); }
+  @media (pointer: coarse), (max-width: 640px) {
+    select, input[type="range"], .check { min-height: var(--tap); }
+  }
+</style>
+
+<style is:global>
+  /* The result HTML is injected by resultView(), so these rules are global, scoped under the run box. */
+  .runbox .error-box { overflow-wrap: anywhere; }
+  .runbox .error-box p { color: var(--ink); }
+  .runbox .restable td, .runbox .restable th { padding: var(--space-2) var(--space-1); }
+  .runbox .restable td:first-child { min-width: 9ch; }
+  .runbox .bar { height: 4px; margin-top: var(--space-1); background: var(--rule); border-radius: 2px; min-width: 48px; }
+  .runbox .bar i { display: block; height: 100%; background: var(--teal); border-radius: 2px; }
+  .runbox svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
+  .runbox svg.chart text { fill: var(--muted); font-family: var(--mono); font-size: var(--step--2); }
+  .runbox svg.chart .grid { stroke: var(--rule); stroke-width: 1; }
+  .runbox svg.chart .axis { stroke: var(--rule-strong); stroke-width: 1; }
+  .runbox ul.chart-legend {
+    list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4);
+    font-size: var(--step--1); color: var(--ink);
+  }
+  .runbox ul.chart-legend li { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .runbox details.chart-data > summary {
+    cursor: pointer; font-size: var(--step--1); color: var(--teal); padding-block: var(--space-1);
+  }
+  .runbox details.chart-data[open] > summary { margin-bottom: var(--space-2); }
+  .runbox .run-note { font-size: var(--step--1); color: var(--ink); }
+  .runbox .run-meta { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+  @media (pointer: coarse), (max-width: 640px) {
+    .runbox details.chart-data > summary { min-height: var(--tap); padding-block: var(--space-3); }
+  }
+</style>

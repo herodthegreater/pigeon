@@ -1,0 +1,317 @@
+---
+/**
+ * A lesson's code editor: a plain textarea with the starting code, hints revealed
+ * one at a time, the reference solution (embedded at build time, so showing it
+ * never fetches), and "Check my code", which runs the lesson's hidden tests in
+ * the visitor's browser through Pyodide.
+ */
+import { inline } from "../lib/lab/markdown";
+
+interface Props {
+  id: string;
+  skeleton: string;
+  hints: string[];
+  solution: string;
+  next: { href: string; title: string } | null;
+}
+const { id, skeleton, hints, solution, next } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
+---
+<section
+  class="lesson-editor"
+  aria-labelledby="your-code"
+  data-lesson-editor
+  data-id={id}
+  data-next-href={next?.href}
+  data-next-title={next?.title}
+  data-all-href={`${base}school/#build`}
+>
+  <h2 id="your-code">Your code</h2>
+  <textarea
+    class="code-input"
+    aria-labelledby="your-code"
+    aria-describedby={`keys-${id}`}
+    spellcheck="false"
+    autocapitalize="off"
+    autocomplete="off"
+    autocorrect="off"
+    wrap="off"
+    rows={rows}
+  >{skeleton}</textarea>
+  <p class="keys" id={`keys-${id}`}>Tab indents. Press Esc, then Tab, to leave the editor. Ctrl or Cmd + Enter checks your code.</p>
+  <p class="state" data-saved></p>
+
+  <div class="actions">
+    <button type="button" class="btn" data-check>Check my code</button>
+    {hints.length > 0 && (
+      <button type="button" class="btn secondary" data-hint>Show a hint (1 of {hints.length})</button>
+    )}
+    <button type="button" class="btn secondary" data-solution>Show the solution</button>
+    <button type="button" class="btn secondary" data-reset>Reset to the starting code</button>
+  </div>
+  <noscript><p class="state error">Checking your code needs JavaScript, which is turned off in this browser.</p></noscript>
+
+  <div class="hints" aria-live="polite" aria-relevant="additions" data-hints-out></div>
+  <template data-hints>{hints.map((h) => <li set:html={inline(h)} />)}</template>
+  <template data-solution-text><pre>{solution}</pre></template>
+
+  <div class="results">
+    <p class="state" data-status hidden></p>
+    <p class="summary" role="status" data-summary></p>
+    <div data-detail></div>
+  </div>
+</section>
+
+<style>
+  .lesson-editor { display: flex; flex-direction: column; gap: var(--space-3); max-width: 60rem; margin-top: var(--space-5); }
+  h2 { font-size: var(--step-2); padding-top: var(--space-3); border-top: 1px solid var(--rule); }
+  .code-input {
+    display: block; width: 100%; min-height: 16rem; resize: vertical; margin: 0;
+    font-family: var(--mono); font-size: var(--step--1); line-height: 1.5; tab-size: 4;
+    padding: var(--space-3) var(--space-4); background: var(--card); color: var(--ink);
+    border: 1px solid var(--rule-strong); border-radius: var(--radius);
+    white-space: pre; overflow-wrap: normal; overflow-x: auto;
+  }
+  /* 16px on touch screens, so iOS doesn't zoom the page when the editor gets focus. */
+  @media (pointer: coarse) { .code-input { font-size: var(--step-0); } }
+  .keys { font-size: var(--step--1); color: var(--muted); }
+  .state:empty { display: none; }
+  .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .btn[aria-disabled="true"] { opacity: 0.6; filter: none; cursor: default; }
+  .btn[data-check][aria-disabled="true"] { cursor: progress; }
+  .btn.secondary[aria-disabled="true"]:hover { border-color: var(--rule-strong); }
+  .hints:empty { display: none; }
+  .results { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-2); }
+  .summary { font-family: var(--display); font-size: var(--step-1); font-weight: 600; }
+  .summary:empty, [data-detail]:empty { display: none; }
+</style>
+
+<style is:global>
+  /* Hints and test results are inserted by the script below, so their styles can't be scoped. */
+  .lesson-editor .hint-list { margin: 0; padding-left: 1.3em; max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-2); }
+  .lesson-editor .hint-list code { font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+  .lesson-editor .tests { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+  .lesson-editor .tests > li {
+    display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: var(--space-2) var(--space-3);
+    padding-block: var(--space-2); border-bottom: 1px solid var(--rule);
+  }
+  .lesson-editor .tests .verdict { font-weight: 600; }
+  .lesson-editor .tests .ok .verdict { color: var(--good); }
+  .lesson-editor .tests .no .verdict { color: var(--bad); }
+  .lesson-editor .tests pre { grid-column: 2; white-space: pre; }
+  .lesson-editor .tests code { font-family: var(--mono); font-size: 0.9em; }
+  .lesson-editor .error-box { display: flex; flex-direction: column; gap: var(--space-2); }
+  .lesson-editor .error-box pre { background: var(--card); }
+  .lesson-editor .done { margin-top: var(--space-4); }
+  .lesson-editor .done a { font-weight: 600; }
+  @media (pointer: coarse), (max-width: 640px) {
+    .lesson-editor .done a { display: inline-flex; align-items: center; min-height: var(--tap); }
+  }
+</style>
+
+<script>
+  import { check, isReady, onStatus, CHECK_LIMIT_S, type CheckResult } from "../lib/lab/python";
+  import { esc, inline } from "../lib/lab/markdown";
+
+  // Storage can be blocked (private windows, strict settings); every access is guarded.
+  const store = {
+    get(k: string): string | null {
+      try { return localStorage.getItem(k); } catch { return null; }
+    },
+    set(k: string, v: string): boolean {
+      try { localStorage.setItem(k, v); return true; } catch { return false; }
+    },
+    remove(k: string) {
+      try { localStorage.removeItem(k); } catch {}
+    },
+  };
+  const BLOCKED = "This browser isn't saving drafts (site storage is blocked), so copy your code before you leave.";
+
+  function setup(root: HTMLElement) {
+    const id = root.dataset.id!;
+    const key = `draft:${id}`;
+    const $ = <T extends Element>(sel: string) => root.querySelector<T>(sel);
+    const ta = $<HTMLTextAreaElement>("textarea")!;
+    const saved = $<HTMLElement>("[data-saved]")!;
+    const checkBtn = $<HTMLButtonElement>("[data-check]")!;
+    const hintBtn = $<HTMLButtonElement>("[data-hint]");
+    const status = $<HTMLElement>("[data-status]")!;
+    const summary = $<HTMLElement>("[data-summary]")!;
+    const detail = $<HTMLElement>("[data-detail]")!;
+    const skeleton = ta.defaultValue;
+    const solution = $<HTMLTemplateElement>("template[data-solution-text]")!.content.querySelector("pre")!.textContent ?? "";
+    const hints = [...($<HTMLTemplateElement>("template[data-hints]")?.content.children ?? [])];
+
+    // Restore the draft from an earlier visit.
+    const draft = store.get(key);
+    if (draft !== null && draft !== skeleton) {
+      ta.value = draft;
+      saved.textContent = "Restored your draft from this browser.";
+    }
+
+    const save = () => {
+      const ok = store.set(key, ta.value);
+      saved.textContent = ok ? "Draft saved in this browser." : BLOCKED;
+    };
+    ta.addEventListener("input", save);
+
+    // Tab indents, so the editor keeps focus; Escape hands Tab back to the page
+    // until the editor is focused again.
+    let tabIndents = true;
+    ta.addEventListener("focus", () => { tabIndents = true; });
+    ta.addEventListener("keydown", (e) => {
+      if (e.isComposing) return;
+      if (e.key === "Escape") {
+        tabIndents = false;
+        return;
+      }
+      if (e.key === "Tab" && tabIndents && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        // insertText keeps the browser's undo history; setRangeText is the fallback.
+        if (!document.execCommand("insertText", false, "    ")) {
+          ta.setRangeText("    ", ta.selectionStart, ta.selectionEnd, "end");
+          save();
+        }
+        return;
+      }
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        runCheck();
+      }
+    });
+
+    // Hints, one at a time.
+    let shown = 0;
+    const hintsOut = $<HTMLElement>("[data-hints-out]")!;
+    if (hintBtn) hintBtn.addEventListener("click", () => {
+      if (shown >= hints.length) return;
+      let list = hintsOut.querySelector("ol");
+      if (!list) {
+        list = document.createElement("ol");
+        list.className = "hint-list";
+        list.setAttribute("aria-label", "Hints");
+        hintsOut.append(list);
+      }
+      list.append(hints[shown].cloneNode(true));
+      shown++;
+      if (shown < hints.length) {
+        hintBtn.textContent = `Show a hint (${shown + 1} of ${hints.length})`;
+      } else {
+        hintBtn.textContent = "No more hints";
+        hintBtn.setAttribute("aria-disabled", "true");
+      }
+    });
+
+    $<HTMLButtonElement>("[data-solution]")!.addEventListener("click", () => {
+      if (ta.value === solution) {
+        saved.textContent = "The editor already shows the reference solution.";
+        return;
+      }
+      const ask = ta.value === skeleton
+        ? "Put the reference solution in the editor?"
+        : "Replace your code with the reference solution? Your draft will be overwritten.";
+      if (!confirm(ask)) return;
+      ta.value = solution;
+      save();
+    });
+
+    $<HTMLButtonElement>("[data-reset]")!.addEventListener("click", () => {
+      if (ta.value === skeleton) {
+        saved.textContent = "The editor already holds the starting code.";
+        return;
+      }
+      if (!confirm("Replace your code with the starting code? Your draft will be overwritten.")) return;
+      ta.value = skeleton;
+      store.remove(key);
+      saved.textContent = "Back to the starting code.";
+    });
+
+    // Checking. The button keeps focus while busy (aria-disabled, not disabled),
+    // and only the one-line summary is announced.
+    let busy = false;
+    checkBtn.addEventListener("click", runCheck);
+
+    async function runCheck() {
+      if (busy) return;
+      busy = true;
+      checkBtn.setAttribute("aria-disabled", "true");
+      checkBtn.textContent = "Checking";
+      summary.textContent = "";
+      detail.replaceChildren();
+      status.textContent = isReady() ? "Running the tests" : "Starting Python";
+      status.hidden = false;
+      const off = onStatus((text) => {
+        status.textContent = text === "Python is ready." ? "Running the tests" : text;
+      });
+      try {
+        showResult(await check(id, ta.value));
+      } catch (err) {
+        showFailure(err instanceof Error ? err.message : String(err));
+      } finally {
+        off();
+        status.hidden = true;
+        status.textContent = "";
+        checkBtn.removeAttribute("aria-disabled");
+        checkBtn.textContent = "Check my code";
+        busy = false;
+      }
+    }
+
+    function showResult(r: CheckResult) {
+      if (r.error) {
+        summary.textContent = "Your code didn't import, so no tests ran.";
+        const trace = r.error.replace(/^Your code failed to import:\n/, "");
+        detail.innerHTML = `<div class="error-box"><p><strong>Python couldn't import your code.</strong> Fix the error below, then check again.</p><pre tabindex="0">${esc(trace)}</pre></div>`;
+        return;
+      }
+      const n = r.tests.length;
+      if (!n) {
+        summary.textContent = "No tests ran.";
+        detail.innerHTML = `<div class="error-box"><p><strong>The lesson's tests didn't run.</strong> Reload the page, then check again.</p></div>`;
+        return;
+      }
+      const k = r.tests.filter((t) => t.ok).length;
+      summary.textContent =
+        k < n ? `${k} of ${n} tests pass` : n === 1 ? "The test passes" : n === 2 ? "Both tests pass" : `All ${n} tests pass`;
+      const items = r.tests.map((t) => {
+        const what = t.doc ? inline(t.doc) : esc(t.name);
+        const why = t.ok ? "" : `<pre tabindex="0">${esc(t.message ?? "failed")}${t.trace ? `\n\n${esc(t.trace)}` : ""}</pre>`;
+        return `<li class="${t.ok ? "ok" : "no"}"><span class="verdict">${t.ok ? "Pass" : "Fail"}</span><span class="what">${what}</span>${why}</li>`;
+      });
+      let html = `<ul class="tests" role="list">${items.join("")}</ul>`;
+      if (r.passed) {
+        store.set(`passed:${id}`, "1");
+        const { nextHref, nextTitle, allHref } = root.dataset;
+        html += `<p class="done"><strong>All tests pass.</strong> ${
+          nextHref
+            ? `<a href="${esc(nextHref)}">Next lesson: ${esc(nextTitle)}</a>`
+            : `That was the last lesson. <a href="${esc(allHref)}">See all lessons</a>`
+        }</p>`;
+      }
+      detail.innerHTML = html;
+    }
+
+    function showFailure(raw: string) {
+      const msg = raw.replace(/[.\s]+$/, "");
+      let short: string, lead: string, next: string;
+      if (/timed out after/.test(msg)) {
+        short = `The check stopped after ${CHECK_LIMIT_S} seconds.`;
+        lead = `Your code ran for more than ${CHECK_LIMIT_S} seconds, so Python was restarted.`;
+        next = "Look for a loop that never ends, or work that grows faster than it should, then check again.";
+      } else if (/can't run Python here/.test(msg)) {
+        short = "This browser can't run Python.";
+        lead = `This browser can't run the checks: ${msg.replace(/^.*can't run Python here:\s*/, "")}.`;
+        next = "Open the lesson in a current version of Firefox, Chrome, Safari or Edge.";
+      } else {
+        short = "The check didn't run.";
+        lead = `Python couldn't run the check: ${msg}.`;
+        next = "Check your connection, then press Check my code again. If it fails the same way, reload the page.";
+      }
+      summary.textContent = short;
+      detail.innerHTML = `<div class="error-box"><p><strong>${esc(lead)}</strong> ${esc(next)}</p></div>`;
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>("[data-lesson-editor]").forEach(setup);
+</script>

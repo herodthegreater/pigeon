@@ -1,0 +1,80 @@
+---
+import { cap } from "./labels";
+import { cellText, columnLabel, columns, isNumeric, refPoints, spread } from "./table";
+
+interface Props {
+  rows: Record<string, number | string>[];
+  refs?: Record<string, Record<string, number>>;
+  seconds: number;
+}
+const { rows, refs, seconds } = Astro.props;
+const cols = columns(rows);
+const numeric = new Set(cols.filter((k) => isNumeric(rows, k)));
+const points = refPoints(refs, cols);
+const took = Number.isFinite(seconds) ? ` The experiment took ${Math.round(seconds).toLocaleString("en-US")} s.` : "";
+---
+<section class="table" aria-labelledby="table">
+  <h2 id="table">Table</h2>
+  <p class="note" id="table-note">Mean over the seeds; ± is the standard deviation where more than one seed ran.{took}</p>
+  {rows.length && cols.length ? (
+    <div class="tablewrap" tabindex="0" role="region" aria-labelledby="table" aria-describedby="table-note">
+      <table>
+        <thead>
+          <tr>{cols.map((k) => <th scope="col" class={numeric.has(k) ? "num" : undefined}>{columnLabel(k)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              {cols.map((k) => {
+                const sd = spread(r, k);
+                return (
+                  <td class={typeof r[k] === "number" ? "num" : undefined}>
+                    {cellText(r[k], k)}{sd && <> <span class="sd">{sd}</span></>}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <p class="gap">This experiment's results file has no rows.</p>
+  )}
+
+  {points.length > 0 && (
+    <>
+      <h3>Reference points</h3>
+      <dl class="refs">
+        {points.map((p) => (
+          <div>
+            <dt>{p.term}</dt>
+            <dd>
+              {p.about && <>{p.about} </>}
+              {p.values.map((v, i) => (
+                <>{i > 0 && ", "}{i === 0 ? cap(v.label) : v.label} <span class="num">{v.text}</span></>
+              ))}.
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  )}
+</section>
+
+<style>
+  .table { display: flex; flex-direction: column; gap: var(--space-3); }
+  .table > h2 { font-size: var(--step-2); }
+  .table > h3 { font-size: var(--step-1); margin-top: var(--space-4); }
+  .note { color: var(--muted); font-size: var(--step--1); max-width: var(--measure); }
+  /* Long column names wrap instead of widening a column of short numbers; the
+     settings in a row stay on one line, so each row reads as one line. The
+     table scrolls inside .tablewrap when that is wider than the page. */
+  th.num { white-space: normal; }
+  th { vertical-align: bottom; }
+  td { white-space: nowrap; }
+  .sd { color: var(--muted); }
+  .refs { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); max-width: var(--measure); }
+  .refs dt { font-weight: 600; }
+  .refs dd { margin: 0; color: var(--muted); font-size: var(--step--1); }
+</style>

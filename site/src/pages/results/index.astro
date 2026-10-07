@@ -1,0 +1,113 @@
+---
+import Base from "../../layouts/Base.astro";
+import "../../styles/page.css";
+import "../../styles/prose.css";
+import { experiment, experiments, report } from "../../lib/lab/data";
+import { inline, slug } from "../../lib/lab/markdown";
+import { reportView } from "../../components/results/report";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const href = (name: string) => `${base}results/${name}/`;
+
+const list = experiments();
+const full = list.map((e) => experiment(e.name));
+const groups = [...new Set(list.map((e) => e.group))];
+
+// The lede's numbers, from the results: how many experiments repeat runs over
+// more than one seed, and which seed counts they used.
+const seedCounts = (rows: Record<string, unknown>[]) => rows.map((r) => Number(r.n_seeds)).filter((n) => n > 1);
+const repeated = full.filter((e) => seedCounts(e.rows).length).length;
+const counts = [...new Set(full.flatMap((e) => seedCounts(e.rows)))].sort((a, b) => a - b);
+const countWords = counts.length < 2 ? `${counts[0]}` : `${counts.slice(0, -1).join(", ")} or ${counts[counts.length - 1]}`;
+
+const text = report();
+const { html, toc } = reportView(text, list.map((e) => e.name), href);
+const contents = [...toc, { id: "experiments", text: "All experiments" }];
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const figs = (n: number) => (n ? plural(n, "figure", "figures") : "No figures");
+const description = list.length
+  ? `The lab's ${plural(list.length, "compression experiment", "compression experiments")}: the write-up, then every experiment's figures and full table.`
+  : "The lab's compression experiments and their write-up.";
+---
+<Base title="Results · Pigeon" active="results" description={description}>
+  <main id="main" class="page">
+    <header>
+      <h1>Results</h1>
+      {list.length ? (
+        <p class="lede">
+          {plural(list.length, "experiment", "experiments")} on the lab's toy problem{repeated > 0 && <>, {repeated === list.length ? "all" : repeated} of them repeated with {countWords} seeds</>}.
+          The write-up comes first, then every experiment with its figures and full table.
+        </p>
+      ) : (
+        <p class="lede">No experiment results have been published yet.</p>
+      )}
+    </header>
+
+    <div class="cols report">
+      <nav class="side" aria-labelledby="contents-title">
+        <div class="panel toc">
+          <h2 id="contents-title">Contents</h2>
+          <ol>
+            {contents.map((t) => <li><a href={`#${t.id}`} set:html={inline(t.text)} /></li>)}
+          </ol>
+        </div>
+      </nav>
+      {text.trim() ? (
+        <div class="prose" set:html={html} />
+      ) : (
+        <p class="gap">The write-up is not written yet.</p>
+      )}
+    </div>
+
+    <section class="all" aria-labelledby="experiments">
+      <h2 id="experiments">All experiments</h2>
+      {list.length ? (
+        <p class="intro">
+          {plural(list.length, "experiment", "experiments")} in {plural(groups.length, "group", "groups")}. Each page has the
+          figures, the full table and the reference points to read them against.
+        </p>
+      ) : (
+        <p class="gap">No experiments yet. They appear here once the lab's results are published.</p>
+      )}
+      {groups.map((g) => (
+        <section class="group" aria-labelledby={`group-${slug(g)}`}>
+          <h3 id={`group-${slug(g)}`}>{g}</h3>
+          <ul class="entries">
+            {list.filter((e) => e.group === g).map((e) => (
+              <li>
+                <a class="entry" href={href(e.name)}>
+                  <span class="name">{e.title}</span>
+                  <span class="aside">{figs(e.figures.length)}</span>
+                  <span class="summary" set:html={inline(e.question)} />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </section>
+  </main>
+</Base>
+
+<style>
+  /* page.css gives phones a plain 1fr column, whose minimum is the widest table in
+     the report; a zero minimum keeps wide tables scrolling inside .tablewrap instead
+     of widening the page. */
+  .report > * { min-width: 0; }
+  /* Contents sit first in reading order (so phones get them before a long read),
+     and beside the write-up on wide screens, where they stay in view. */
+  @media (min-width: 961px) {
+    .report > .side { grid-column: 2; grid-row: 1; }
+    .report > .prose, .report > .gap { grid-column: 1; grid-row: 1; }
+  }
+
+  /* The index is a different kind of section from the prose above it: a heavier
+     rule marks the turn from reading to looking things up. */
+  .all {
+    display: flex; flex-direction: column; gap: var(--space-6);
+    margin-top: var(--space-7); padding-top: var(--space-4); border-top: 2px solid var(--ink);
+  }
+  .all > h2 { font-size: var(--step-2); }
+  .all > .intro { color: var(--muted); max-width: var(--measure); margin-top: calc(-1 * var(--space-4)); }
+</style>

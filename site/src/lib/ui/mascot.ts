@@ -27,6 +27,8 @@ export interface Species {
   };
 }
 
+// Plumage colors are each real bird's colors: illustration data for the plate,
+// not UI colors, so they live here rather than in tokens.css.
 export const SPECIES: Species[] = [
   {
     id: "pigeon", name: "Rock Pigeon", latin: "Columba livia", grams: 350, minRatio: 0,
@@ -84,6 +86,9 @@ export type Condition = "healthy" | "emaciated" | "skeleton";
 export const WORKS = { accuracy: 0.9, pointing: 0.75 };
 export const BROKEN = { accuracy: 0.6, pointing: 0.35 };
 
+/** The "still works" line in words, so every page quotes the same threshold. */
+export const WORKS_LINE = `≥ ${Math.round(WORKS.accuracy * 100)}% accuracy and ≥ ${Math.round(WORKS.pointing * 100)}% pointing`;
+
 export function starvation(accuracy: number, pointing: number): number {
   const a = (WORKS.accuracy - accuracy) / (WORKS.accuracy - BROKEN.accuracy);
   const p = (WORKS.pointing - pointing) / (WORKS.pointing - BROKEN.pointing);
@@ -104,8 +109,11 @@ function mix(a: string, b: string, t: number): string {
   return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("");
 }
 
+/** Mirrors --bird-dull in tokens.css. It is mixed into hex colors here, so it can't be a var(). */
+const BIRD_DULL = "#8a8176";
+
 /** Pull colours toward a dull grey-brown as the bird starves. */
-const dull = (col: string, s: number) => mix(col, "#8a8176", 0.45 * s);
+const dull = (col: string, s: number) => mix(col, BIRD_DULL, 0.45 * s);
 
 function bodyPath(cx: number, cy: number, l: number, h: number, s: number): string {
   const belly = h * (1 - 0.55 * s); // belly sinks in
@@ -213,12 +221,12 @@ function drawLiving(sp: Species, s: number): string {
   if (c.throat) parts.push(`<path d="M ${hx - hr * 0.2} ${hy + hr * 0.55} q ${hr * 0.5} ${hr * 0.6} ${hr * 0.95} ${-hr * 0.1}" fill="${c.throat}"/>`);
   const bx = hx + hr * 0.9, by = hy + hr * 0.05;
   parts.push(`<path d="M ${bx - 1} ${by - sp.beak.h} L ${bx + sp.beak.l} ${by + droop * 0.15} L ${bx - 1} ${by + sp.beak.h} Z" fill="${c.beak}" stroke="var(--bird-line)" stroke-width="0.8" stroke-linejoin="round"/>`);
-  if (sp.id === "pigeon") parts.push(`<ellipse cx="${bx + 1}" cy="${by - sp.beak.h + 0.5}" rx="3.2" ry="1.8" fill="#eeeae2"/>`);
+  if (sp.id === "pigeon") parts.push(`<ellipse cx="${bx + 1}" cy="${by - sp.beak.h + 0.5}" rx="3.2" ry="1.8" fill="var(--bird-beak-cere)"/>`);
   const ex = hx + hr * 0.3, ey = hy - hr * 0.2;
   if (c.ring) parts.push(`<circle cx="${ex}" cy="${ey}" r="${3.6 + s}" fill="${c.ring}"/>`);
   if (s > 0) parts.push(`<circle cx="${ex}" cy="${ey}" r="${3.2 + 2.2 * s}" fill="var(--bird-rib)" opacity="${0.5 * s}"/>`);
   parts.push(`<circle cx="${ex}" cy="${ey}" r="${2.4 * (1 - 0.3 * s)}" fill="${c.eye}"/>`);
-  parts.push(`<circle cx="${ex + 0.8}" cy="${ey - 0.8}" r="0.8" fill="#fff" opacity="${1 - s}"/>`);
+  parts.push(`<circle cx="${ex + 0.8}" cy="${ey - 0.8}" r="0.8" fill="var(--plate)" opacity="${1 - s}"/>`);
   return parts.join("");
 }
 

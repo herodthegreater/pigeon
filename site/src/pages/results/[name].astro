@@ -1,0 +1,60 @@
+---
+import Base from "../../layouts/Base.astro";
+import "../../styles/page.css";
+import "../../styles/prose.css";
+import { experiment, experiments, methods } from "../../lib/lab/data";
+import { inline, slug } from "../../lib/lab/markdown";
+import Figures from "../../components/results/Figures.astro";
+import ResultTable from "../../components/results/ResultTable.astro";
+
+export function getStaticPaths() {
+  return experiments().map((e) => ({ params: { name: e.name } }));
+}
+
+const { name } = Astro.params as { name: string };
+const e = experiment(name);
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const all = methods();
+const related = e.methods.map((id) => all.find((m) => m.id === id)).filter((m) => m !== undefined);
+// The lab writes its questions with markdown emphasis (*itself*): rendered on the
+// page, and dropped from the plain-text meta description.
+const plain = (s: string) => s.replace(/\*([^*\n]+)\*/g, "$1");
+---
+<Base title={`${e.title} · Pigeon`} active="results" description={plain(e.question)}>
+  <main id="main" class="page">
+    <header>
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href={`${base}results/`}>Results</a></li>
+          <li><a href={`${base}results/#group-${slug(e.group)}`}>{e.group}</a></li>
+        </ol>
+      </nav>
+      <h1>{e.title}</h1>
+      <p class="lede" set:html={inline(e.question)} />
+      {related.length > 0 && (
+        <p class="methods">
+          Methods:{" "}
+          {related.map((m, i) => (
+            <>{i > 0 && ", "}<a href={`${base}guide/${m.id}/`}>{m.name}</a></>
+          ))}
+        </p>
+      )}
+    </header>
+
+    <Figures exp={e} />
+
+    {e.notes && <p class="notes"><strong>Note:</strong> <Fragment set:html={inline(e.notes)} /></p>}
+
+    <ResultTable rows={e.rows} refs={e.refs} seconds={e.seconds} />
+  </main>
+</Base>
+
+<style>
+  .notes { max-width: var(--measure); }
+  .notes strong { font-weight: 600; }
+  /* Crumbs and method links stand alone (not inside a sentence), so on touch
+     screens each gets a full-size target. */
+  @media (pointer: coarse), (max-width: 640px) {
+    .crumbs a, .methods a { display: inline-flex; align-items: center; min-height: var(--tap); }
+  }
+</style>

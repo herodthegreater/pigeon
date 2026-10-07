@@ -1,0 +1,191 @@
+---
+import Base from "../../layouts/Base.astro";
+import RunBox from "../../components/RunBox.astro";
+import "../../styles/page.css";
+import "../../styles/prose.css";
+import { meta, methods, method, STATUS_LABEL, figureUrl } from "../../lib/lab/data";
+import { md, highlight, type Heading } from "../../lib/lab/markdown";
+import { figuresOf } from "../../components/guide/figures";
+
+export function getStaticPaths() {
+  return methods().map((m) => ({ params: { id: m.id } }));
+}
+
+const { id } = Astro.params;
+const m = method(id!);
+const M = meta();
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const family = M.families[m.family];
+const category = M.categories[m.category] ?? m.category;
+
+const toc: Heading[] = [];
+const body = m.page.trim() ? md(m.page, { toc }) : "";
+const contents: Heading[] = [
+  ...toc,
+  ...(m.code.length ? [{ id: "source", text: "Source code" }] : []),
+  ...(m.experiments.length ? [{ id: "simulations", text: "Simulation figures" }] : []),
+  ...(m.papers.length ? [{ id: "papers", text: "Papers" }] : []),
+];
+const experiments = m.experiments.map((e) => ({ ...e, figs: figuresOf(e) }));
+const runnable = m.status === "runnable";
+const codeNotes = toc.some((t) => t.id === "the-code-line-by-line");
+const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
+---
+<Base title={`${m.name} · Field Guide · Pigeon`} active="guide" description={m.summary}>
+  <main id="main" class="page method">
+    <header>
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href={`${base}guide/`}>Field Guide</a></li>
+          <li><a href={`${base}guide/#${m.family}`}>{family.title}</a></li>
+          <li><a href={`${base}guide/#${m.family}-${m.category}`}>{category}</a></li>
+        </ol>
+      </nav>
+      <h1>{m.name}</h1>
+      <p class="lede">{m.summary}</p>
+      <p class="where">
+        <span class:list={["status", m.status]}>{STATUS_LABEL[m.status]}</span>
+        {runnable && <a class="jump-run" href="#run">Run it in your browser</a>}
+      </p>
+    </header>
+
+    <div class="cols">
+      <article class="prose">
+        {body ? <Fragment set:html={body} /> : <p class="gap">No write-up yet. The source code below is the reference.</p>}
+
+        <h2 id="source">Source code</h2>
+        {m.code.length ? (
+          <>
+            <p>The exact code that runs, read from the repository when this page was built.</p>
+            {m.code.map((c, k) => (
+              <details class="src" open={k === 0}>
+                <summary><code>{c.name}</code> <span class="where-in">{c.file}:{c.line}</span></summary>
+                <pre tabindex="0"><code set:html={highlight(c.source)} /></pre>
+              </details>
+            ))}
+          </>
+        ) : (
+          <p class="gap">
+            The lab has no code for this method.{" "}
+            {codeNotes ? <>See the write-up's section <a href="#the-code-line-by-line">The code, line by line</a>.</> : "The write-up is the whole entry."}
+          </p>
+        )}
+
+        <h2 id="simulations">Simulation figures</h2>
+        {experiments.length ? (
+          experiments.map((e) => (
+            <section class="sim" aria-labelledby={`sim-${e.name}`}>
+              <h3 id={`sim-${e.name}`}>{e.title}</h3>
+              <p class="question">{e.question}</p>
+              {e.figs.map((f) => (
+                <figure class="plate">
+                  <img src={figureUrl(f.rel)} alt={f.alt} width={f.width} height={f.height} loading="lazy" decoding="async" />
+                </figure>
+              ))}
+              {e.notes && <p class="note">{e.notes}</p>}
+              <p><a class="solo" href={`${base}results/${e.name}/`}>Full table: {e.title}</a></p>
+            </section>
+          ))
+        ) : (
+          <p class="gap">No simulation in the lab covers this method yet.</p>
+        )}
+
+        <h2 id="papers">Papers</h2>
+        {m.papers.length ? (
+          <ul class="papers">{m.papers.map((p) => <li>{p}</li>)}</ul>
+        ) : (
+          <p class="gap">No papers are listed for this method.</p>
+        )}
+      </article>
+
+      <div class="side">
+        {runnable && <RunBox id={m.id} params={m.params} />}
+        {m.status === "cockpit" && (
+          <section class="panel" aria-labelledby="where-title">
+            <h2 id="where-title">Runs in the cockpit</h2>
+            <p>
+              The source code on this page is the real code of the YOLOv8n cockpit, the tool in this repository that
+              prunes, quantizes and fine-tunes a real detector. It runs on your own machine with PyTorch, not in the
+              browser.
+            </p>
+            <p><a class="solo" href={COCKPIT}>The cockpit's code and quickstart on GitHub</a></p>
+          </section>
+        )}
+        {m.status === "reference" && (
+          <section class="panel" aria-labelledby="where-title">
+            <h2 id="where-title">Reference only</h2>
+            <p>
+              This method needs a kind of model the lab doesn't have, so nothing on this page runs.{" "}
+              {m.code.length
+                ? "The write-up explains the algorithm, and the source code below it is the closest code that does run."
+                : "The write-up explains the algorithm; the lab has no code for it."}
+            </p>
+          </section>
+        )}
+        {contents.length > 0 && (
+          <nav class="panel toc" aria-labelledby="toc-title">
+            <h2 id="toc-title">On this page</h2>
+            <ol>{contents.map((t) => <li><a href={`#${t.id}`}>{t.text}</a></li>)}</ol>
+          </nav>
+        )}
+        <section class="panel" aria-labelledby="build-title">
+          <h2 id="build-title">Build it yourself</h2>
+          {m.lessons.length ? (
+            <>
+              <p>Flight School lessons that have you write the pieces of this method in Python:</p>
+              <ul class="lessons">
+                {m.lessons.map((l) => <li><a href={`${base}school/${l.id}/`}>{l.title}</a></li>)}
+              </ul>
+            </>
+          ) : (
+            <p>No Flight School lesson builds this method yet.</p>
+            <p><a class="solo" href={`${base}school/`}>All Flight School lessons</a></p>
+          )}
+        </section>
+      </div>
+    </div>
+  </main>
+</Base>
+
+<style>
+  .where { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+  .jump-run { display: inline-flex; align-items: center; min-height: 32px; font-size: var(--step--1); font-weight: 600; }
+
+  /* page.css drops .cols to a plain 1fr track below 960px, which lets a long code block
+     widen the whole page; min-width: 0 keeps code scrolling inside its own box. */
+  .cols > .prose, .cols > .side { min-width: 0; }
+  .prose > :global(h2:first-child) { margin-top: 0; padding-top: 0; border-top: 0; }
+  .prose :global(h2), .prose h3, :global(#run) { scroll-margin-top: var(--space-4); }
+  details.src + details.src { margin-top: var(--space-2); }
+  details.src > summary {
+    cursor: pointer; display: list-item; padding: var(--space-2) 0; font-size: var(--step--1);
+    overflow-wrap: anywhere;
+  }
+  details.src > summary code { font-weight: 500; }
+  .where-in { font-family: var(--mono); color: var(--muted); margin-left: var(--space-2); }
+  details.src[open] > summary { margin-bottom: var(--space-2); }
+
+  .sim { display: flex; flex-direction: column; gap: var(--space-3); }
+  .sim + .sim { margin-top: var(--space-6); }
+  .sim h3 { margin-top: 0; }
+  .question { color: var(--muted); }
+  .note { font-size: var(--step--1); color: var(--muted); }
+  .papers li, .lessons li { overflow-wrap: anywhere; }
+
+  .lessons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .lessons a { display: flex; align-items: center; min-height: 32px; font-size: var(--step--1); }
+
+  /* The side panel stays beside the write-up while you read, and scrolls on its own
+     once a run result makes it taller than the window, so nothing in it is out of reach. */
+  @media (min-width: 961px) {
+    .side {
+      max-height: calc(100vh - 2 * var(--space-3)); overflow-y: auto; overscroll-behavior: contain;
+      padding: var(--space-1); margin: calc(-1 * var(--space-1)); /* room for the focus ring inside the scroll area */
+    }
+  }
+  @media (pointer: coarse), (max-width: 640px) {
+    .jump-run, .lessons a, .crumbs a, a.solo { min-height: var(--tap); }
+    .crumbs a, a.solo { display: inline-flex; align-items: center; }
+    details.src > summary { padding-block: var(--space-3); }
+  }
+</style>

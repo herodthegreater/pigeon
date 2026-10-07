@@ -1,0 +1,94 @@
+---
+import Base from "../../layouts/Base.astro";
+import LessonEditor from "../../components/LessonEditor.astro";
+import "../../styles/page.css";
+import "../../styles/prose.css";
+import { lesson, lessons, solution, STATUS_LABEL } from "../../lib/lab/data";
+import { md } from "../../lib/lab/markdown";
+import { bareTitle, guideHref, lessonHref } from "../../components/school/course";
+
+export function getStaticPaths() {
+  return lessons().map((l) => ({ params: { id: l.id } }));
+}
+
+const { id } = Astro.params as { id: string };
+const all = lessons();
+const index = all.findIndex((l) => l.id === id);
+const L = lesson(id);
+const title = bareTitle(L.title);
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+
+const neighbour = (lid: string | null) => {
+  const hit = lid ? all.find((l) => l.id === lid) : undefined;
+  return hit ? { href: lessonHref(hit.id), title: bareTitle(hit.title) } : null;
+};
+const prev = neighbour(L.prev);
+const next = neighbour(L.next);
+---
+<Base
+  title={`Lesson ${index + 1}: ${title} · Pigeon`}
+  active="school"
+  description={`Flight School lesson ${index + 1} of ${all.length}: ${title}. Write it in numpy and check it against tests in your browser.`}
+>
+  <main id="main" class="page lesson">
+    <header>
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href={`${base}school/`}>Flight School</a></li>
+          <li><a href={`${base}school/#build`}>Build it yourself</a></li>
+        </ol>
+      </nav>
+      <p class="count num">Lesson {index + 1} of {all.length}</p>
+      <h1>{title}</h1>
+    </header>
+
+    <div class="prose" set:html={md(L.intro, { shift: 1 })} />
+
+    <LessonEditor id={id} skeleton={L.skeleton} hints={L.hints} solution={solution(id)} next={next} />
+
+    {L.methods.length > 0 && (
+      <section class="group" aria-labelledby="used">
+        <h2 id="used">Where this is used</h2>
+        <ul class="entries">
+          {L.methods.map((m) => (
+            <li>
+              <a class="entry" href={guideHref(m.id)}>
+                <span class="name">{m.name}</span>
+                <span class={`aside status ${m.status}`}>{STATUS_LABEL[m.status]}</span>
+                <span class="summary">{m.summary}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+
+    <nav class="pager" aria-label="Lessons">
+      {prev ? <a class="prev" href={prev.href}>Previous: {prev.title}</a> : <span />}
+      {next ? <a class="next" href={next.href}>Next: {next.title}</a> : <a class="next" href={`${base}school/#build`}>All lessons</a>}
+    </nav>
+  </main>
+</Base>
+
+<style>
+  .count { font-size: var(--step--1); color: var(--muted); }
+  .group > h2 { padding-top: var(--space-3); border-top: 1px solid var(--rule); }
+  .group { margin-top: var(--space-5); }
+
+  .pager {
+    display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);
+    border-top: 1px solid var(--rule); padding-top: var(--space-3); margin-top: var(--space-5);
+  }
+  .pager a {
+    display: flex; align-items: center; min-height: var(--tap);
+    font-family: var(--display); font-size: var(--step-1); font-weight: 600;
+  }
+  .pager .next { justify-content: flex-end; text-align: right; }
+  @media (max-width: 640px) {
+    .pager { grid-template-columns: 1fr; gap: var(--space-2); }
+    .pager .next { justify-content: flex-start; text-align: left; }
+  }
+  @media (pointer: coarse), (max-width: 640px) {
+    .crumbs a { display: inline-flex; align-items: center; min-height: var(--tap); }
+  }
+</style>
