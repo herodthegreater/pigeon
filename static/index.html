@@ -255,10 +255,10 @@
       <div><dt>Clipping</dt><dd>shrinking the range so the steps get finer, at the price of flattening outliers. Minimizes weight error — which isn't the same as keeping accuracy.</dd></div>
       <div><dt>Mixed precision</dt><dd>different bits per stage: protect the fragile ones, crush the robust bulk.</dd></div>
       <div><dt>SQNR</dt><dd>signal-to-quantization-noise ratio (dB): how loud the weights are vs. the rounding error. ~6 dB per bit.</dd></div>
-      <div><dt>Pruning</dt><dd>removing capacity. <b>Structural</b> = whole channels (real speedup). <b>Masking</b> = zeroing them (safe live preview; no speed change until Export).</dd></div>
+      <div><dt>Pruning</dt><dd>removing capacity. <b>Structural</b> = whole channels (real speedup). <b>Masking</b> = zeroing exactly the channels Export would remove (safe live preview with the exported model's accuracy before regrow; no speed change until Export).</dd></div>
       <div><dt>Sensitivity</dt><dd>how much mAP drops when you cut (or quantize) one stage. Low = redundant; high = load-bearing.</dd></div>
       <div><dt>Value</dt><dd>payoff per unit of damage: FLOP (or weight) share ÷ sensitivity. Spend your cuts where value is high.</dd></div>
-      <div><dt>FLOPs</dt><dd>compute per image — the portable measure of speed (trust it over laptop latency).</dd></div>
+      <div><dt>MACs / FLOPs</dt><dd>compute per image — the portable measure of speed (trust it over laptop latency). One multiply-accumulate (MAC) = 2 FLOPs; numbers here are in GMACs.</dd></div>
       <div><dt>mAP@50</dt><dd>detection accuracy: how well it finds birds (higher is better).</dd></div>
       <div><dt>The cliff</dt><dd>the point where a smooth decline turns into collapse.</dd></div>
       <div><dt>Fine-tune / regrow</dt><dd>retraining the wounded model to recover what a cut cost.</dd></div>
@@ -495,7 +495,7 @@ async function boot(){
   const s=await (await fetch('/api/structure')).json();
   STAGES=s.stages; PSTAGES=s.precision_stages; NODE_H=s.node_height; NATIVE=s.native; HEAD=s.head; nPreviews=s.previews;
   $('chips').innerHTML=`<span class="chip">yolov8n</span><span class="chip"><b>${NATIVE.params_m}M</b> params</span>
-     <span class="chip"><b>${NATIVE.flops_g}</b> GFLOP</span><span class="chip">mAP <b>${NATIVE.map}</b></span><span class="chip">${s.device}</span>`;
+     <span class="chip"><b>${NATIVE.flops_g}</b> GMAC</span><span class="chip">mAP <b>${NATIVE.map}</b></span><span class="chip">${s.device}</span>`;
   if(!store.get('seenGuide',false)){ $('guide').open=true; store.set('seenGuide',true); }
   buildLadder(); syncSegs(); render(); renderPGrid(); coach(); drawFrontier(); drawCurves(); renderMissions(); suggestRegrow();
   buildScopeStages(); inspect();
@@ -538,7 +538,7 @@ function setScore(r){
   $('sizev').textContent=r.size_mb+' MB'; $('sizes').textContent=`${Math.round(r.size_pct)}% of fp16`;
   $('bitsv').textContent=(+r.eff_bits).toFixed(2); $('bitsv').style.color=BITCOL[Math.round(Math.min(16,r.eff_bits))]||'var(--ink)';
   $('bitss').textContent=r.eff_bits>=16?'fp16 native':`${(16/r.eff_bits).toFixed(1)}× smaller weights`;
-  $('flopv').textContent=r.flops_g+' G'; $('flops').textContent=r.flops_pct>=100?'native':`${(100-r.flops_pct).toFixed(1)}% removed`;
+  $('flopv').textContent=r.flops_g+' GMAC'; $('flops').textContent=r.flops_pct>=100?'native':`${(100-r.flops_pct).toFixed(1)}% removed`;
   $('recipe').innerHTML='recipe: '+describe(recipe());
 }
 
@@ -890,8 +890,8 @@ $('export').onclick=async e=>{ const b=e.target,o=b.textContent;
   if(!Object.keys(fracs()).length){ $('e-result').innerHTML='Export bakes <b>structural</b> cuts into a real file — cut some channels in Structure first. (Quantization is applied at deploy time by the target runtime.)'; return; }
   b.disabled=true; b.innerHTML='<span class="spin">removing channels for real…</span>'; setBusy(1);
   try{ const r=await post('/api/export',{masks:fracs()});
-    $('e-result').innerHTML=`Exported: <b>${r.params_m}M</b> params (${r.params_pct}%) · <b>${r.flops_g}G</b> FLOPs (${r.flops_pct}%) · ${r.latency_ms} ms · saved <b>${r.path}</b><br>`+
-      `real mAP after true removal, before regrow: <b>${r.map}</b> (${Math.round(r.map_pct)}%) <span class="tag real">real</span> — vs. the masked preview's ${Math.round(last.map_pct)}%. That gap is the cliff; <b>Regrow</b> closes it.`;
+    $('e-result').innerHTML=`Exported: <b>${r.params_m}M</b> params (${r.params_pct}%) · <b>${r.flops_g} GMAC</b> (${r.flops_pct}%) · ${r.latency_ms} ms · saved <b>${r.path}</b><br>`+
+      `real mAP after true removal, before regrow: <b>${r.map}</b> (${Math.round(r.map_pct)}%) <span class="tag real">real</span>. Masking zeroes exactly these channels, so a cut-only preview predicts this number (Export doesn't quantize, so a recipe with quantization will differ). The drop from native is the cliff; <b>Regrow</b> closes it.`;
   } finally { setBusy(-1); b.disabled=false; b.textContent=o; } };
 $('reset').onclick=async()=>{ S={masks:{},quant:{bits:16,granularity:'channel',levels:'int',clip:'max',stage_bits:{}}}; SENS=null; PSENS=null;
   render(); renderPGrid(); coach(); syncSegs(); buildLadder(); inspect(); suggestRegrow();

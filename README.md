@@ -360,10 +360,12 @@ git-ignored; the two `build_*` scripts regenerate them.
   through BatchNorm exactly, so that's what QAT uses (a per-tensor recipe is
   trained per-channel). The before/after score applies the recipe to the fused
   model, as the cockpit does.
-- **Masking previews, Export commits.** The masked preview's compute/size track
-  a real Export closely; its accuracy is an optimistic preview (Export removes
-  channels by dependency group and bites harder — Export now reports that real
-  number).
+- **The web edition's masking is only a preview.** The server cockpit masks
+  exactly the channels Export removes (torch-pruning's plan), so its masked mAP
+  is the exported model's. `web/engine.js` can't run torch-pruning, so in the
+  browser masking zeroes each conv's lowest-L1 channels on its own; its
+  accuracy is an optimistic preview (Export removes whole dependency groups and
+  bites harder), and Export there replays recorded server runs.
 
 ## Status & roadmap
 
