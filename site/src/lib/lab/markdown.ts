@@ -31,7 +31,8 @@ export function inline(s: string): string {
       if (part.startsWith("`") && part.endsWith("`") && part.length > 1) return `<code>${esc(part.slice(1, -1))}</code>`;
       return esc(part)
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-        .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>")
+        // *emphasis* can't open or close on a space, so "2 * 3 * 4" stays arithmetic
+        .replace(/(^|[^*\w])\*(?=\S)([^*\n]*?\S)\*(?!\w)/g, "$1<em>$2</em>")
         .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t: string, u: string) =>
           /^https?:/.test(u) ? `<a href="${u}" target="_blank" rel="noopener">${t}<span class="visually-hidden"> (opens in a new tab)</span></a>` : t,
         );
