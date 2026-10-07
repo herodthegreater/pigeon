@@ -20,8 +20,9 @@ permissions:
   pages: write
   id-token: write
 
+# One group per ref: a PR build never cancels a deploy, and vice versa.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
