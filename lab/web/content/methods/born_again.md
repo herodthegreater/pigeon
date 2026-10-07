@@ -21,7 +21,7 @@ for g in range(1, G + 1):
 `born_again` in `lab/experiments/teacher.py` runs the method for two architectures and two transfer sets.
 
 - The outer loops cover `("2x32 (student-size)", STUDENT)` and `("3x256 (teacher-size)", [256, 256, 256])`, then `transfer` in `"train"` (8k labeled inputs) and `"pool"` (plus 20k unlabeled), then two seeds (`SEEDS[:2]`).
-- Generation 0: `prev = scratch(hid, s)` trains the small network on labels. For the 3x256 case it reuses the cached `teacher(seed=s)` instead, which was trained with its own recipe (60 epochs, learning rate 2e-3), not the 3000-step budget the later generations get.
+- Generation 0: `prev = scratch(hid, s)` trains the network on labels with the same 3000-step budget every later generation gets, for both sizes, so any change across generations comes from distillation, not from a different recipe.
 - Each row records `ev(prev)`, the test metrics.
 - For `g` in 1 to 3: `cur = distill(hid, prev, seed=100 * g + s, transfer=transfer, T=2, alpha=0.5)`. The seed changes each generation, so the child starts from new random weights and sees batches in a new order. `T=2, alpha=0.5` means half the loss is KD at a mild temperature and half is CE on the labels. With `transfer="pool"`, the unlabeled rows only get the KD half.
 - `ev(cur, prev)` adds `fidelity`: how often the child's top class matches its parent's.
@@ -36,14 +36,12 @@ for g in range(1, G + 1):
 
 | generation | 2x32, train | 2x32, pool | 3x256, train | 3x256, pool |
 |---|---|---|---|---|
-| 0 | 0.8163 | 0.8163 | 0.9155 | 0.9155 |
-| 1 | 0.8016 | 0.7920 | 0.9180 | 0.9188 |
-| 2 | 0.7951 | 0.7762 | 0.9183 | 0.9211 |
-| 3 | 0.7921 | 0.7730 | 0.9184 | 0.9209 |
+| 0 | 0.8163 | 0.8163 | 0.9168 | 0.9168 |
+| 1 | 0.8016 | 0.7920 | 0.9193 | 0.9203 |
+| 2 | 0.7951 | 0.7762 | 0.9203 | 0.9224 |
+| 3 | 0.7921 | 0.7730 | 0.9180 | 0.9231 |
 
-The small network loses accuracy every generation; the big one gains a little and then flattens. Fidelity to the parent rises with each generation (2x32 on train inputs: 0.8194, 0.8383, 0.8481), so children become better copies of increasingly worse parents. A 2x32 network cannot fit this problem well, and its soft outputs encode its own errors; the KD half of the loss pulls the child toward them. The 3x256 parent is close to fitting the data, so its soft outputs mostly add calibration information: its NLL (mean negative log-probability of the true class) falls from 0.3719 to 0.3215 by generation 3 with the pool.
-
-The generation-0 confound matters for the big network: generation 0 used a different training recipe from generations 1-3, so part of its jump may come from the recipe, not from self-distillation.
+The small network loses accuracy every generation. The big one gains a little: with the pool it climbs every generation, on the labeled inputs alone it peaks at generation 2. Fidelity to the parent rises with each generation (2x32 on train inputs: 0.8194, 0.8383, 0.8481), so children become better copies of increasingly worse parents. A 2x32 network cannot fit this problem well, and its soft outputs encode its own errors; the KD half of the loss pulls the child toward them. The 3x256 parent is close to fitting the data, so its soft outputs mostly add calibration information: its NLL (mean negative log-probability of the true class) falls from 0.3735 to 0.3184 by generation 3 with the pool. The 3x256 gains are small next to their seed spread (up to 0.004), so treat them as a tendency.
 
 `small_tricks` agrees for small models: self-distillation gave 0.6234 against a 0.6637 baseline for 2x16, and 0.8008 against 0.8170 for 2x32.
 
@@ -55,7 +53,7 @@ This page's runs (1000 steps, seed 0). Width 32: 0.7398, 0.7032, 0.6980. Width 1
 - Short budgets: each generation is trained from scratch, so a child that has not converged is worse than its parent.
 - Too much weight on KD (`alpha` near 1) with a weak parent copies its errors; the labels are what keep generations anchored.
 - Gains are small, often within seed noise. Run several seeds before trusting a generation-to-generation difference.
-- Comparing generation 0 trained one way with later generations trained another confounds the result.
+- Give generation 0 the same recipe and budget as its children; otherwise the comparison measures the recipe.
 
 ## Try this
 

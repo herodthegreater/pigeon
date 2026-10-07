@@ -29,25 +29,25 @@ p(y = c | z) = lik[c] / sum_c' lik[c']
 
 `World.sample` calls it on the latent `z` and stores the result as `Split.bayes`. With a non-uniform `class_probs`, it multiplies in the class prior and renormalizes.
 
-`run_bayes` in `lab/methods.py`: `soft = np.log(np.concatenate([d.train.bayes, d.pool.bayes]) + 1e-8)` turns the posterior for all 28k transfer inputs into logits (`softmax(log p) = p`). `FixedSource(X, None, ..., t_logits=soft)` uses them as fixed targets with no labels, and `KD(T=1)` matches them. The comparison arms are `scratch` (labels only, on the 8k labeled inputs) and `distill` from the trained 3x256 teacher, which defaults to `T = 4`. The ceiling row is `(d.test.bayes.argmax(1) == d.test.y).mean()`.
+`run_bayes` in `lab/methods.py`: `soft = np.log(np.concatenate([d.train.bayes, d.pool.bayes]) + 1e-8)` turns the posterior for all 28k transfer inputs into logits (`softmax(log p) = p`). `FixedSource(X, None, ..., t_logits=soft)` uses them as fixed targets with no labels, and `KD(T=1)` matches them. The comparison arms are `scratch` (labels only, on the 8k labeled inputs) and `distill` from the trained 3x256 teacher at its default `T = 1`, so both teachers use the same temperature. The ceiling row is `(d.test.bayes.argmax(1) == d.test.y).mean()`.
 
 ## What the simulations show
 
-`oracle_teacher` (3 seeds, 3000 steps, test accuracy; the Bayes ceiling is 0.9734 and the trained teacher scores 0.9139):
+`oracle_teacher` (3 seeds, 3000 steps, both KD arms at `T = 1`, test accuracy; the Bayes ceiling is 0.9734 and the trained teacher scores 0.9139):
 
-| student | labels only | KD from teacher | KD from posterior | posterior argmax labels |
+| student | labels only | KD from trained teacher | KD from Bayes posterior | Bayes-argmax labels on all 28k inputs |
 |---|---|---|---|---|
-| 2x8 | 0.4428 | 0.4488 | 0.4577 | 0.4562 |
-| 2x16 | 0.6637 | 0.6398 | 0.6766 | 0.6728 |
-| 2x32 | 0.8170 | 0.8059 | 0.8399 | 0.8378 |
-| 2x64 | 0.8820 | 0.8893 | 0.9093 | 0.9077 |
-| 2x128 | 0.9042 | 0.9107 | 0.9378 | 0.9333 |
+| 2x8 | 0.4428 | 0.4556 | 0.4577 | 0.4562 |
+| 2x16 | 0.6637 | 0.6714 | 0.6766 | 0.6728 |
+| 2x32 | 0.8170 | 0.8318 | 0.8399 | 0.8378 |
+| 2x64 | 0.8820 | 0.8957 | 0.9093 | 0.9077 |
+| 2x128 | 0.9042 | 0.9156 | 0.9378 | 0.9333 |
 
-The perfect teacher beats the trained one at every width, and the 2x128 student from the posterior (0.9378) is more accurate than the 3x256 teacher itself. The last column trains on the posterior's top class as hard labels and recovers almost all of the gain. So most of the benefit is not the soft shape but *labels on all 28k inputs*: 3.5 times the 8k labeled set, each the most probable class rather than the sampled one. The soft part shows mostly in calibration: at 2x128, KL divergence to the true posterior is 0.1101 for the soft student against 0.1306 for the hard one.
+The perfect teacher beats the trained one at every width, and the gap grows with the student: at 2x8 they are within seed noise, at 2x128 the posterior gives 0.9378 against 0.9156, more accurate than the 3x256 teacher itself. Only wide students can use a better target.
 
-Part of the gap to the trained teacher is temperature: the teacher arm uses `T = 4`, the posterior arm `T = 1`. In `loss_zoo`, KD from the trained teacher at `T = 1` gave a 2x16 student 0.6714, against 0.6398 at `T = 4`.
+The last column trains on the posterior's top class as hard labels and recovers almost all of the gain. So most of the benefit is not the soft shape but *labels on all 28k inputs*: 3.5 times the 8k labeled set, each the most probable class rather than the sampled one. The soft part shows mostly in calibration: at 2x128, KL divergence to the true posterior is 0.1101 for the soft student, 0.1306 for the hard one, and 0.1900 for the student of the trained teacher.
 
-This page's runs (1000 steps, seed 0; labels only, KD from teacher, KD from posterior): width 16 gave 0.5803, 0.5534, 0.5898; width 64 gave 0.8511, 0.8237, 0.8685; width 128 gave 0.9008, 0.8911, 0.9172.
+This page's runs (1000 steps, seed 0; labels only, KD from trained teacher, KD from posterior): width 16 gave 0.5803, 0.5854, 0.5898; width 64 gave 0.8511, 0.8572, 0.8685; width 128 gave 0.9008, 0.9028, 0.9172.
 
 ## When it breaks
 

@@ -54,21 +54,20 @@ for _ in range(steps):
 
 With no real data, all three fake sources land near 0.66, about the same as distilling on 500 real inputs, and clearly better than training on 500 labels. Inversion does not beat plain noise. A look at 1000 inverted inputs explains part of it: their mean length is 2.12 against 3.39 for real test inputs (the L2 prior pulls them inward), and the teacher's mean top probability on them is 0.9983, so the targets are nearly one-hot and carry little information about the other classes. Gaussian noise, by contrast, already has the same mean length as real inputs (3.39) and the teacher assigns it to all 20 classes.
 
-This page's runs (1000 steps, seed 0, default `n` = 4000): labels only 0.7398; real 0.6724, Gaussian 0.5489, uniform 0.5549, inversion 0.5632. With `n` = 500 real inputs the student reached 0.5989, and with all 28000, 0.6781. The first inversion at `n` = 4000 took 67 seconds here; after that it is cached. The toy flatters noise: 12 standardized numbers are a small space, so random points often land near real data. Random images almost never look like photographs.
+This page's runs (1000 steps, seed 0, default `n` = 4000): labels only 0.7398; real 0.6724, Gaussian 0.5489, uniform 0.5549, inversion 0.5632. With `n` = 500 real inputs the student reached 0.5989, and with all 28000, 0.6781. The first inversion at `n` = 4000 took 67 seconds; later runs use the cache. The toy flatters noise: 12 standardized numbers are a small space, so random points often land near real data. Random images almost never look like photographs.
 
 ## When it breaks
 
 - In high-dimensional inputs like images, pure noise covers almost none of the data distribution; the teacher sees only out-of-distribution inputs.
 - Inversion with a plain cross-entropy target finds inputs where the teacher is *most* confident, which are the least informative for distillation.
 - Too strong an L2 prior shrinks inputs toward zero; too weak lets them drift far from real data.
-- Every inverted point costs a full forward and backward pass through the teacher per step.
 - A teacher can be confident on inputs that look nothing like real data, so a high score proves nothing about realism.
 
 ## Try this
 
 - Set **transfer inputs** to `gaussian`, then `uniform`, then `inversion`, at the same **number of inputs**. Compare with the labels-only row.
 - Set **transfer inputs** to `real` and **number of inputs** to 500, then 4000, then 28000. This shows how much real data the fake sources are worth.
-- Try `inversion` at 1000 inputs to see whether a smaller synthetic set loses much (the first run at a new size is slow).
+- Try `inversion` at 1000 inputs to see whether a smaller synthetic set loses much.
 
 ## Going further
 

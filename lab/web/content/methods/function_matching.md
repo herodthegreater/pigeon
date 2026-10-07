@@ -44,12 +44,12 @@ Short training favors fixed targets; online augmentation is a harder task and ne
 
 The effect is largest when real data is scarce. In `transfer_set`, a student distilled on only 500 real inputs reaches 0.6612; with online mixup on the same 500 it reaches 0.7158, and 0.7280 with mixup plus jitter. In `small_tricks`, combining the unlabeled pool, online mixup, weight averaging and 4x longer training gives a 2x32 student 0.8607, against 0.8170 for labels only.
 
-This page's runs (seed 0, mixup), fixed against online: length 2 (2000 steps) 0.7946 against 0.7742; length 4, 0.8284 against 0.8222; length 8, 0.8416 against 0.8453; length 24 (24000 steps), 0.8414 against 0.8736. The crossover falls between 4x and 8x, and at 24x the fixed student has stalled while the online one is still gaining. Long runs take minutes. In 12 dimensions, mixup between two real points stays fairly close to the data; the toy cannot show how far this carries to images, where Beyer et al. trained for thousands of epochs.
+This page's runs (seed 0, mixup), fixed against online: length 2 (2000 steps) 0.7946 against 0.7742; length 4, 0.8284 against 0.8222; length 8, 0.8416 against 0.8453; length 24 (24000 steps), 0.8414 against 0.8736. The crossover falls between 4x and 8x, and at 24x the fixed student has stalled while the online one is still gaining.  In 12 dimensions, mixup between two real points stays fairly close to the data; the toy cannot show how far this carries to images, where Beyer et al. trained for thousands of epochs.
 
 ## When it breaks
 
 - Short budgets: online augmentation loses to fixed targets until training is long enough.
-- Cost: every step pays for a teacher forward pass; precomputed targets are free after the first.
+- Cost: every step pays for a teacher forward pass.
 - Augmentations that leave the data distribution (too much jitter) give targets on inputs that never occur. Here jitter on top of mixup was slightly worse with 8k inputs, but helped with 500.
 - Mixup with plain labels needs care: the blended label `λ · y_i + (1 − λ) · y_j` is a guess about what a blended input is. Querying the teacher on the blend replaces that guess with an answer.
 

@@ -247,7 +247,7 @@ def run_data_free(p):
          "uniform": lambda: rng.uniform(-3, 3, (n, dim)).astype(np.float32),
          "inversion": lambda: cached(f"inversion_{n}", lambda: invert_teacher(
              t, n, steps=30 if QUICK else 200))}[p["source"]]()
-    m = train(net(STUDENT, 0), FixedSource(X, None, d.world.C, teacher=t), [KD(T=4)], steps=STEPS)
+    m = train(net(STUDENT, 0), FixedSource(X, None, d.world.C, teacher=t), [KD(T=1)], steps=STEPS)
     return result([teacher_row(), row("labels only (8k)", scratch(STUDENT, 0, steps=STEPS), t),
                    row(f"KD on {p['source']} inputs ({n})", m, t)])
 
@@ -259,7 +259,7 @@ def run_data_free(p):
         code=["lab/train.py:OnlineSource"],
         params=[P("aug", "augmentation", "choice", "mixup", choices=["mixup", "noise", "mixup+noise"]),
                 P("length", "training length (x base)", "float", 2.0, 0.5, 24, 0.5,
-                  help="online matching overtakes fixed targets only after ~6-24x; long runs take a minute")],
+                  help="online matching overtakes fixed targets only after ~8x; runs past 8x take several minutes")],
         experiments=["function_matching"],
         papers=["Beyer et al. Knowledge Distillation: A Good Teacher is Patient and Consistent (2022)"])
 def run_function_matching(p):
@@ -313,7 +313,7 @@ def run_ensemble(p):
         tl = log_mean_softmax([t.logits(X) for t in ts])
     probs = np.mean([softmax(t.logits(d.test.X)) for t in ts], 0)
     ens_acc = float((probs.argmax(1) == d.test.y).mean())
-    m = train(net(STUDENT, 0), FixedSource(X, y, d.world.C, t_logits=tl), [KD(T=4)], steps=STEPS)
+    m = train(net(STUDENT, 0), FixedSource(X, y, d.world.C, t_logits=tl), [KD(T=1)], steps=STEPS)
     return result([dict(label=f"ensemble of {p['n']} teachers", acc=ens_acc),
                    row("student from teacher #0 alone", distill(STUDENT, ts[0], 0, steps=STEPS)),
                    row(f"student from ensemble ({p['combine']} averaged)", m)])
