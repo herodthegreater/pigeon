@@ -1,14 +1,136 @@
 ---
 import Base from "../../layouts/Base.astro";
-const used = ["GGUF k-quants + importance matrix", "AWQ", "GPTQ", "FP8 (E4M3 / E5M2)", "FP4 microscaling (NVFP4 / MXFP4)", "bitsandbytes NF4 + QLoRA", "SmoothQuant", "Rotations (QuaRot / SpinQuant / ParoQuant)", "KV-cache quantization", "MLX", "2:4 sparsity", "Prune + distill", "Quantization-aware distillation", "TorchAO / LiteRT / Core ML"];
+import "../../styles/page.css";
+import { meta, methods, FAMILY_ORDER, STATUS_ORDER, STATUS_LABEL, type Status } from "../../lib/lab/data";
+import { NOT_COVERED, COVERED, COVERAGE_LABEL, renderLine } from "../../components/guide/techniques";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const M = meta();
+const all = methods();
+
+const count = (s: Status) => all.filter((m) => m.status === s).length;
+const families = FAMILY_ORDER.map((f) => {
+  const ms = all.filter((m) => m.family === f);
+  const categories = Object.entries(M.categories)
+    .map(([key, name]) => ({
+      key,
+      name,
+      methods: ms
+        .map((m, i) => ({ m, i }))
+        .filter(({ m }) => m.category === key)
+        .sort((a, b) => STATUS_ORDER[a.m.status] - STATUS_ORDER[b.m.status] || a.i - b.i)
+        .map(({ m }) => m),
+    }))
+    .filter((c) => c.methods.length);
+  return { key: f, ...M.families[f], total: ms.length, categories };
+});
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const verb = (n: number, one: string, many: string) => (n === 1 ? one : many);
+const lede =
+  `${all.length} compression methods, each written up with the real source code it runs. ` +
+  `${count("runnable")} of them ${verb(count("runnable"), "runs", "run")} in your browser; ` +
+  `${count("cockpit")} ${verb(count("cockpit"), "runs", "run")} in the YOLOv8n cockpit on your own machine, ` +
+  `and ${count("reference")} ${verb(count("reference"), "is a reference write-up", "are reference write-ups")} ` +
+  `for kinds of models the lab doesn't have.`;
 ---
-<Base title="Field Guide · Pigeon" active="guide">
-  <main style="max-width: 760px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: flex; flex-direction: column; gap: 20px;">
-    <p class="label">Coming next</p>
-    <h1 style="font-size: var(--step-3)">Field Guide</h1>
-    <p style="color: var(--muted)">A card for every technique, at three depths, with code for your own models. First up, the methods people actually use in 2026:</p>
-    <ul style="display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0;">
-      {used.map((m) => <li style="border: 1px solid var(--rule); background: var(--card); padding: 3px 10px; font-size: 0.9rem;">{m}</li>)}
-    </ul>
+<Base
+  title="Field Guide · Pigeon"
+  active="guide"
+  description={`${all.length} model compression methods with their real source code; ${count("runnable")} run in your browser.`}
+>
+  <main id="main" class="page guide">
+    <header>
+      <h1>Field Guide</h1>
+      <p class="lede">{lede}</p>
+      <nav class="jump" aria-label="Families on this page">
+        <ol>
+          {families.map((f) => (
+            <li><a href={`#${f.key}`}>{f.title}</a> <span class="num">{plural(f.total, "method", "methods")}</span></li>
+          ))}
+          <li><a href="#not-covered">Techniques not covered yet</a> <span class="num">{plural(NOT_COVERED.length, "technique", "techniques")}</span></li>
+        </ol>
+      </nav>
+    </header>
+
+    {families.map((f) => (
+      <section id={f.key} class="family" aria-labelledby={`${f.key}-title`}>
+        <div class="group">
+          <h2 id={`${f.key}-title`}>{f.title}</h2>
+          <p>{f.blurb}</p>
+        </div>
+        {f.categories.map((c) => (
+          <div class="group">
+            <h3 id={`${f.key}-${c.key}`}>{c.name}</h3>
+            <ul class="entries">
+              {c.methods.map((m) => (
+                <li>
+                  <a class="entry" href={`${base}guide/${m.id}/`}>
+                    <span class="name">{m.name}</span>
+                    <span class:list={["aside", m.status]}>{STATUS_LABEL[m.status]}</span>
+                    <span class="summary">{m.summary}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </section>
+    ))}
+
+    <section id="not-covered" class="family" aria-labelledby="not-covered-title">
+      <div class="group">
+        <h2 id="not-covered-title">Techniques not covered yet</h2>
+        <p>
+          Techniques this guide covers only in part, or not at all. Where the Coop applies the same number format to
+          Pigeon's own weights, the line says how.
+        </p>
+      </div>
+      <ul class="techniques">
+        {NOT_COVERED.map((t) => (
+          <li>
+            <h3>{t.name}</h3>
+            <p class="coverage">{COVERAGE_LABEL[t.coverage]}</p>
+            <p set:html={renderLine(t.line, base)} />
+          </li>
+        ))}
+      </ul>
+      <p class="covered" set:html={renderLine(COVERED, base)} />
+    </section>
   </main>
 </Base>
+
+<style>
+  .jump ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); }
+  .jump li { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .jump a { display: inline-flex; align-items: center; min-height: 32px; }
+  .jump .num { font-size: var(--step--1); color: var(--muted); }
+
+  .family {
+    display: flex; flex-direction: column; gap: var(--space-5);
+    padding-top: var(--space-6); border-top: 1px solid var(--rule);
+  }
+  .family h2, .family h3 { scroll-margin-top: var(--space-4); }
+  /* Categories are index labels, set in the body face so they don't compete with the serif method names. */
+  .family > .group > h3 { font-family: var(--body); font-size: var(--step-0); font-weight: 600; }
+  .entry .aside.runnable { color: var(--teal); font-weight: 600; }
+
+  .techniques { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); max-width: var(--measure); }
+  .techniques li {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-4);
+    padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--rule);
+  }
+  .techniques h3 { font-size: var(--step-1); }
+  .techniques .coverage { font-size: var(--step--1); color: var(--muted); white-space: nowrap; align-self: baseline; }
+  .techniques p:last-child { grid-column: 1 / -1; font-size: var(--step--1); }
+  .covered { max-width: var(--measure); font-size: var(--step--1); }
+
+  @media (pointer: coarse), (max-width: 640px) {
+    .jump a { min-height: var(--tap); }
+    /* Links inside a sentence can't be 44px tall; extra leading keeps them apart for a thumb. */
+    .techniques p:last-child, .covered { line-height: 2; }
+  }
+  @media (max-width: 640px) {
+    .techniques li { grid-template-columns: 1fr; }
+  }
+</style>
