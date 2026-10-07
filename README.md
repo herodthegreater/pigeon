@@ -182,6 +182,23 @@ reverse-trains both (see *Provenance* below).
 fast subset, the recovery job uses the 125-image val set — both real, different
 sample sizes.)
 
+## The simulation lab (`lab/`)
+
+Real YOLO experiments are slow and come one at a time. [`lab/`](lab/README.md)
+is a CPU-only, numpy-only miniature of the same problem: a 20-class
+"generalist" world with one target class and a known Bayes-optimal answer.
+It runs **28 experiments** across every way we could find to make a small
+model from a big one, or make a small model better: distillation (12 loss and
+data variants, teacher edge cases, data-free), pruning (unstructured,
+structured, lottery tickets), quantization (PTQ, QAT, k-means sharing),
+low-rank, layer deletion, specialization to one class, and their combinations.
+Findings, and what they imply for pigeon's cut-and-regrow loop, are in
+[`lab/REPORT.md`](lab/REPORT.md).
+
+```bash
+python -m lab.run            # ~35 min on 4 cores; LAB_QUICK=1 for a 2-min smoke test
+```
+
 ## Quickstart
 
 ```bash

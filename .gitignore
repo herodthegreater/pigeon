@@ -18,3 +18,9 @@ samples/
 
 # OS
 .DS_Store
+
+# Simulation lab: teacher cache + quick smoke-test outputs
+lab/.cache/
+lab/results/quick_*
+lab/results/RESULTS_quick.md
+lab/results/figures/quick_*
