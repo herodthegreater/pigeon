@@ -26,7 +26,7 @@ The model: a general ImageNet classifier, specialized to one job — **is there 
 | Depth | Every card has three layers: the gist · how it works · under the hood — plus "Do it yourself" code for real tools. |
 | Look | Field-guide aesthetic. Mascot bird whose **species tracks size** and **condition tracks accuracy**. |
 | LLM coverage | LLM-only methods get toy simulations in an **LLM wing** plus real commands (llama.cpp, bitsandbytes, AutoAWQ, GPTQModel, MLX…). |
-| Repo | v0 YOLO cockpit tagged `v0-yolo-cockpit` and moved to `archive/v0-yolo-cockpit/`; its findings are lesson material (`docs/findings-yolo.md`). |
+| Repo | v0 YOLO cockpit tagged `v0-yolo-cockpit` and moved to `archive/v0-yolo-cockpit/` (since un-archived as `cockpit/`, where it kept evolving to v3); its findings are lesson material (`docs/findings-yolo.md`). |
 | Hosting | GitHub Pages (pending the owner's go-ahead to make the repo public). |
 
 ## The mascot
