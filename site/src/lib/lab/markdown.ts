@@ -53,7 +53,7 @@ export function md(src: string, opts: { toc?: Heading[]; shift?: number } = {}):
   const { toc, shift = 0 } = opts;
   const L = (src || "").replace(/\r/g, "").split("\n");
   let h = "", i = 0;
-  const isBlock = (l: string) => /^```|^#{1,4} |^\s*[-*] |^\s*\d+\. |^\|/.test(l);
+  const isBlock = (l: string) => /^```|^#{1,4} |^\s*[-*] |^\s*\d+\. |^\||^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(l);
   while (i < L.length) {
     const l = L[i];
     if (/^```/.test(l)) {
@@ -90,6 +90,8 @@ export function md(src: string, opts: { toc?: Heading[]; shift?: number } = {}):
         "</tr></thead><tbody>" +
         body.slice(1).map((r) => "<tr>" + cells(r).map((c) => `<td>${inline(c)}</td>`).join("") + "</tr>").join("") +
         "</tbody></table></div>";
+    } else if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(l)) {
+      i++; // a thematic break: sections already open with a rule (prose h2), so draw nothing extra
     } else if (!l.trim()) {
       i++;
     } else {

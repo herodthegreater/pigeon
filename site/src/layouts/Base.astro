@@ -18,6 +18,7 @@ const nav: [Section, string, string][] = [
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
     <title>{title}</title>
+    <slot name="head" />
     <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -56,12 +57,12 @@ const nav: [Section, string, string][] = [
         display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-5);
         padding-inline: var(--gutter); padding-block: var(--space-3); border-bottom: 1px solid var(--rule);
       }
-      .brand { display: flex; align-items: baseline; gap: 10px; text-decoration: none; color: var(--ink); }
+      .brand { display: flex; align-items: baseline; gap: var(--space-2); text-decoration: none; color: var(--ink); }
       .wordmark { font-family: var(--display); font-weight: 600; font-size: var(--step-2); }
       .latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
       nav { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin-inline-end: auto; }
       nav a {
-        color: var(--muted); text-decoration: none; font-size: 0.95rem;
+        color: var(--muted); text-decoration: none; font-size: var(--step-0);
         display: inline-flex; align-items: center; min-height: 36px; border-bottom: 2px solid transparent;
       }
       nav a:hover { color: var(--ink); }

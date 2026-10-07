@@ -1,39 +1,24 @@
 /**
  * Names and alt text for an experiment's figures. The figure files are numbered
  * (`<name>_<i>.png`), so the words come from the plot spec that drew figure i:
- * lab/results/<name>.json keeps one spec per figure (axes, title, chart kind),
- * and lab/report.py renders `<name>_<i>.png` from spec i. The page data the
- * site reads does not carry the specs yet, so they are read from the committed
- * results files here; every figure still gets a distinct name without them.
+ * the lab exports each experiment's specs as `plots` (lab/report.py renders
+ * `<name>_<i>.png` from plots[i]). Every figure still gets a distinct name
+ * without a spec.
  */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cap, label } from "./labels";
+import type { PlotSpec } from "./data";
 
-export interface PlotSpec {
-  x: string;
-  y: string;
-  kind?: "line" | "bar" | "scatter";
-  group?: string;
-  title?: string;
-  xlog?: boolean;
-  hlines?: string[];
-  ref_metric?: string;
-  label?: string;
-  connect?: boolean;
-}
+export type { PlotSpec };
 
-const specFiles = import.meta.glob<PlotSpec[] | undefined>("../../../../lab/results/*.json", {
-  eager: true,
-  import: "plots",
-});
-
-/** The plot specs of one experiment, by figure index ([] when unknown). */
-export function plotSpecs(name: string): PlotSpec[] {
-  const hit = Object.entries(specFiles).find(([path]) => path.endsWith(`/lab/results/${name}.json`));
-  return (hit?.[1] as PlotSpec[] | undefined) ?? [];
-}
+/** Where the reader finds the figure's numbers, said at the end of the alt text. */
+export type NumbersAt = "below" | "results";
+const NUMBERS: Record<NumbersAt, string> = {
+  below: "The numbers are in the table below.",
+  results: "The numbers are in the experiment's full table on the Results page.",
+};
 
 const REF_NAME: Record<string, string> = { teacher: "the teacher", bayes: "the Bayes-optimal classifier" };
 
@@ -55,14 +40,15 @@ export function figureText(
   file: string,
   position: number,
   count: number,
-  exp: { title: string; refs?: Record<string, Record<string, number>> },
-  specs: PlotSpec[],
+  exp: { title: string; refs?: Record<string, Record<string, number>>; plots?: PlotSpec[] },
+  numbersAt: NumbersAt = "below",
 ): FigureText {
+  const specs = exp.plots ?? [];
   const index = Number(file.match(/_(\d+)\.png$/)?.[1] ?? NaN);
   const spec = Number.isInteger(index) ? specs[index] : undefined;
   if (!spec) {
     const name = `Figure ${position + 1} of ${count}`;
-    return { name, alt: `${name} for “${exp.title}”. The numbers are in the table below.` };
+    return { name, alt: `${name} for “${exp.title}”. ${NUMBERS[numbersAt]}` };
   }
   const kind = spec.kind ?? "line";
   const x = label(spec.x), y = label(spec.y);
@@ -83,7 +69,7 @@ export function figureText(
   const metric = spec.ref_metric ?? spec.y;
   const lines = (spec.hlines ?? []).filter((h) => typeof exp.refs?.[h]?.[metric] === "number").map((h) => REF_NAME[h] ?? h);
   const refs = lines.length ? `, with a dashed reference line for ${list(lines)}` : "";
-  const alt = `${what}${scale}${group}${tags}${refs}. Titled “${spec.title ?? exp.title}”. The numbers are in the table below.`;
+  const alt = `${what}${scale}${group}${tags}${refs}. Titled “${spec.title ?? exp.title}”. ${NUMBERS[numbersAt]}`;
   return { name, alt };
 }
 

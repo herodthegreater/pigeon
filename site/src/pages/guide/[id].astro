@@ -3,9 +3,9 @@ import Base from "../../layouts/Base.astro";
 import RunBox from "../../components/RunBox.astro";
 import "../../styles/page.css";
 import "../../styles/prose.css";
-import { meta, methods, method, STATUS_LABEL, figureUrl } from "../../lib/lab/data";
-import { md, highlight, type Heading } from "../../lib/lab/markdown";
-import { figuresOf } from "../../components/guide/figures";
+import { meta, methods, method, STATUS_LABEL } from "../../lib/lab/data";
+import { md, highlight, inline, type Heading } from "../../lib/lab/markdown";
+import Figures from "../../components/Figures.astro";
 
 export function getStaticPaths() {
   return methods().map((m) => ({ params: { id: m.id } }));
@@ -26,7 +26,7 @@ const contents: Heading[] = [
   ...(m.experiments.length ? [{ id: "simulations", text: "Simulation figures" }] : []),
   ...(m.papers.length ? [{ id: "papers", text: "Papers" }] : []),
 ];
-const experiments = m.experiments.map((e) => ({ ...e, figs: figuresOf(e) }));
+const experiments = m.experiments;
 const runnable = m.status === "runnable";
 const codeNotes = toc.some((t) => t.id === "the-code-line-by-line");
 const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
@@ -76,12 +76,8 @@ const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
           experiments.map((e) => (
             <section class="sim" aria-labelledby={`sim-${e.name}`}>
               <h3 id={`sim-${e.name}`}>{e.title}</h3>
-              <p class="question">{e.question}</p>
-              {e.figs.map((f) => (
-                <figure class="plate">
-                  <img src={figureUrl(f.rel)} alt={f.alt} width={f.width} height={f.height} loading="lazy" decoding="async" />
-                </figure>
-              ))}
+              <p class="question" set:html={inline(e.question)} />
+              <Figures exp={e} numbersAt="results" lazy />
               {e.notes && <p class="note">{e.notes}</p>}
               <p><a class="solo" href={`${base}results/${e.name}/`}>Full table: {e.title}</a></p>
             </section>

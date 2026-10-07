@@ -186,7 +186,10 @@ def main():
         raise SystemExit("unset LAB_QUICK: the site ships full-budget models")
     out = os.path.abspath(args.out)
     data_out = os.path.abspath(args.data_out) if args.data_out else os.path.join(out, "data")
-    for d in sorted({out, data_out}):  # parent first if data_out sits inside out
+    # --data-only refreshes data and figures but keeps an existing runtime (Pyodide,
+    # the bundle) in `out`, so a quick local rebuild never deletes a full one.
+    fresh = [data_out, os.path.join(out, "figures")] if args.data_only else [out, data_out]
+    for d in sorted(set(fresh)):  # parent first if data_out sits inside out
         if os.path.exists(d):
             shutil.rmtree(d)
         os.makedirs(d)

@@ -32,7 +32,7 @@ def invert_teacher(t: MLP, n: int, steps: int = 300, lr: float = 0.05, l2: float
 
 
 @experiment("transfer_set", G, "Distilling without (much) real data",
-            "Which inputs carry the teacher's knowledge best -- real labeled, real "
+            "Which inputs carry the teacher's knowledge best: real labeled, real "
             "unlabeled, augmented, pure noise, or inputs dreamed up by inverting the teacher?")
 def transfer_set():
     d = data()
@@ -74,7 +74,7 @@ def transfer_set():
 
 
 @experiment("function_matching", G, "Patient & consistent teaching",
-            "Beyer et al.: treat KD as *function matching* -- query the teacher on fresh "
+            "Beyer et al.: treat KD as *function matching*: query the teacher on fresh "
             "augmented inputs every step and train for a long time. Does it keep paying?")
 def function_matching():
     d = data()

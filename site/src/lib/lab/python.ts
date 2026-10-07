@@ -67,6 +67,11 @@ function call<T>(kind: string, args: unknown, timeoutMs = 0): Promise<T> {
   });
 }
 
+/** Stop whatever is running: Python can't be interrupted, so the worker restarts (the next call reloads it). */
+export function stop() {
+  restart(new Error("stopped"));
+}
+
 /** Status lines while Python loads ("Downloading Python (about 20 MB, only the first time)…"). */
 export function onStatus(fn: PyStatus): () => void {
   listeners.add(fn);

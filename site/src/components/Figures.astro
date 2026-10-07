@@ -1,16 +1,19 @@
 ---
-import { figureUrl } from "../../lib/lab/data";
-import { figureText, plotSpecs, pngSize } from "./figures";
+import { figureUrl, type PlotSpec } from "../lib/lab/data";
+import { figureText, pngSize, type NumbersAt } from "../lib/lab/figures";
 
 interface Props {
-  exp: { name: string; title: string; figures: string[]; refs?: Record<string, Record<string, number>> };
+  exp: { name: string; title: string; figures: string[]; refs?: Record<string, Record<string, number>>; plots?: PlotSpec[] };
+  /** "below" on an experiment's page (its table follows); "results" elsewhere. */
+  numbersAt?: NumbersAt;
+  /** Lazy-load every figure (true further down a page); by default the first loads eagerly. */
+  lazy?: boolean;
 }
-const { exp } = Astro.props;
-const specs = plotSpecs(exp.name);
+const { exp, numbersAt = "below", lazy = false } = Astro.props;
 const figures = exp.figures.map((rel, i) => ({
   src: figureUrl(rel),
   size: pngSize(rel),
-  ...figureText(rel, i, exp.figures.length, exp, specs),
+  ...figureText(rel, i, exp.figures.length, exp, numbersAt),
 }));
 ---
 {figures.length ? (
@@ -22,18 +25,18 @@ const figures = exp.figures.map((rel, i) => ({
           alt={f.alt}
           width={f.size?.width}
           height={f.size?.height}
-          loading={i === 0 ? undefined : "lazy"}
+          loading={i === 0 && !lazy ? undefined : "lazy"}
           decoding="async"
         />
         <p class="state error fig-error" hidden>
-          This figure did not load: the file is missing or the connection dropped. Reload the page to try again; the table below has the same numbers.
+          This figure did not load: the file is missing or the connection dropped. Reload the page to try again; {numbersAt === "below" ? "the table below has the same numbers." : "the experiment's full table on the Results page has the same numbers."}
         </p>
         <figcaption>{f.name}</figcaption>
       </figure>
     ))}
   </div>
 ) : (
-  <p class="gap">No figures for this experiment. The table below has its numbers.</p>
+  <p class="gap">No figures for this experiment. {numbersAt === "below" ? "The table below has its numbers." : "Its full table on the Results page has the numbers."}</p>
 )}
 
 <script>

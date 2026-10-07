@@ -55,6 +55,7 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
     <div class="run-actions">
       <button class="btn" type="submit" data-run>Run</button>
       <button class="btn secondary" type="reset">Reset to defaults</button>
+      <button class="btn secondary" type="button" data-stop hidden>Stop the run</button>
     </div>
   </form>
   <p class="run-status state"><span aria-live="polite" data-msg>Not run yet.</span><span data-tick></span></p>
@@ -68,7 +69,7 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
 </section>
 
 <script>
-  import { run, onStatus, isReady } from "../lib/lab/python";
+  import { run, onStatus, isReady, stop as stopPython } from "../lib/lab/python";
   import { resultView } from "../lib/lab/results";
   import { esc } from "../lib/lab/markdown";
 
@@ -79,6 +80,8 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
     const kinds: { name: string; kind: Kind }[] = JSON.parse(box.dataset.params || "[]");
     const form = box.querySelector("form")!;
     const btn = box.querySelector<HTMLButtonElement>("[data-run]")!;
+    const stopBtn = box.querySelector<HTMLButtonElement>("[data-stop]")!;
+    let stopped = false;
     const msg = box.querySelector<HTMLElement>("[data-msg]")!;
     const tick = box.querySelector<HTMLElement>("[data-tick]")!;
     const out = box.querySelector<HTMLElement>("[data-results]")!;
@@ -109,6 +112,13 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
       });
     });
 
+    // Python can't be interrupted, so stopping restarts its worker; the run's promise then rejects.
+    stopBtn.addEventListener("click", () => {
+      if (!running) return;
+      stopped = true;
+      stopPython();
+    });
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (running) return;
@@ -120,8 +130,10 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
       }
 
       running = true;
+      stopped = false;
       btn.disabled = true;
       btn.textContent = "Running";
+      stopBtn.hidden = false;
       out.setAttribute("aria-busy", "true");
       out.replaceChildren();
       tick.textContent = "";
@@ -149,6 +161,12 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
         tick.textContent = "";
         say(`Done in ${res.seconds.toFixed(1)} s`);
       } catch (err) {
+        if (stopped) {
+          tick.textContent = "";
+          out.innerHTML = `<p class="run-idle">You stopped the run. The next run restarts Python first, which takes a few seconds.</p>`;
+          say("Stopped.");
+          return;
+        }
         const why = String((err as Error)?.message ?? err).trim().replace(/[.\s]+$/, "") || "no reason was given";
         tick.textContent = "";
         out.innerHTML = `<div class="error-box"><p>The run failed: ${esc(why)}. Change a setting or run it again.</p></div>`;
@@ -159,6 +177,9 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
         running = false;
         btn.disabled = false;
         btn.textContent = "Run";
+        // The Stop button is about to disappear; if it had focus, hand focus to Run.
+        if (document.activeElement === stopBtn || stopped) btn.focus();
+        stopBtn.hidden = true;
         out.removeAttribute("aria-busy");
       }
     });
@@ -193,7 +214,6 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
 <style is:global>
   /* The result HTML is injected by resultView(), so these rules are global, scoped under the run box. */
   .runbox .error-box { overflow-wrap: anywhere; }
-  .runbox .error-box p { color: var(--ink); }
   .runbox .restable td, .runbox .restable th { padding: var(--space-2) var(--space-1); }
   .runbox .restable td:first-child { min-width: 9ch; }
   .runbox .bar { height: 4px; margin-top: var(--space-1); background: var(--rule); border-radius: 2px; min-width: 48px; }

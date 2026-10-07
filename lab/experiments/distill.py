@@ -86,7 +86,7 @@ def loss_zoo():
 
 @experiment("label_budget", G, "Distillation as a substitute for labels",
             "With only a few hundred labels, how much do a strong teacher and "
-            "unlabeled inputs buy -- and does the teacher need the big labeled set?")
+            "unlabeled inputs buy? And does the teacher need the big labeled set?")
 def label_budget():
     t_full = teacher()
     rows = []

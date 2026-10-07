@@ -286,7 +286,7 @@ def _greedy_drop(m: MLP, k: int, X, y) -> list[int]:
 
 @experiment("layer_drop", G, "Deleting whole layers: plain vs. residual",
             "Remove k of 8 hidden layers from a deep teacher. Residual nets are said to "
-            "behave like ensembles of shallow paths -- does that make depth removable? "
+            "behave like ensembles of shallow paths. Does that make depth removable? "
             "And is initializing a shallow student from the teacher's layers worth it?")
 def layer_drop():
     d = data()

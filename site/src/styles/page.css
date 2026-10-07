@@ -15,6 +15,7 @@
 .crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 .crumbs li + li::before { content: "/"; margin-right: var(--space-2); color: var(--rule-strong); }
 .crumbs a { color: var(--muted); }
+@media (pointer: coarse), (max-width: 640px) { .crumbs a { display: inline-flex; align-items: center; min-height: var(--tap); } }
 .crumbs a:hover { color: var(--ink); }
 
 /* A titled group of entries (a family, a category, a group of experiments). */
@@ -42,13 +43,18 @@
 /* Two columns: the reading on the left, a side panel (run box, contents) on the right.
    Phones get the panel first only when it holds the page's main action. */
 .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: var(--space-6); align-items: start; }
-.side { display: flex; flex-direction: column; gap: var(--space-4); position: sticky; top: var(--space-3); }
+.cols > * { min-width: 0; } /* long code and tables scroll inside their own box, never widen the page */
+/* The side panel follows the reader, and scrolls on its own once a run result makes it tall. */
+.side {
+  display: flex; flex-direction: column; gap: var(--space-4); position: sticky; top: var(--space-3);
+  max-height: calc(100vh - 2 * var(--space-3)); overflow-y: auto; overscroll-behavior: contain;
+}
 .panel { border-top: 2px solid var(--ink); padding-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
 .panel > h2 { font-size: var(--step-1); }
-.panel p { font-size: var(--step--1); color: var(--muted); }
+.panel > p { font-size: var(--step--1); color: var(--muted); }
 @media (max-width: 960px) {
-  .cols { grid-template-columns: 1fr; }
-  .side { position: static; }
+  .cols { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; max-height: none; overflow: visible; }
 }
 
 /* Contents list for long pages. */

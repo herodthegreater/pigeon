@@ -44,6 +44,20 @@ export interface CodeRef {
   doc: string;
 }
 
+/** What one figure plots; figure i of an experiment is drawn from plots[i] by lab/report.py. */
+export interface PlotSpec {
+  x: string;
+  y: string;
+  kind?: "line" | "bar" | "scatter";
+  group?: string;
+  title?: string;
+  xlog?: boolean;
+  hlines?: string[];
+  ref_metric?: string;
+  label?: string;
+  connect?: boolean;
+}
+
 export interface ExperimentSummary {
   name: string;
   title: string;
@@ -53,6 +67,8 @@ export interface ExperimentSummary {
   figures: string[]; // "figures/<file>.png", relative to the lab's runtime folder
   notes: string;
   methods?: string[];
+  plots?: PlotSpec[];
+  refs?: Record<string, Record<string, number>>;
 }
 
 export interface Method extends MethodSummary {

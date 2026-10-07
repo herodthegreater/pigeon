@@ -4,7 +4,7 @@
  */
 
 import { fmt } from "../../lib/lab/results";
-import { METRICS, cap, label } from "./labels";
+import { METRICS, cap, label } from "../../lib/lab/labels";
 
 type Row = Record<string, number | string>;
 

@@ -116,10 +116,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border: 1px solid var(--teal); background: var(--teal); color: var(--on-teal);
   font-weight: 600; font-size: var(--step--1); text-decoration: none; cursor: pointer;
 }
-.btn:hover { filter: brightness(1.08); }
+/* Hover says "this is the thing you'll press": the label underlines; secondary buttons turn teal. */
+.btn:hover { text-decoration: underline; text-underline-offset: 3px; }
 .btn.secondary { background: var(--card); color: var(--ink); border-color: var(--rule-strong); }
-.btn.secondary:hover { border-color: var(--teal); filter: none; }
-.btn:disabled { opacity: 0.6; cursor: progress; filter: none; }
+.btn.secondary:hover { border-color: var(--teal); color: var(--teal); }
+/* Busy or spent buttons. aria-disabled keeps keyboard focus on the button while it works. */
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.6; cursor: default; text-decoration: none; }
+.btn[aria-busy="true"] { cursor: progress; }
+.btn.secondary[aria-disabled="true"]:hover { border-color: var(--rule-strong); color: var(--ink); }
 @media (pointer: coarse), (max-width: 640px) {
   .btn { min-height: var(--tap); }
 }

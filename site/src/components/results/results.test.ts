@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { experiment, experiments, report } from "../../lib/lab/data";
-import { figureText, plotSpecs } from "./figures";
-import { LABELS, METRICS } from "./labels";
+import { figureText } from "../../lib/lab/figures";
+import { LABELS, METRICS } from "../../lib/lab/labels";
 import { reportSource, reportView } from "./report";
 import { columns, isNumeric, refPoints, spread } from "./table";
 
@@ -77,9 +77,8 @@ describe("figures", () => {
   it("give every figure of an experiment its own name and alt text, from its plot spec", () => {
     for (const s of experiments()) {
       const e = experiment(s.name);
-      const specs = plotSpecs(e.name);
-      const texts = e.figures.map((f, i) => figureText(f, i, e.figures.length, e, specs));
-      expect(specs.length, e.name).toBeGreaterThanOrEqual(e.figures.length);
+      const texts = e.figures.map((f, i) => figureText(f, i, e.figures.length, e));
+      expect(e.plots?.length ?? 0, e.name).toBeGreaterThanOrEqual(e.figures.length);
       expect(new Set(texts.map((t) => t.name)).size, e.name).toBe(texts.length);
       expect(new Set(texts.map((t) => t.alt)).size, e.name).toBe(texts.length);
       for (const t of texts) {
@@ -91,14 +90,20 @@ describe("figures", () => {
 
   it("only mention a reference line the figure draws", () => {
     const spec = [{ x: "width", y: "acc", hlines: ["teacher", "bayes"] }];
-    const one = figureText("figures/x_0.png", 0, 1, { title: "T", refs: { teacher: { acc: 0.9 } } }, spec);
+    const one = figureText("figures/x_0.png", 0, 1, { title: "T", refs: { teacher: { acc: 0.9 } }, plots: spec });
     expect(one.alt).toContain("reference line for the teacher.");
-    const both = figureText("figures/x_0.png", 0, 1, { title: "T", refs: { teacher: { acc: 0.9 }, bayes: { acc: 0.97 } } }, spec);
+    const both = figureText("figures/x_0.png", 0, 1, { title: "T", refs: { teacher: { acc: 0.9 }, bayes: { acc: 0.97 } }, plots: spec });
     expect(both.alt).toContain("for the teacher and the Bayes-optimal classifier.");
   });
 
   it("fall back to a numbered name when a figure has no spec", () => {
-    const t = figureText("figures/x_3.png", 1, 2, { title: "T" }, []);
+    const t = figureText("figures/x_3.png", 1, 2, { title: "T" });
     expect(t.name).toBe("Figure 2 of 2");
+  });
+
+  it("say where the numbers are: below on an experiment page, on Results elsewhere", () => {
+    const spec = [{ x: "width", y: "acc" }];
+    expect(figureText("figures/x_0.png", 0, 1, { title: "T", plots: spec }).alt).toMatch(/table below\.$/);
+    expect(figureText("figures/x_0.png", 0, 1, { title: "T", plots: spec }, "results").alt).toMatch(/on the Results page\.$/);
   });
 });
