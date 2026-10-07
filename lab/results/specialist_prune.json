@@ -1,0 +1,549 @@
+{
+ "name": "specialist_prune",
+ "group": "6 \u00b7 Specialization (the pigeon question)",
+ "title": "Carving a specialist out of the generalist",
+ "question": "Prune the teacher's neurons for one class. Does a task-aware importance score (bird-vs-rest) keep a better bird detector than an all-class score, and does collapsing the head help recovery?",
+ "quick": false,
+ "seconds": 90.3,
+ "rows": [
+  {
+   "width": 128,
+   "method": "all-class importance, no recovery",
+   "target_ap": 0.3660063522715505,
+   "params": 37268.0,
+   "macs": 36864.0,
+   "acc": 0.2994,
+   "nll": 3.8636746406555176,
+   "ece": 0.4337475483909249,
+   "kl_bayes": 3.7839391231536865,
+   "n_seeds": 1
+  },
+  {
+   "width": 128,
+   "method": "bird importance, no recovery",
+   "target_ap": 0.758072810658414,
+   "params": 37268.0,
+   "macs": 36864.0,
+   "acc": 0.1651,
+   "nll": 8.47514533996582,
+   "ece": 0.6605720531985164,
+   "kl_bayes": 8.393479347229004,
+   "n_seeds": 1
+  },
+  {
+   "width": 128,
+   "method": "all-class importance, 20-way KD",
+   "target_ap": 0.9901482805036922,
+   "target_ap_std": 1.0511325885254053e-05,
+   "params": 37268.0,
+   "params_std": 0.0,
+   "macs": 36864.0,
+   "macs_std": 0.0,
+   "acc": 0.9154,
+   "acc_std": 0.00019999999999997797,
+   "nll": 0.3132363557815552,
+   "nll_std": 0.0013309717178344727,
+   "ece": 0.042784174199402294,
+   "ece_std": 0.00027500895410775134,
+   "kl_bayes": 0.23237860947847366,
+   "kl_bayes_std": 0.0014689937233924866,
+   "n_seeds": 2
+  },
+  {
+   "width": 128,
+   "method": "all-class importance, collapsed head + grouped KD",
+   "target_ap": 0.9900435869097992,
+   "target_ap_std": 0.00023756006859970702,
+   "params": 35720.0,
+   "params_std": 0.0,
+   "macs": 35328.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 128,
+   "method": "bird importance, collapsed head + grouped KD",
+   "target_ap": 0.9864319907605856,
+   "target_ap_std": 0.0004238158564711658,
+   "params": 35720.0,
+   "params_std": 0.0,
+   "macs": 35328.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 128,
+   "method": "fresh 3xW specialist, grouped KD",
+   "target_ap": 0.9888996990294902,
+   "target_ap_std": 0.001528532419230122,
+   "params": 35720.0,
+   "params_std": 0.0,
+   "macs": 35328.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 64,
+   "method": "all-class importance, no recovery",
+   "target_ap": 0.1487305606344956,
+   "params": 10452.0,
+   "macs": 10240.0,
+   "acc": 0.1519,
+   "nll": 3.3143796920776367,
+   "ece": 0.20047666740342976,
+   "kl_bayes": 3.232968807220459,
+   "n_seeds": 1
+  },
+  {
+   "width": 64,
+   "method": "bird importance, no recovery",
+   "target_ap": 0.5333295656213507,
+   "params": 10452.0,
+   "macs": 10240.0,
+   "acc": 0.0708,
+   "nll": 5.998466491699219,
+   "ece": 0.6714957238435746,
+   "kl_bayes": 5.917683124542236,
+   "n_seeds": 1
+  },
+  {
+   "width": 64,
+   "method": "all-class importance, 20-way KD",
+   "target_ap": 0.9834420901970581,
+   "target_ap_std": 0.000352931054420913,
+   "params": 10452.0,
+   "params_std": 0.0,
+   "macs": 10240.0,
+   "macs_std": 0.0,
+   "acc": 0.9025000000000001,
+   "acc_std": 0.00040000000000001146,
+   "nll": 0.3120903819799423,
+   "nll_std": 0.0003334134817123413,
+   "ece": 0.028173830649256697,
+   "ece_std": 0.0005503887653350824,
+   "kl_bayes": 0.23502788692712784,
+   "kl_bayes_std": 0.00023255497217178345,
+   "n_seeds": 2
+  },
+  {
+   "width": 64,
+   "method": "all-class importance, collapsed head + grouped KD",
+   "target_ap": 0.9878628806340738,
+   "target_ap_std": 0.0006701380267213342,
+   "params": 9672.0,
+   "params_std": 0.0,
+   "macs": 9472.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 64,
+   "method": "bird importance, collapsed head + grouped KD",
+   "target_ap": 0.9861957860648951,
+   "target_ap_std": 0.0007191238380545584,
+   "params": 9672.0,
+   "params_std": 0.0,
+   "macs": 9472.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 64,
+   "method": "fresh 3xW specialist, grouped KD",
+   "target_ap": 0.9873093840853079,
+   "target_ap_std": 7.05040034509885e-05,
+   "params": 9672.0,
+   "params_std": 0.0,
+   "macs": 9472.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 32,
+   "method": "all-class importance, no recovery",
+   "target_ap": 0.08226622246851688,
+   "params": 3188.0,
+   "macs": 3072.0,
+   "acc": 0.1104,
+   "nll": 2.991680860519409,
+   "ece": 0.010016930878162383,
+   "kl_bayes": 2.9079041481018066,
+   "n_seeds": 1
+  },
+  {
+   "width": 32,
+   "method": "bird importance, no recovery",
+   "target_ap": 0.4997254760228421,
+   "params": 3188.0,
+   "macs": 3072.0,
+   "acc": 0.0711,
+   "nll": 3.308457851409912,
+   "ece": 0.2597826074361801,
+   "kl_bayes": 3.2260358333587646,
+   "n_seeds": 1
+  },
+  {
+   "width": 32,
+   "method": "all-class importance, 20-way KD",
+   "target_ap": 0.9611157592397344,
+   "target_ap_std": 0.00036038267785537537,
+   "params": 3188.0,
+   "params_std": 0.0,
+   "macs": 3072.0,
+   "macs_std": 0.0,
+   "acc": 0.8360000000000001,
+   "acc_std": 0.0023000000000000242,
+   "nll": 0.5042408108711243,
+   "nll_std": 0.00276947021484375,
+   "ece": 0.009500866906344899,
+   "ece_std": 0.00015508606135843529,
+   "kl_bayes": 0.4251338839530945,
+   "kl_bayes_std": 0.0027194321155548096,
+   "n_seeds": 2
+  },
+  {
+   "width": 32,
+   "method": "all-class importance, collapsed head + grouped KD",
+   "target_ap": 0.9754931077018799,
+   "target_ap_std": 0.0013457803351679676,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 32,
+   "method": "bird importance, collapsed head + grouped KD",
+   "target_ap": 0.9679164518346448,
+   "target_ap_std": 0.0017388529762747962,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 32,
+   "method": "fresh 3xW specialist, grouped KD",
+   "target_ap": 0.9667493206127946,
+   "target_ap_std": 0.0003147536159707198,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 16,
+   "method": "all-class importance, no recovery",
+   "target_ap": 0.0963137135963046,
+   "params": 1092.0,
+   "macs": 1024.0,
+   "acc": 0.0441,
+   "nll": 3.033365249633789,
+   "ece": 0.0437315113209188,
+   "kl_bayes": 2.948838233947754,
+   "n_seeds": 1
+  },
+  {
+   "width": 16,
+   "method": "bird importance, no recovery",
+   "target_ap": 0.509725457961927,
+   "params": 1092.0,
+   "macs": 1024.0,
+   "acc": 0.0784,
+   "nll": 2.9369492530822754,
+   "ece": 0.04948625471442938,
+   "kl_bayes": 2.852962017059326,
+   "n_seeds": 1
+  },
+  {
+   "width": 16,
+   "method": "all-class importance, 20-way KD",
+   "target_ap": 0.8463773549423805,
+   "target_ap_std": 0.005714638454041465,
+   "params": 1092.0,
+   "params_std": 0.0,
+   "macs": 1024.0,
+   "macs_std": 0.0,
+   "acc": 0.65785,
+   "acc_std": 0.009149999999999991,
+   "nll": 1.0200651586055756,
+   "nll_std": 0.025769859552383423,
+   "ece": 0.020525468479841942,
+   "ece_std": 0.002573403217643504,
+   "kl_bayes": 0.9380981922149658,
+   "kl_bayes_std": 0.024622023105621338,
+   "n_seeds": 2
+  },
+  {
+   "width": 16,
+   "method": "all-class importance, collapsed head + grouped KD",
+   "target_ap": 0.895015048796165,
+   "target_ap_std": 0.0010147464698735398,
+   "params": 888.0,
+   "params_std": 0.0,
+   "macs": 832.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 16,
+   "method": "bird importance, collapsed head + grouped KD",
+   "target_ap": 0.8916486888770261,
+   "target_ap_std": 0.0008583608343986637,
+   "params": 888.0,
+   "params_std": 0.0,
+   "macs": 832.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 16,
+   "method": "fresh 3xW specialist, grouped KD",
+   "target_ap": 0.9079248193499104,
+   "target_ap_std": 7.918706425213973e-05,
+   "params": 888.0,
+   "params_std": 0.0,
+   "macs": 832.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 8,
+   "method": "all-class importance, no recovery",
+   "target_ap": 0.09795731309886245,
+   "params": 428.0,
+   "macs": 384.0,
+   "acc": 0.0677,
+   "nll": 3.0135483741760254,
+   "ece": 0.0060764426261186635,
+   "kl_bayes": 2.928907871246338,
+   "n_seeds": 1
+  },
+  {
+   "width": 8,
+   "method": "bird importance, no recovery",
+   "target_ap": 0.5308204128462576,
+   "params": 428.0,
+   "macs": 384.0,
+   "acc": 0.0773,
+   "nll": 2.9709644317626953,
+   "ece": 0.03259623143598437,
+   "kl_bayes": 2.8865907192230225,
+   "n_seeds": 1
+  },
+  {
+   "width": 8,
+   "method": "all-class importance, 20-way KD",
+   "target_ap": 0.7040292260839672,
+   "target_ap_std": 0.009881963502438862,
+   "params": 428.0,
+   "params_std": 0.0,
+   "macs": 384.0,
+   "macs_std": 0.0,
+   "acc": 0.4628,
+   "acc_std": 0.009199999999999986,
+   "nll": 1.6134802103042603,
+   "nll_std": 0.0226210355758667,
+   "ece": 0.022930433767288916,
+   "ece_std": 0.002890429801493885,
+   "kl_bayes": 1.5266075730323792,
+   "kl_bayes_std": 0.022419631481170654,
+   "n_seeds": 2
+  },
+  {
+   "width": 8,
+   "method": "all-class importance, collapsed head + grouped KD",
+   "target_ap": 0.6406072665503526,
+   "target_ap_std": 0.0069479236950426015,
+   "params": 320.0,
+   "params_std": 0.0,
+   "macs": 288.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 8,
+   "method": "bird importance, collapsed head + grouped KD",
+   "target_ap": 0.7289067159084298,
+   "target_ap_std": 0.004757840142600056,
+   "params": 320.0,
+   "params_std": 0.0,
+   "macs": 288.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 8,
+   "method": "fresh 3xW specialist, grouped KD",
+   "target_ap": 0.7485014862484859,
+   "target_ap_std": 0.01802640686866519,
+   "params": 320.0,
+   "params_std": 0.0,
+   "macs": 288.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 4,
+   "method": "all-class importance, no recovery",
+   "target_ap": 0.08066149208785606,
+   "params": 192.0,
+   "macs": 160.0,
+   "acc": 0.054,
+   "nll": 2.998603105545044,
+   "ece": 0.006251750051975251,
+   "kl_bayes": 2.9138376712799072,
+   "n_seeds": 1
+  },
+  {
+   "width": 4,
+   "method": "bird importance, no recovery",
+   "target_ap": 0.4402531142751649,
+   "params": 192.0,
+   "macs": 160.0,
+   "acc": 0.0627,
+   "nll": 2.9883625507354736,
+   "ece": 0.0044565993592143,
+   "kl_bayes": 2.903724193572998,
+   "n_seeds": 1
+  },
+  {
+   "width": 4,
+   "method": "all-class importance, 20-way KD",
+   "target_ap": 0.5307620774776729,
+   "target_ap_std": 0.007603026553700987,
+   "params": 192.0,
+   "params_std": 0.0,
+   "macs": 160.0,
+   "macs_std": 0.0,
+   "acc": 0.31930000000000003,
+   "acc_std": 0.0009999999999999731,
+   "nll": 2.0297282934188843,
+   "nll_std": 0.0073920488357543945,
+   "ece": 0.017996646069735292,
+   "ece_std": 0.0033000263281166573,
+   "kl_bayes": 1.9427787065505981,
+   "kl_bayes_std": 0.0072994232177734375,
+   "n_seeds": 2
+  },
+  {
+   "width": 4,
+   "method": "all-class importance, collapsed head + grouped KD",
+   "target_ap": 0.48848274038675155,
+   "target_ap_std": 0.0002887076879288242,
+   "params": 132.0,
+   "params_std": 0.0,
+   "macs": 112.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 4,
+   "method": "bird importance, collapsed head + grouped KD",
+   "target_ap": 0.4850312409032024,
+   "target_ap_std": 0.016854127782711253,
+   "params": 132.0,
+   "params_std": 0.0,
+   "macs": 112.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 4,
+   "method": "fresh 3xW specialist, grouped KD",
+   "target_ap": 0.3796037436382097,
+   "target_ap_std": 0.09765961499337669,
+   "params": 132.0,
+   "params_std": 0.0,
+   "macs": 112.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "width": 128,
+   "overlap": 0.5546875
+  },
+  {
+   "width": 64,
+   "overlap": 0.328125
+  },
+  {
+   "width": 32,
+   "overlap": 0.15625
+  },
+  {
+   "width": 16,
+   "overlap": 0.125
+  },
+  {
+   "width": 8,
+   "overlap": 0.125
+  },
+  {
+   "width": 4,
+   "overlap": 0.0
+  }
+ ],
+ "refs": {
+  "bayes": {
+   "acc": 0.9734,
+   "target_ap": 0.999168038786606,
+   "nll": 0.07882840931415558
+  },
+  "teacher": {
+   "target_ap": 0.9885493012579957,
+   "params": 140052,
+   "macs": 139264,
+   "acc": 0.9139,
+   "nll": 0.3843076229095459,
+   "ece": 0.05536622720360759,
+   "kl_bayes": 0.3093399703502655
+  }
+ },
+ "plots": [
+  {
+   "x": "width",
+   "y": "target_ap",
+   "group": "method",
+   "xlog": true,
+   "hlines": [
+    "teacher"
+   ],
+   "ref_metric": "target_ap",
+   "filter": {
+    "method": [
+     "all-class importance, 20-way KD",
+     "all-class importance, collapsed head + grouped KD",
+     "bird importance, collapsed head + grouped KD",
+     "fresh 3xW specialist, grouped KD"
+    ]
+   }
+  },
+  {
+   "x": "width",
+   "y": "target_ap",
+   "group": "method",
+   "xlog": true,
+   "ref_metric": "target_ap",
+   "filter": {
+    "method": [
+     "all-class importance, no recovery",
+     "bird importance, no recovery"
+    ]
+   },
+   "title": "no recovery"
+  },
+  {
+   "x": "width",
+   "y": "overlap",
+   "filter": {
+    "overlap": null
+   },
+   "xlog": true,
+   "title": "fraction of kept layer-2 neurons shared by both criteria"
+  }
+ ]
+}

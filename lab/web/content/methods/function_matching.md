@@ -42,7 +42,7 @@ for step in range(steps):
 
 Short training favors fixed targets; online augmentation is a harder task and needs time. At 6000 steps they tie. At 24000, fixed targets have stopped improving and started overfitting: their NLL (mean negative log-probability of the true class) rises from 0.5133 to 0.6753, while online mixup keeps improving to 0.8719 with NLL 0.3897. The teacher scores 0.9139.
 
-The effect is largest when real data is scarce. In `transfer_set`, a student distilled on only 500 real inputs reaches 0.6612; with online mixup on the same 500 it reaches 0.7158, and 0.7280 with mixup plus jitter. In `small_tricks`, combining the unlabeled pool, online mixup, weight averaging and 4x longer training gives a 2x32 student 0.8607, against 0.8170 for labels only.
+The effect is largest when real data is scarce. In `transfer_set`, a student distilled on only 500 real inputs reaches 0.5931; with online mixup on the same 500 it reaches 0.7382, and 0.7556 with mixup plus jitter. In `small_tricks`, combining the unlabeled pool, online mixup, weight averaging and 4x longer training gives a 2x32 student 0.8607, against 0.8170 for labels only.
 
 This page's runs (seed 0, mixup), fixed against online: length 2 (2000 steps) 0.7946 against 0.7742; length 4, 0.8284 against 0.8222; length 8, 0.8416 against 0.8453; length 24 (24000 steps), 0.8414 against 0.8736. The crossover falls between 4x and 8x, and at 24x the fixed student has stalled while the online one is still gaining.  In 12 dimensions, mixup between two real points stays fairly close to the data; the toy cannot show how far this carries to images, where Beyer et al. trained for thousands of epochs.
 

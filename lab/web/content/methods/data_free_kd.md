@@ -34,27 +34,29 @@ for _ in range(steps):
 - `_, dX = t.backward(cache, dz)` backpropagates through the teacher. `MLP.backward` in `lab/nn.py` returns weight gradients and, as its second value, the gradient with respect to the input; only the latter is used.
 - `opt.step([dX + l2 * X / n])` adds the gradient of the L2 prior and moves `X`.
 
-`run_data_free` in `lab/methods.py` builds the transfer inputs for the chosen `source`: the first `n` real inputs (8k labeled, then the unlabeled pool), Gaussian noise, uniform noise on `[-3, 3]`, or `invert_teacher(t, n, steps=200)` wrapped in `cached(f"inversion_{n}", ...)`, so the slow inversion runs once per `n` and later runs reuse it from disk. It then trains a 2x32 student with `FixedSource(X, None, ..., teacher=t)` (teacher logits precomputed, no labels) and `KD(T=4)`, and compares it with a student trained on the 8k labels.
+`run_data_free` in `lab/methods.py` builds the transfer inputs for the chosen `source`: the first `n` real inputs (8k labeled, then the unlabeled pool), Gaussian noise, uniform noise on `[-3, 3]`, or `invert_teacher(t, n, steps=200)` wrapped in `cached(f"inversion_{n}", ...)`, so the slow inversion runs once per `n` and later runs reuse it from disk. It then trains a 2x32 student with `FixedSource(X, None, ..., teacher=t)` (teacher logits precomputed, no labels) and `KD(T=1)`, and compares it with a student trained on the 8k labels.
 
 ## What the simulations show
 
-`transfer_set` (2x32 student, 3 seeds, 3000 steps, KD at `T = 4`; fidelity is how often the student's top class matches the teacher's):
+`transfer_set` (2x32 student, 3 seeds, 3000 steps, KD at `T = 1`; fidelity is how often the student's top class matches the teacher's):
 
 | transfer inputs | accuracy | fidelity |
 |---|---|---|
 | labels only, 8k (no teacher) | 0.8170 | 0.8309 |
-| real: labeled set (8k) | 0.7996 | 0.8184 |
-| real: + unlabeled pool (28k) | 0.8059 | 0.8251 |
-| real: 500 only | 0.6612 | 0.6719 |
-| fake: gaussian noise N(0,1) | 0.6601 | 0.6885 |
-| fake: uniform noise [-3,3] | 0.6662 | 0.6926 |
-| fake: teacher inversion | 0.6670 | 0.6938 |
-| fake: inversion + 500 real | 0.6922 | 0.7167 |
+| real: labeled set (8k) | 0.8180 | 0.8327 |
+| real: + unlabeled pool (28k) | 0.8318 | 0.8454 |
+| real: 500 only | 0.5931 | 0.6004 |
+| fake: gaussian noise N(0,1) | 0.6797 | 0.7078 |
+| fake: uniform noise [-3,3] | 0.6794 | 0.7041 |
+| fake: teacher inversion | 0.6748 | 0.6994 |
+| fake: inversion + 500 real | 0.6975 | 0.7218 |
 | labels only, 500 (no teacher) | 0.5872 | 0.5947 |
 
-With no real data, all three fake sources land near 0.66, about the same as distilling on 500 real inputs, and clearly better than training on 500 labels. Inversion does not beat plain noise. A look at 1000 inverted inputs explains part of it: their mean length is 2.12 against 3.39 for real test inputs (the L2 prior pulls them inward), and the teacher's mean top probability on them is 0.9983, so the targets are nearly one-hot and carry little information about the other classes. Gaussian noise, by contrast, already has the same mean length as real inputs (3.39) and the teacher assigns it to all 20 classes.
+With no real data, all three fake sources land near 0.68: far below real data, well above the 500 real inputs. Those 500 are training inputs the teacher memorized, so its answers there are nearly their labels (0.5931 against 0.5872 for the labels themselves); noise at least shows the teacher across the whole input space.
 
-This page's runs (1000 steps, seed 0, default `n` = 4000): labels only 0.7398; real 0.6724, Gaussian 0.5489, uniform 0.5549, inversion 0.5632. With `n` = 500 real inputs the student reached 0.5989, and with all 28000, 0.6781. The first inversion at `n` = 4000 took 67 seconds; later runs use the cache. The toy flatters noise: 12 standardized numbers are a small space, so random points often land near real data. Random images almost never look like photographs.
+Inversion does not beat plain noise. A look at 1000 inverted inputs explains part of it: their mean length is 2.12 against 3.39 for real test inputs (the L2 prior pulls them inward), and the teacher's mean top probability on them is 0.9983, so the targets are nearly one-hot. Gaussian noise already has the same mean length as real inputs (3.39) and the teacher assigns it to all 20 classes.
+
+This page's runs (1000 steps, seed 0, default `n` = 4000): labels only 0.7398; real 0.7267, Gaussian 0.5654, uniform 0.5609, inversion 0.5827. With `n` = 500 real inputs the student reached 0.5829, and with all 28000, 0.7465. The first run at a new `n` is slow; later runs read the cached inversion. The toy flatters noise: 12 standardized numbers are a small space, so random points often land near real data.
 
 ## When it breaks
 
