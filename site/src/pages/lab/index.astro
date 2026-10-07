@@ -1,0 +1,49 @@
+---
+import Base from "../../layouts/Base.astro";
+import "../../styles/page.css";
+import { methods, lessons, experiments, FAMILY_ORDER } from "../../lib/lab/data";
+import { labRedirectScript } from "../../lib/ui/labroutes";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const allMethods = methods();
+const allLessons = lessons();
+const exps = experiments();
+
+// The lab's old address: any #/... route goes to its new page; a bare /lab/ goes to the Field Guide.
+const redirect = labRedirectScript(
+  { methods: allMethods.map((m) => m.id), families: FAMILY_ORDER, lessons: allLessons.map((l) => l.id), experiments: exps.map((e) => e.name) },
+  { base, fallback: "guide/", strict: false },
+);
+---
+<Base title="The lab has moved · Pigeon" description="The simulation lab is now part of Pigeon: the Field Guide, Flight School and Results.">
+  <script is:inline set:html={redirect}></script>
+  <main id="main" class="page">
+    <header>
+      <h1>The lab has moved</h1>
+      <p class="lede">The simulation lab is now part of Pigeon. Its pages live in three places. With JavaScript on, an old lab link opens the matching page by itself; without it, pick one here.</p>
+    </header>
+    <ul class="entries">
+      <li>
+        <a class="entry" href={`${base}guide/`}>
+          <span class="name">Field Guide</span>
+          <span class="aside num">{allMethods.length} methods</span>
+          <span class="summary">The lab's method write-ups.</span>
+        </a>
+      </li>
+      <li>
+        <a class="entry" href={`${base}school/#build`}>
+          <span class="name">Flight School</span>
+          <span class="aside num">{allLessons.length} lessons</span>
+          <span class="summary">The lab's build-it-yourself coding lessons.</span>
+        </a>
+      </li>
+      <li>
+        <a class="entry" href={`${base}results/`}>
+          <span class="name">Results</span>
+          <span class="aside num">{exps.length} experiments</span>
+          <span class="summary">The lab's simulation experiments and the report on what they show.</span>
+        </a>
+      </li>
+    </ul>
+  </main>
+</Base>

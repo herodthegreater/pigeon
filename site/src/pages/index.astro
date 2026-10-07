@@ -1,63 +1,179 @@
 ---
 import Base from "../layouts/Base.astro";
-import { mascotSVG } from "../lib/ui/mascot";
+import "../styles/page.css";
+import { mascotSVG, SPECIES, WORKS_LINE } from "../lib/ui/mascot";
+import { PRESETS } from "../lib/ui/recipe";
+import { meta, methods, lessons, experiments, FAMILY_ORDER } from "../lib/lab/data";
+import { labRedirectScript } from "../lib/ui/labroutes";
+
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
-const ladder = [1, 2, 4, 8, 16].map((r) => mascotSVG({ ratio: r, accuracy: 0.95, pointing: 0.98 }));
-const bones = mascotSVG({ ratio: 4, accuracy: 0.5, pointing: 0.2 });
+
+// Counts are read from the data at build time. The one exception is the course
+// outline, which is not in the data yet: its 12 chapters are listed in docs/PLAN.md (Tier 1).
+const testsets = import.meta.glob<{ images: unknown[] }>("/public/testset/testset.json", { eager: true, import: "default" });
+const photos = Object.values(testsets)[0]?.images?.length;
+if (!photos) throw new Error("public/testset/testset.json is missing or has no images");
+
+const allMethods = methods();
+const runnable = allMethods.filter((m) => m.status === "runnable").length;
+const categories = Object.values(meta().categories).map((c) => c.toLowerCase());
+const allLessons = lessons();
+const exps = experiments();
+const expGroups = new Set(exps.map((e) => e.group)).size;
+const COURSE_CHAPTERS = 12;
+
+const and = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+
+// The species ladder: each bird drawn at the compression ratio where Pigeon becomes it.
+const ladder = SPECIES.map((sp) => ({
+  sp,
+  svg: mascotSVG({ ratio: Math.max(1, sp.minRatio), accuracy: 0.95, pointing: 0.98 }).svg,
+  size: sp.minRatio > 0 ? `≥ ${sp.minRatio}× smaller` : "uncompressed",
+}));
+const bones = mascotSVG({ ratio: 4, accuracy: 0.5, pointing: 0.2 }).svg;
+const presets = PRESETS.filter((p) => p.id !== "fp32");
+
+const redirect = labRedirectScript(
+  { methods: allMethods.map((m) => m.id), families: FAMILY_ORDER, lessons: allLessons.map((l) => l.id), experiments: exps.map((e) => e.name) },
+  { base, fallback: null, strict: true },
+);
 ---
-<Base title="Pigeon" active={undefined}>
-  <main class="home">
-    <section class="lead">
-      <p class="label">A field guide to model compression</p>
+<Base title="Pigeon · a field guide to model compression" description="Learn model compression by shrinking a real bird-spotting model in your browser.">
+  <script is:inline set:html={redirect}></script>
+  <main id="main" class="page home">
+    <header class="lead">
       <h1>Shrink a real model with your own hands, and watch what it costs.</h1>
-      <p class="sub">Pigeon is a small image model with one job: <em>is there a bird, and where?</em> Quantize it, prune it, palettize it, right here in your browser, on 500 real photos. Keep it accurate and it slims from a pigeon into a hummingbird. Push too far and it starves.</p>
-      <div class="cta"><a class="go" href={`${base}coop/`}>Open the Coop</a><a class="alt" href={`${base}school/`}>Preview the Flight School syllabus</a></div>
-    </section>
+      <p class="lede">Pigeon is a small image model with one job: <em>is there a bird, and where?</em> Quantize it, prune it, palettize it, right here in your browser, on {photos} real photos. Keep it accurate and it slims from a pigeon into a hummingbird. Push too far and it starves.</p>
+      <div class="cta">
+        <a class="btn" href={`${base}coop/`}>Open the Coop</a>
+        <a class="btn secondary" href={`${base}school/`}>Start Flight School</a>
+      </div>
+    </header>
 
-    <section class="ladder" aria-label="The species ladder">
-      {ladder.map((m, i) => (
-        <figure>
-          <div class="svg" set:html={m.svg} />
-          <figcaption><strong>{m.species.name}</strong><span class="num">{[1, 2, 4, 8, 16][i]}× smaller · {m.species.grams} g</span></figcaption>
-        </figure>
-      ))}
-      <figure class="dead">
-        <div class="svg" set:html={bones.svg} />
-        <figcaption><strong>Too far</strong><span>accuracy gone</span></figcaption>
+    <section class="flagship" aria-labelledby="coop-title">
+      <h2 id="coop-title">The Coop</h2>
+      <p class="intro">Where the shrinking happens. Stack quantization, pruning and palettes into a recipe. After every change Pigeon scores itself again on all {photos} photos and shows what it cost: accuracy, pointing, and the real size in bytes.</p>
+
+      <figure class="ladder">
+        <ol class="birds">
+          {ladder.map(({ sp, svg, size }) => (
+            <li>
+              <div class="svg" aria-hidden="true" set:html={svg} />
+              <p class="bird-name">{sp.name}</p>
+              <p class="bird-latin">{sp.latin}</p>
+              <p class="bird-size num"><span>{size}</span><span>{sp.grams} g</span></p>
+            </li>
+          ))}
+          <li class="dead">
+            <div class="svg" aria-hidden="true" set:html={bones} />
+            <p class="bird-name">Skeleton</p>
+            <p class="bird-size"><span>pushed too far:</span><span>it's guessing</span></p>
+          </li>
+        </ol>
+        <figcaption>How much smaller Pigeon gets decides which bird it becomes. It stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and a broken model is bones.</figcaption>
       </figure>
+
+      <h3 id="presets-title">Open the Coop with a preset loaded</h3>
+      <ul class="presets" aria-labelledby="presets-title">
+        {presets.map((p) => (
+          <li>
+            <a href={`${base}coop/?preset=${p.id}`}><span class="preset-name">{p.name}</span><span class="preset-hint">{p.hint}</span></a>
+          </li>
+        ))}
+      </ul>
     </section>
 
-    <section class="three">
-      <a href={`${base}school/`}><h2>Flight School</h2><p class="state">Coming next</p><p>Twelve short lessons on the building blocks: number formats, scales, bits, outliers, pruning, distillation. The syllabus is posted; the lessons are still being written. Until then, the Lab has ten build-it-yourself coding lessons.</p></a>
-      <a href={`${base}coop/`}><h2>The Coop</h2><p class="state open">Open now</p><p>A sandbox. Stack methods, watch accuracy and size move live, and find the smallest Pigeon that still works.</p></a>
-      <a href={`${base}guide/`}><h2>Field Guide</h2><p class="state">Coming next</p><p>The compression techniques people use in 2026, from INT8 to GGUF k-quants to NVFP4. The list is posted; the write-ups and code for your own models are on the way. Until then, the Lab has runnable write-ups for 43 methods.</p></a>
+    <section class="more" aria-labelledby="more-title">
+      <h2 id="more-title">Lessons, methods and experiments</h2>
+      <ul class="entries">
+        <li>
+          <a class="entry" href={`${base}school/`}>
+            <span class="name">Flight School</span>
+            <span class="aside num">{allLessons.length} coding lessons</span>
+            <span class="summary">Write the core of a method yourself in Python, then check it against tests, all in your browser. A {COURSE_CHAPTERS}-chapter course on the building blocks is outlined; its chapters are not written yet.</span>
+          </a>
+        </li>
+        <li>
+          <a class="entry" href={`${base}guide/`}>
+            <span class="name">Field Guide</span>
+            <span class="aside num">{allMethods.length} methods</span>
+            <span class="summary">One write-up per method, grouped by what it does: {and(categories)}. {runnable} of them run in your browser.</span>
+          </a>
+        </li>
+        <li>
+          <a class="entry" href={`${base}results/`}>
+            <span class="name">Results</span>
+            <span class="aside num">{exps.length} experiments</span>
+            <span class="summary">Simulations in {expGroups} groups, each asking one question about compression, with its figures, its numbers, and a report on what they show.</span>
+          </a>
+        </li>
+      </ul>
     </section>
   </main>
+
   <style>
-    .home { max-width: 1100px; margin: 0 auto; padding-inline: 20px; padding-block: 48px 72px; display: flex; flex-direction: column; gap: 48px; }
-    .lead { display: flex; flex-direction: column; gap: 14px; max-width: 68ch; }
-    .lead h1 { font-size: clamp(2rem, 5vw, var(--step-4)); }
-    .sub { font-size: 1.1rem; color: var(--muted); }
-    .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
-    .go, .alt { padding: 10px 18px; text-decoration: none; border-radius: var(--radius); font-weight: 600; }
-    .go { background: var(--teal); color: var(--paper); }
-    .alt { border: 1px solid var(--rule); color: var(--ink); }
-    .ladder { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; align-items: end; border-block: 1px solid var(--rule); padding-block: 12px; }
-    .ladder figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
-    .ladder .svg :global(svg) { width: 100%; height: auto; display: block; }
-    .ladder figcaption { display: flex; flex-direction: column; font-size: 0.8rem; line-height: 1.3; }
-    .ladder figcaption span { color: var(--muted); font-family: var(--mono); font-size: 0.7rem; }
-    .dead figcaption strong { color: var(--bad); }
-    .three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-    .three a { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: var(--ink); border-top: 2px solid var(--ink); padding-top: 12px; }
-    .three a:hover h2 { color: var(--teal); }
-    .three h2 { font-size: var(--step-2); }
-    .three p { color: var(--muted); font-size: 0.95rem; }
-    .three .state { font-size: 0.85rem; font-style: italic; margin-top: -4px; }
-    .three .state.open { color: var(--teal); }
-    @media (max-width: 760px) {
-      .ladder { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .three { grid-template-columns: 1fr; }
+    .home { gap: var(--space-7); }
+    .lead { display: flex; flex-direction: column; gap: var(--space-4); max-width: var(--measure); }
+    .home h1 { font-size: var(--step-4); }
+    .cta { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
+    /* A real hover on both calls to action: the label underlines, and the secondary one takes the action color. */
+    .cta .btn:hover { text-decoration: underline; text-underline-offset: 3px; }
+    .cta .btn.secondary:hover { color: var(--teal); }
+
+    /* The Coop is the flagship: a heavy ink rule, the larger heading, and the birds on a plate.
+       Headings sit in a left margin column, like the entry headings of a printed guide. */
+    .flagship {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-5) var(--space-6);
+      border-top: 2px solid var(--ink); padding-top: var(--space-4);
+    }
+    .flagship h2 { font-size: var(--step-3); }
+    .flagship h3 { font-size: var(--step-1); }
+    .intro { font-size: var(--step-1); max-width: var(--measure); }
+
+    .ladder { grid-column: 1 / -1; margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+    /* Every bird is drawn in the same frame, so top-aligned frames share one ground line and the sizes compare honestly. */
+    .birds {
+      list-style: none; margin: 0; padding: var(--space-4); display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: var(--space-4) var(--space-3); align-items: start; background: var(--card); border: 1px solid var(--rule);
+    }
+    .birds li { display: flex; flex-direction: column; gap: var(--space-1); }
+    .birds .svg :global(svg) { width: 100%; height: auto; display: block; }
+    .bird-name { font-family: var(--display); font-weight: 600; font-size: var(--step-0); line-height: 1.2; }
+    .bird-latin { font-family: var(--display); font-style: italic; color: var(--magenta); font-size: var(--step--1); line-height: 1.3; }
+    .bird-size { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); display: flex; flex-direction: column; }
+    .dead .bird-name { color: var(--bad); }
+    .ladder figcaption { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
+
+    .presets {
+      list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+      column-gap: var(--space-5); border-top: 1px solid var(--rule); align-content: start;
+    }
+    .presets li { border-bottom: 1px solid var(--rule); }
+    .presets a {
+      display: flex; flex-direction: column; gap: var(--space-1); min-height: var(--tap);
+      padding: var(--space-3) var(--space-1); text-decoration: none; color: var(--ink);
+    }
+    .preset-name { color: var(--teal); font-weight: 600; }
+    .preset-hint { font-size: var(--step--1); color: var(--muted); }
+    .presets a:hover .preset-name { text-decoration: underline; text-underline-offset: 2px; }
+
+    .more { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-3) var(--space-6); border-top: 1px solid var(--rule); padding-top: var(--space-4); }
+    .more h2 { font-size: var(--step-2); }
+
+    @media (max-width: 860px) {
+      .flagship, .more { grid-template-columns: minmax(0, 1fr); }
+      .birds { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .home { gap: var(--space-6); }
+      .home h1 { font-size: var(--step-3); }
+      .intro { font-size: var(--step-0); }
+      .birds { padding: var(--space-3); gap: var(--space-4) var(--space-2); }
+      .cta .btn { flex: 1 1 auto; }
+    }
+    /* Narrow phones: two birds a row, so "Ruby-throated Hummingbird" fits its column. */
+    @media (max-width: 480px) {
+      .birds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
 </Base>

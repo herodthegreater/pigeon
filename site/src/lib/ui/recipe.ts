@@ -54,7 +54,7 @@ export function describeStep(s: Step): string {
 }
 
 export function describeRecipe(r: Recipe): string {
-  return r.steps.length ? r.steps.map(describeStep).join(" → ") : "Full precision";
+  return r.steps.length ? r.steps.map(describeStep).join(", then ") : "Full precision";
 }
 
 const STEP_TITLES = { int: "Quantize to integers", float: "Change number format", prune: "Prune", cluster: "Palettize (k-means)" } as const;
@@ -94,12 +94,20 @@ export class RecipeEditor {
     this.render();
   }
 
-  load(r: Recipe, preset: string | null = null) {
+  /** `focus` keeps focus on the clicked preset; a preset loaded from the URL leaves focus where it is. */
+  load(r: Recipe, preset: string | null = null, focus = true) {
     this.recipe = clone(r);
     this.active = preset;
-    this.render();
-    if (preset) this.root.querySelector<HTMLElement>(`[data-preset="${preset}"]`)?.focus();
+    this.render(preset && focus ? `[data-preset="${preset}"]` : this.focusKey());
     this.emit();
+  }
+
+  /** Load a preset by id, as if its button were clicked. Returns false for an unknown id. */
+  loadPreset(id: string, focus = true): boolean {
+    const p = PRESETS.find((x) => x.id === id);
+    if (!p) return false;
+    this.load(p.recipe, p.id, focus);
+    return true;
   }
 
   private setHint(id: string | null) {
@@ -111,19 +119,31 @@ export class RecipeEditor {
     this.onChange(clone(this.recipe), describeRecipe(this.recipe));
   }
 
-  private render() {
+  /** A selector for the focused control, so a re-render can put keyboard focus back on its replacement. */
+  private focusKey(): string | null {
+    const a = document.activeElement as HTMLElement | null;
+    if (!a || !this.root.contains(a)) return null;
+    const d = a.dataset;
+    if (d.preset) return `[data-preset="${d.preset}"]`;
+    if (d.add) return `[data-add="${d.add}"]`;
+    if (d.i && d.f) return `[data-i="${d.i}"][data-f="${d.f}"]${a instanceof HTMLInputElement && (a.type === "radio" || a.type === "checkbox") ? `[value="${a.value}"]` : ""}`;
+    return null;
+  }
+
+  private render(focus: string | null = this.focusKey()) {
     const presets = PRESETS.map((p) => `<button type="button" class="preset" data-preset="${p.id}" aria-pressed="${p.id === this.active}" aria-describedby="preset-hint">${p.name}</button>`).join("");
     const steps = this.recipe.steps.map((s, i) => this.stepHTML(s, i)).join("");
     this.root.innerHTML = `
-      <div class="presets"><span class="label">Presets</span><div class="preset-row">${presets}</div><p class="preset-hint" id="preset-hint">${presetHint(this.active)}</p></div>
-      <ol class="steps">${steps || `<li class="empty">No steps yet: this is the full-precision Pigeon. Add a step, or start from a preset.</li>`}</ol>
-      <div class="add"><span class="label">Add a step</span><div class="add-row">
+      <div class="presets" role="group" aria-labelledby="presets-label"><span class="sub" id="presets-label">Presets</span><div class="preset-row">${presets}</div><p class="preset-hint" id="preset-hint">${presetHint(this.active)}</p></div>
+      ${steps ? `<ol class="steps">${steps}</ol>` : `<p class="empty">No steps yet: this is the full-precision Pigeon. Add a step, or start from a preset.</p>`}
+      <div class="add" role="group" aria-labelledby="add-label"><span class="sub" id="add-label">Add a step</span><div class="add-row">
         ${(Object.keys(STEP_TITLES) as Step["op"][]).map((op) => `<button type="button" class="add-btn" data-add="${op}">+ ${STEP_TITLES[op]}</button>`).join("")}
       </div></div>`;
+    if (focus) this.root.querySelector<HTMLElement>(focus)?.focus();
   }
 
   private partsHTML(s: Step, i: number) {
-    return `<fieldset class="parts"><legend class="label">Applies to</legend>${ALL.map(
+    return `<fieldset class="parts"><legend class="sub">Applies to</legend>${ALL.map(
       (k) => `<label class="part"><input type="checkbox" data-i="${i}" data-f="part" value="${k}" ${s.parts.includes(k) ? "checked" : ""}/>
         <span>${PART_NAMES[k]}</span><span class="share num">${(this.shares[k] * 100).toFixed(k === "head" || k === "conv" ? 2 : 0)}%</span></label>`,
     ).join("")}</fieldset>`;
@@ -137,9 +157,9 @@ export class RecipeEditor {
       body = `
         <label for="${id("bits")}" class="field"><span>Bits per weight</span><output class="num">${s.ternary ? "1.58 (ternary)" : s.bits >= 16 ? "off" : s.bits}</output></label>
         <input id="${id("bits")}" type="range" min="1" max="8" step="1" value="${Math.min(s.bits, 8)}" data-i="${i}" data-f="bits"/>
-        <div class="seg" role="radiogroup" aria-label="Scale granularity">${(["tensor", "channel", "group"] as const).map(
+        <fieldset class="gran"><legend class="sub">Scale granularity</legend><div class="seg">${(["tensor", "channel", "group"] as const).map(
           (k) => `<label><input type="radio" name="${id("g")}" value="${k}" data-i="${i}" data-f="gran" ${g === k ? "checked" : ""}/><span>${k === "tensor" ? "Per tensor" : k === "channel" ? "Per channel" : "Per group"}</span></label>`,
-        ).join("")}</div>
+        ).join("")}</div></fieldset>
         ${g === "group" ? `<label class="field" for="${id("gs")}"><span>Group size</span><select id="${id("gs")}" data-i="${i}" data-f="gsize">${[16, 32, 64, 128].map((n) => `<option ${s.granularity.kind === "group" && s.granularity.size === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>` : ""}
         <label class="check"><input type="checkbox" data-i="${i}" data-f="asym" ${s.symmetric ? "" : "checked"}/> Asymmetric (scale + zero-point)</label>
         ${s.bits === 2 ? `<label class="check"><input type="checkbox" data-i="${i}" data-f="ternary" ${s.ternary ? "checked" : ""}/> Ternary {−1, 0, +1} (BitNet-style)</label>` : ""}`;
@@ -173,10 +193,20 @@ export class RecipeEditor {
   private onClick(e: Event) {
     const t = (e.target as HTMLElement).closest("button");
     if (!t) return;
-    if (t.dataset.preset) return this.load(PRESETS.find((p) => p.id === t.dataset.preset)!.recipe, t.dataset.preset);
+    if (t.dataset.preset) return void this.loadPreset(t.dataset.preset);
     this.active = null;
-    if (t.dataset.add) { this.recipe.steps.push(newStep(t.dataset.add as Step["op"])); this.render(); return this.emit(); }
-    if (t.dataset.remove) { this.recipe.steps.splice(Number(t.dataset.remove), 1); this.render(); return this.emit(); }
+    if (t.dataset.add) {
+      this.recipe.steps.push(newStep(t.dataset.add as Step["op"]));
+      this.render(`[data-i="${this.recipe.steps.length - 1}"]`); // focus moves to the new step's first control
+      return this.emit();
+    }
+    if (t.dataset.remove) {
+      const i = Number(t.dataset.remove), steps = this.recipe.steps;
+      steps.splice(i, 1);
+      // focus moves to the step that took its place, else the one above, else the first "add" button
+      this.render(steps.length ? `[data-remove="${Math.min(i, steps.length - 1)}"]` : ".add-btn");
+      return this.emit();
+    }
   }
 
   private onInput(e: Event) {
