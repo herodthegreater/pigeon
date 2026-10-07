@@ -24,11 +24,11 @@ Nothing in `lab/nn.py` is QAT-specific. Two lines make it happen when `net.qbits
 
 `MLP.eff(i)` returns the weight the network actually uses. `w = self.W[i]`, then `w = w * self.masks[i]` if there is a mask, then `w = fake_quantize(w, self.qbits, self.qgroup)` if `qbits` is set. `self.W[i]` itself is never rounded. It is the full-precision copy.
 
-`MLP.forward` calls `w = self.eff(i)` for every layer and, when `cache=True`, stores it in `effs`. `MLP.backward` then works on the quantized network as it really ran. `gz` is the gradient at the layer's pre-activation, and `dW[i] = ins[i].T @ gz` is `dL/dw_hat`, the gradient with respect to the rounded weight. `g_in = gz @ effs[i].T` sends the gradient to earlier layers through the rounded weights, which is exact, since that is the network that ran. `backward` returns `dW + db`, and `fit` hands it to `Adam` together with `net.params()`, which is `self.W + self.b`, the full-precision tensors. That pairing, gradient for `w_hat` applied to `W`, is the whole straight-through estimator.
+`MLP.forward` calls `w = self.eff(i)` for every layer and, when `cache=True`, stores it in `effs`. `MLP.backward` then works on the quantized network as it really ran. `gz` is the gradient at the layer's pre-activation, and `dW[i] = ins[i].T @ gz` is `dL/dw_hat`, the gradient with respect to the rounded weight. `g_in = gz @ effs[i].T` passes the gradient back through the rounded weights, exactly as the network ran. `fit` hands `dW + db` to `Adam` together with `net.params()`, which is `self.W + self.b`, the full-precision tensors. That pairing, gradient for `w_hat` applied to `W`, is the whole straight-through estimator.
 
-Two details follow. The scale is recomputed from `W` on every forward pass (`max|g| / qmax` inside `fake_quantize`), so it tracks the weights but is not learned. Learned Step Size Quantization (Esser et al.) makes the scale a trainable parameter. And no gradient is clipped: since the scale is set by the group's largest weight, no weight is ever outside the grid, so the usual "zero the gradient outside the clip range" rule never triggers.
+The scale is recomputed from `W` on every forward pass, so it tracks the weights but is not learned, as it is in Learned Step Size Quantization (Esser et al.). No gradient is clipped: the scale comes from the group's largest weight, so no weight ever falls outside the grid.
 
-`run_qat` in `lab/methods.py` copies the model and sets `m.qbits, m.qgroup = p["bits"], 16`. It trains for `FT` = 500 steps at `FT_LR` = 3e-3, with `scratch` (labels) or `distill` (KD from the 3x256 teacher, at `distill`'s default temperature T=1). The returned net still has `qbits` set, so it is evaluated through the quantizer. It is compared with PTQ at the same bits and group size.
+`run_qat` in `lab/methods.py` copies the model and sets `m.qbits, m.qgroup = p["bits"], 16`. It trains for `FT` = 500 steps at `FT_LR` = 3e-3, with `scratch` (labels) or `distill` (KD from the 3x256 teacher, at `distill`'s default temperature T=1). The returned net keeps `qbits` set, so it is evaluated through the quantizer, next to PTQ at the same bits and group size.
 
 ## What the simulations show
 
@@ -50,16 +50,16 @@ Page runs (500 steps): the default student at 2 bits goes from 0.1683 with PTQ t
 
 ## When it breaks
 
-- **No spare capacity.** QAT redistributes what the network knows across coarser weights. A model that was already capacity-limited has nothing to redistribute into.
+- **No spare capacity.** QAT redistributes knowledge across coarser weights. A capacity-limited model has nowhere to put it.
 - **STE mismatch.** The gradient is for `w_hat`, but the step is taken on `W`. A weight sitting just inside a rounding boundary gets the same gradient as one in the middle of its bin, so training can oscillate between levels.
 - **Fixed scales.** Recomputing `scale` from the max means one weight growing changes the grid for its whole group mid-training.
-- **Budget and learning rate.** QAT is a fine-tune, so too high a learning rate destroys the pretrained solution, and too few steps leaves rounding damage unrepaired.
+- **Budget and learning rate.** Too high a rate destroys the pretrained solution, and too few steps leave rounding damage unrepaired.
 - **Weights only.** Activations stay in float here. Integer hardware also needs activation quantization, which QAT should simulate too.
 
 ## Try this
 
 - Keep **model** on student and step **bits** from 4 down to 1 with **train with** kd. Find where QAT stops closing the gap to fp32.
-- At **bits** 2 on the student, compare **train with** labels and kd, and look at `target_ap` as well as accuracy. Neither teacher signal nor labels can buy back capacity the 2-bit grid removed.
+- At **bits** 2 on the student, compare **train with** labels and kd, and look at `target_ap` as well as accuracy.
 - Switch **model** to teacher and set **bits** to 1. Compare the PTQ row with the QAT row.
 
 ## Going further

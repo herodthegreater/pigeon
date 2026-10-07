@@ -1,6 +1,6 @@
 ## The idea
 
-Uniform quantization places its levels evenly between `-max` and `+max`. Trained weights are not spread evenly: most sit near zero and a few are large, so evenly spaced levels waste most of their resolution on empty space. *Weight sharing* lets the data choose the levels. Run k-means on the weight values of a layer to find `k` *centroids*, the representative values, and replace each weight by its nearest centroid. Storage becomes a `log2(k)`-bit index per weight plus a codebook of `k` floats per layer. This is the "trained quantization" step of Han et al.'s Deep Compression.
+Uniform quantization spaces its levels evenly between `-max` and `+max`, but most trained weights sit near zero, so most levels go unused. *Weight sharing* lets the data choose the levels: k-means on a layer's weight values finds `k` *centroids*, and each weight is replaced by its nearest one. Storage becomes a `log2(k)`-bit index per weight plus a codebook of `k` floats per layer. This is the "trained quantization" step of Han et al.'s Deep Compression.
 
 ## How it works
 
@@ -20,13 +20,13 @@ w_shared = c[a]
 
 ## The code, line by line
 
-`kmeans_share` in `lab/compress.py` copies the net and loops over every layer, including the output layer. Biases are left in float. `w = net.W[i].reshape(-1)` flattens the matrix. `nz = w != 0 if net.masks[i] is not None else np.ones_like(w, bool)`: on a pruned layer only surviving weights join the clustering, so zeros stay zero and don't drag a centroid towards 0. `v = w[nz]` is the list to cluster.
+`kmeans_share` in `lab/compress.py` copies the net and loops over every layer; biases stay in float. `w = net.W[i].reshape(-1)` flattens the matrix, and `nz = w != 0 if net.masks[i] is not None else ...` makes a pruned layer cluster only its surviving weights, so zeros stay zero. `v = w[nz]` is the list to cluster.
 
-`c = np.linspace(v.min(), v.max(), k)` is the linear init. Han et al. found it beats random init because it keeps centroids on the rare large weights, which matter most. Each of the 25 iterations computes `a = np.abs(v[:, None] - c[None]).argmin(1)`. `v[:, None] - c[None]` broadcasts to an `(n_weights, k)` table of distances, and `argmin(1)` picks the nearest centroid for each weight. `c[j] = v[a == j].mean()` moves each centroid to the mean of its members. The `if (a == j).any()` guard leaves an empty cluster's centroid where it was instead of producing NaN. After the loop, one more assignment is done, `out[nz] = c[a]` writes the centroid values, and the matrix is reshaped back.
+`c = np.linspace(v.min(), v.max(), k)` is the linear init, which Han et al. preferred because it keeps centroids on the rare large weights. Each of 25 iterations computes `a = np.abs(v[:, None] - c[None]).argmin(1)`: the broadcast builds an `(n_weights, k)` distance table and `argmin(1)` picks each weight's nearest centroid. `c[j] = v[a == j].mean()` moves each centroid to its members' mean, and the `if (a == j).any()` guard leaves empty clusters in place instead of producing NaN. A final assignment and `out[nz] = c[a]` write the centroid values back.
 
-The result is still a float matrix, but it holds at most `k` distinct values per layer. The `params` column counts nonzero weights, and a centroid is almost never exactly 0, so it stays at 140,052 even though storage drops to `log2(k)` bits per weight.
+The result is a float matrix with at most `k` distinct values per layer. `params` counts nonzero weights, and centroids are almost never 0, so it stays at 140,052 although storage drops to `log2(k)` bits per weight.
 
-`run_weight_sharing` in `lab/methods.py` compares three rows. Its uniform baseline is `quantize(t, bits + 1)` with `bits = ceil(log2(k))`, per tensor. Symmetric uniform quantization at `b + 1` bits has `2^(b+1) - 1` levels, so on this page k = 4 is compared with a 7-level grid that also costs one more bit per weight, which favours uniform. The `weight_sharing` experiment instead compares at equal storage, `quantize(m0, bits)` against `k = 2^bits` centroids. Symmetric uniform then has `2^b - 1` levels (3 at 2 bits) against k-means' `2^b` (4 at 2 bits). At 1 bit both have 2 levels. Fine-tuning does two rounds of `kmeans_share(distill(m, t, r, steps=FT // 2, lr=FT_LR), k)`. KD from the teacher moves the weights freely, off their centroids, and then they are re-clustered and snapped. Deep Compression instead trains the centroids themselves: it sums the gradients of all weights that share a centroid and updates that one value, so the weights never leave the codebook.
+`run_weight_sharing` in `lab/methods.py` compares against `quantize(t, bits + 1)` with `bits = ceil(log2(k))`, per tensor: a uniform grid with one more bit per weight and `2^(b+1) - 1` levels (7 for k = 4), which favours uniform. The `weight_sharing` experiment compares at equal storage instead, `quantize(m0, bits)` against `k = 2^bits` centroids, which is `2^b - 1` uniform levels against `2^b`. Fine-tuning runs `kmeans_share(distill(m, t, r, steps=FT // 2, lr=FT_LR), k)` twice: KD moves the weights off their centroids, then they are re-clustered and snapped. Deep Compression instead trains the centroids themselves, summing the gradients of all weights that share one, so weights never leave the codebook.
 
 ## What the simulations show
 
@@ -40,19 +40,17 @@ From `weight_sharing`, at equal bits per weight (accuracy on 20 classes; the stu
 | 4 (16) | 0.8998 | 0.9088 | 0.9213 | 0.7229 | 0.7839 | 0.7844 |
 | 5 (32) | 0.9134 | 0.9129 | 0.9200 | 0.8132 | 0.8153 | 0.8268 |
 
-At the same storage, a learned codebook beats the uniform grid at 2, 3 and 4 bits on both models. The 2-bit case is the starkest: uniform symmetric 2-bit is ternary, `{-s, 0, +s}` with `s` the tensor's largest weight, so most weights round to zero (0.0707 for the teacher), while 4 k-means values keep 0.8487. At 1 bit both schemes have two levels and score about the same. At 5 bits both are near lossless. The student, with less spare capacity, loses more at every width: at 3 bits its k-means accuracy is 0.6453 against 0.8281 in fp32, while the teacher keeps 0.9039 against 0.9139. Fine-tuning with KD and re-snapping helps the teacher at every `k`, and from 8 values up it ends above the fp32 teacher (0.9139). That is partly the extra KD training on 28,000 inputs, not the codebook. For the student the loop adds at most 0.0224 (at 8 values).
+At the same storage, a learned codebook beats the uniform grid at 2, 3 and 4 bits on both models. At 2 bits, uniform symmetric is ternary, `{-s, 0, +s}` with `s` the largest weight, so most weights round to zero (teacher 0.0707), while 4 k-means values keep 0.8487. At 1 bit both have two levels and score alike; at 5 bits both are near lossless. The student, with less spare capacity, loses more at every width: at 3 bits its k-means accuracy is 0.6453 against 0.8281 in fp32, while the teacher keeps 0.9039 against 0.9139. KD fine-tuning with re-snapping helps the teacher at every `k`, ending above fp32 from 8 values up, which is partly just extra training on 28,000 inputs. For the student it adds at most 0.0224.
 
 Page runs use the `b + 1`-bit uniform baseline. At the defaults (k = 4, fine-tune on): uniform 3-bit 0.7766, k-means 0.8487, after KD and re-snap 0.8646. At k = 2: uniform 2-bit 0.0707, k-means 0.3999, after KD and re-snap 0.4165.
-
-The toy can't speak to decoding cost. Real kernels need a lookup per weight, which uniform integer arithmetic avoids.
 
 ## When it breaks
 
 - **Re-snapping throws away part of the fine-tune.** Free fine-tuning moves weights off their centroids, and each snap pulls them back. Training that keeps weights tied to centroids (shared-gradient centroid updates) avoids the round trip.
-- **One codebook per layer is coarse.** A layer whose rows have very different scales gets centroids that fit neither. Per-group codebooks, or a uniform grid with group scales, can beat it.
-- **Tiny `k` collapses expressiveness.** Two values per layer turns a layer into a signed binary pattern, and a small network cannot absorb that.
-- **Cost of clustering.** The `(n, k)` distance table is fine here but grows with layer size times `k`. Large models cluster in chunks or sample.
-- **Hardware.** Indices into a codebook need a gather. Integer matmul units can't use them directly.
+- **One codebook per layer is coarse.** Rows with very different scales get centroids that fit neither. Per-group codebooks or group-scaled uniform grids can beat it.
+- **Tiny `k`.** Two values per layer is a signed binary pattern, which a small network cannot absorb.
+- **Clustering cost.** The `(n, k)` distance table grows with layer size times `k`, so large models cluster in chunks.
+- **Hardware.** Codebook indices need a lookup per weight, which integer matmul units can't do directly.
 
 ## Try this
 
@@ -62,4 +60,4 @@ The toy can't speak to decoding cost. Real kernels need a lookup per weight, whi
 
 ## Going further
 
-Deep Compression chains pruning, then weight sharing with centroid fine-tuning, then Huffman coding of the indices. Modern non-uniform formats follow the same idea with fixed codebooks (NF4 in QLoRA uses levels matched to a normal distribution) or learned vector codebooks for groups of weights. pigeon's harness only does uniform symmetric quantization (`harness/quant.py`). The teacher results above suggest a per-layer codebook could beat per-tensor uniform at 2-3 bits, and at equal storage the student benefited too. A per-layer k-means codebook could be added to `harness/model.py` beside `apply_uniform` and swept with `carve.py`.
+Deep Compression chains pruning, then weight sharing with centroid fine-tuning, then Huffman coding of the indices. Modern non-uniform formats use fixed codebooks (QLoRA's NF4 levels follow a normal distribution) or learned vector codebooks. pigeon's harness only does uniform symmetric quantization (`harness/quant.py`). The teacher results above suggest a per-layer codebook could beat per-tensor uniform at 2-3 bits, and at equal storage the student benefited too. A per-layer k-means codebook could be added to `harness/model.py` beside `apply_uniform` and swept with `carve.py`.

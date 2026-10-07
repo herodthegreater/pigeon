@@ -1,6 +1,6 @@
 ## The idea
 
-A trained network stores every weight as a 32-bit float, but it rarely needs that much precision. *Post-training quantization* (PTQ) rounds each weight to one of a small set of evenly spaced levels, so it can be stored as a `b`-bit integer plus a shared *scale* (the float that turns integers back into weights). It needs no data and no training. The knob that decides how low `b` can go is how many weights share one scale. One scale for a whole matrix is set by its largest weight, which leaves too few levels for the typical one. A separate scale for every *group* of 16 weights follows the local size of the weights much more closely.
+A trained network stores 32-bit floats but rarely needs that much precision. *Post-training quantization* (PTQ) rounds each weight to one of a small set of evenly spaced levels, so it can be stored as a `b`-bit integer plus a shared *scale* (the float that turns integers back into weights). It needs no data and no training. How low `b` can go depends on how many weights share a scale. One scale per matrix is set by its largest weight and leaves few levels for typical ones. A scale per *group* of 16 weights tracks local size much more closely.
 
 ## How it works
 
@@ -18,15 +18,15 @@ w_hat = clip(round(group / scale), -qmax, qmax) * scale
 
 ## The code, line by line
 
-`fake_quantize` in `lab/nn.py` is a line-for-line numpy twin of `harness/quant.py:fake_quantize`, the function pigeon runs on YOLOv8n. Both return floats ("fake" quantization): the values are exactly the ones a `b`-bit format could store, but kept in float, so measured accuracy matches a real quantize-then-dequantize export.
+`fake_quantize` in `lab/nn.py` is a line-for-line numpy twin of `harness/quant.py:fake_quantize`, the function pigeon runs on YOLOv8n. Both return floats ("fake" quantization) holding exactly the values a `b`-bit format could store, so measured accuracy matches a real export.
 
-`if bits >= 16: return w` is the native setting. `flat = w.reshape(-1)` flattens row by row. `lab/nn.py` stores `W` as (inputs, outputs), so a group of 16 is 16 weights leaving one input towards 16 consecutive neurons. If `group_size` is `None`, or at least the tensor size, `g = flat[None, :]` makes one group. Otherwise `pad = (-n) % group_size` zeros are appended so the tensor splits evenly, and `reshape(-1, group_size)` makes one row per group.
+`if bits >= 16: return w` is the native setting. `flat = w.reshape(-1)` flattens row by row. `lab/nn.py` stores `W` as (inputs, outputs), so a group of 16 is 16 weights leaving one input towards 16 consecutive neurons. With no `group_size`, `g = flat[None, :]` is one group. Otherwise `pad = (-n) % group_size` zeros are appended and `reshape(-1, group_size)` makes one row per group.
 
-For 1 bit, `scale = np.maximum(np.abs(g).mean(1, keepdims=True), 1e-12)` and `q = np.where(g >= 0, 1.0, -1.0)`, so even an exact zero becomes `+scale`. The torch version maps zeros to +1 explicitly, with the same result. For more bits, `qmax = (1 << (bits - 1)) - 1`, `scale = max|g| / qmax`, and `q = np.clip(np.round(g / scale), -qmax, qmax)`. The `1e-12` floor stops an all-zero group from dividing by zero. `out = (q * scale)` is reshaped back, the padding is cut off, and `astype(w.dtype)` keeps float32.
+For 1 bit, `scale = np.maximum(np.abs(g).mean(1, keepdims=True), 1e-12)` and `q = np.where(g >= 0, 1.0, -1.0)`, so even an exact zero becomes `+scale`. The torch version does the same. For more bits, `qmax = (1 << (bits - 1)) - 1`, `scale = max|g| / qmax`, and `q = np.clip(np.round(g / scale), -qmax, qmax)`. The `1e-12` floor guards all-zero groups. `out = (q * scale)` is reshaped, unpadded and cast back to float32.
 
-`quantize` in `lab/compress.py` copies the net, sets `net.qbits, net.qgroup`, and bakes the result in with `net.W = [net.eff(i) for i in range(net.n_layers)]`, since `MLP.eff` applies `fake_quantize` when `qbits` is set. It then clears `qbits`, so the returned net is an ordinary float MLP whose weights happen to lie on the grid.
+`quantize` in `lab/compress.py` copies the net, sets `net.qbits, net.qgroup`, and bakes the result in with `net.W = [net.eff(i) for i in range(net.n_layers)]`, since `MLP.eff` applies `fake_quantize` when `qbits` is set. Clearing `qbits` leaves an ordinary float MLP whose weights lie on the grid.
 
-One consequence of the symmetric grid is easy to miss. At 2 bits, `qmax = 1`, so the levels are only `{-scale, 0, +scale}`, and every weight smaller than half the group maximum becomes zero. The `params` column counts nonzero weights and shows this directly.
+One consequence is easy to miss. At 2 bits, `qmax = 1`, so the levels are only `{-scale, 0, +scale}`, and every weight smaller than half the group maximum becomes zero. The `params` column counts nonzero weights and shows this directly.
 
 ## What the simulations show
 
@@ -44,17 +44,16 @@ From `quantization`, accuracy on 20 classes. The "teacher" is the 3x256 net (140
 
 8 and 6 bits are free for both models. Below that, group scales are worth a lot (teacher at 3 bits: 0.7766 → 0.8970), and the small student degrades much earlier than the big teacher. Per-tensor 2-bit is worse than 1-bit. At 2 bits only 3,616 of the teacher's 140,052 weights stay nonzero, while 1-bit keeps every weight as ±mean.
 
-Scales are not free. The experiment's storage count adds an fp16 scale per group, so the teacher at 4 bits takes 582.3 kbit per-tensor and 721.5 kbit with group-16, against 4,481.7 kbit in fp32. A group of 16 adds one bit per weight, and a group of 4 adds four.
+Scales cost storage. Counting an fp16 scale per group, the teacher at 4 bits takes 582.3 kbit per-tensor and 721.5 kbit with group-16, against 4,481.7 kbit in fp32. A group of 16 adds one bit per weight, and a group of 4 adds four.
 
 Page runs: the default (teacher, 4-bit, group 16) gives 0.9128. Group 4 at 2 bits gives 0.8057, but with four extra bits of scale per weight.
 
-pigeon's `carve.py` on YOLOv8n found the same shape with a lower floor: 8-bit about free, 6-bit alive only with group scales (group size 128), 4-bit collapsed. The toy teacher has more slack than YOLOv8n. The small student, with little spare capacity, is the closer analogue.
+pigeon's `carve.py` on YOLOv8n found the same shape with a lower floor: 8-bit about free, 6-bit alive only with group scales (group size 128), 4-bit collapsed. The small student, with little spare capacity, is the closer analogue.
 
 ## When it breaks
 
 - **Outliers.** One large weight sets `scale` for its whole group and pushes everything else towards zero. This is why per-tensor scales fail first.
 - **2-bit symmetric is ternary.** Most weights become zero, which is effectively heavy pruning.
-- **Small models have no slack.** Each weight carries more of the function, so rounding errors are not averaged away.
 - **Group overhead.** Very small groups cost more in scales than they save in bits.
 - **Activations are not quantized here.** Real integer inference also rounds activations, which has its own outlier problem (see SmoothQuant).
 
@@ -66,4 +65,4 @@ pigeon's `carve.py` on YOLOv8n found the same shape with a lower floor: 8-bit ab
 
 ## Going further
 
-Real deployments store integers (int8, int4) with per-channel or per-group fp16 scales, and quantize activations too, using a calibration set to pick their ranges. For 4 bits and below on large models, layer-wise methods that correct rounding error with calibration data (GPTQ, AWQ pages) beat round-to-nearest, and quantization-aware training (QAT page) beats both when you can afford training. In pigeon, the cockpit's Precision module applies `harness/quant.py:fake_quantize` to every `Conv2d` (via `harness/model.py`), so accuracy measured in the cockpit is what an export with the same scheme would give.
+Real deployments store integers (int8, int4) with per-channel or per-group fp16 scales, and quantize activations too, using a calibration set to pick their ranges. At 4 bits and below, calibration-based methods (GPTQ, AWQ) beat round-to-nearest, and QAT beats both when you can afford training. In pigeon, the cockpit's Precision module applies `harness/quant.py:fake_quantize` to every `Conv2d` (via `harness/model.py`), so accuracy measured in the cockpit is what an export with the same scheme would give.

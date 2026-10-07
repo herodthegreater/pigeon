@@ -1,6 +1,6 @@
 ## The idea
 
-Many weights in a trained network are close to zero. Magnitude pruning treats `|w|` as a stand-in for importance and sets the smallest weights to exactly zero. This is *unstructured* pruning: single weights anywhere are removed, so a matrix keeps its shape but becomes *sparse* (mostly zeros). The cut always costs accuracy. A *recovery* phase, meaning more training with the removed weights held at zero, wins most of it back.
+Many weights in a trained network are close to zero. Magnitude pruning treats `|w|` as a stand-in for importance and sets the smallest weights to exactly zero. This is *unstructured* pruning: the matrix keeps its shape but becomes *sparse* (mostly zeros). The cut always costs accuracy. A *recovery* phase, meaning more training with the removed weights held at zero, wins most of it back.
 
 ## How it works
 
@@ -20,11 +20,11 @@ for i in layers:
 
 ## The code, line by line
 
-`magnitude_prune` in `lab/compress.py` starts with `net = net.copy()`, so the input is never modified. `spare_last=True` would keep the output layer dense.
+`magnitude_prune` in `lab/compress.py` starts with `net = net.copy()`, so the input is never modified.
 
-The helper `mask_for(mags, flat)` does the ranking. `k = int(round(sparsity * flat.size))` counts how many weights must be zero, over *all* weights, already-pruned ones included. `thr = np.partition(flat, k - 1)[k - 1]` finds the `k`-th smallest magnitude without a full sort, and the mask is `mags > thr`. Dead weights have magnitude 0, sit at the bottom and stay dead. So calling the function again with a higher target removes only the difference. That is what makes gradual schedules land where they should.
+The helper `mask_for(mags, flat)` does the ranking. `k = int(round(sparsity * flat.size))` counts how many weights must be zero, over *all* weights, already-pruned ones included. `thr = np.partition(flat, k - 1)[k - 1]` finds the `k`-th smallest magnitude without a full sort, and the mask is `mags > thr`. Dead weights have magnitude 0, sit at the bottom and stay dead. So calling the function again with a higher target removes only the difference.
 
-In the global branch, `flat = np.concatenate([np.abs(net.eff(i)).ravel() for i in layers])` pools every layer's magnitudes, so one threshold applies everywhere. `net.eff(i)` is the weight the forward pass uses, with any existing mask or quantization applied. The per-layer branch calls `mask_for(w, w.ravel())` once per layer.
+In the global branch, `flat = np.concatenate([np.abs(net.eff(i)).ravel() for i in layers])` pools every layer's magnitudes, so one threshold applies everywhere. `net.eff(i)` is the weight as the forward pass uses it. The per-layer branch calls `mask_for(w, w.ravel())` once per layer.
 
 `net.apply_masks()` runs `MLP.apply_masks` in `lab/nn.py`, `self.W[i] *= m`, writing the zeros into the weights. Three places keep them at zero: `MLP.eff` multiplies by the mask on every forward pass, `MLP.backward` does `dW[i] *= self.masks[i]`, and `fit` re-applies the masks after every optimizer step.
 
@@ -47,15 +47,13 @@ Without recovery there is a cliff between 75% and 90%, the shape pigeon saw for 
 
 Page runs (500 recovery steps): the defaults (0.9, KD, global) recover from 0.286 to 0.8945, and labels reach 0.8901. Per-layer ranking starts at 0.1367 and recovers to 0.8573. Five gradual steps reach 0.8641 at 0.9 and 0.7097 at 0.95, below one-shot (0.8945, 0.8213), because each recovery gets only 100 steps.
 
-The toy can't show speed: numpy multiplies zeros like any other weight.
-
 ## When it breaks
 
 - **Sparse is not small or fast by itself.** Savings need a sparse storage format, sparse kernels, or hardware patterns such as 2:4.
 - **Per-layer ranking** forces the small input and output layers to lose as large a share as the big hidden ones.
 - **Fraction of what?** If a pruning function ranks only surviving weights, repeated calls with rising total targets compound. An earlier version of this function did that: its 5-step "0.9" schedule ended at 99.9%. Check the nonzero count.
 - **Past the cliff** whole neurons lose every input or output weight, and one-shot recovery has nothing left to retrain.
-- **Magnitude is a proxy.** A small weight on a large activation can matter more than a large weight on an input that is nearly always zero.
+- **Magnitude is a proxy.** A small weight on a large activation can matter more than a large one on a near-zero input.
 
 ## Try this
 
