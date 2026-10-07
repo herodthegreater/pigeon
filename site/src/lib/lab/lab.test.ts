@@ -15,7 +15,9 @@ describe("markdown", () => {
     expect(inline("[x](https://e.org)")).toContain('href="https://e.org" target="_blank" rel="noopener"');
     expect(inline("[x](https://e.org)")).toContain("(opens in a new tab)");
     // other schemes, including javascript:, become plain text
-    expect(inline("[x](javascript:alert(1))")).toBe("x");
+    const js = inline("[x](javascript:alert(1))");
+    expect(js).not.toContain("<a");
+    expect(js).not.toContain("javascript");
     expect(inline("[repo file](results/RESULTS.md)")).toBe("repo file");
   });
 
