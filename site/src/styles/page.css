@@ -1,0 +1,65 @@
+/* The page kit every content page shares (Field Guide, Flight School, Results).
+   Ruled entries on paper, like a printed guide's index: no cards, no badges. */
+
+.page {
+  max-width: 1100px; margin: 0 auto;
+  padding: var(--space-6) var(--gutter) var(--space-8);
+  display: flex; flex-direction: column; gap: var(--space-5);
+}
+.page > header { display: flex; flex-direction: column; gap: var(--space-3); max-width: var(--measure); }
+.page h1 { font-size: var(--step-3); }
+.lede { font-size: var(--step-1); color: var(--muted); max-width: var(--measure); }
+
+/* Breadcrumbs: where this page sits. */
+.crumbs { font-size: var(--step--1); color: var(--muted); }
+.crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
+.crumbs li + li::before { content: "/"; margin-right: var(--space-2); color: var(--rule-strong); }
+.crumbs a { color: var(--muted); }
+.crumbs a:hover { color: var(--ink); }
+
+/* A titled group of entries (a family, a category, a group of experiments). */
+.group { display: flex; flex-direction: column; gap: var(--space-2); }
+.group > h2 { font-size: var(--step-2); }
+.group > h3 { font-size: var(--step-1); }
+.group > p { color: var(--muted); max-width: var(--measure); }
+
+/* Ruled entries: each row is one link, the whole row is the target. */
+.entries { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.entries > li { border-bottom: 1px solid var(--rule); }
+.entries a.entry {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-4);
+  padding: var(--space-3) var(--space-1); min-height: var(--tap); text-decoration: none; color: var(--ink);
+}
+.entry .name { font-family: var(--display); font-size: var(--step-1); font-weight: 600; }
+.entry .aside { font-size: var(--step--1); color: var(--muted); text-align: right; white-space: nowrap; }
+.entry .summary { grid-column: 1 / -1; color: var(--muted); font-size: var(--step--1); max-width: var(--measure); }
+.entries a.entry:hover .name { color: var(--teal); }
+@media (max-width: 640px) {
+  .entries a.entry { grid-template-columns: 1fr; }
+  .entry .aside { text-align: left; }
+}
+
+/* Two columns: the reading on the left, a side panel (run box, contents) on the right.
+   Phones get the panel first only when it holds the page's main action. */
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: var(--space-6); align-items: start; }
+.side { display: flex; flex-direction: column; gap: var(--space-4); position: sticky; top: var(--space-3); }
+.panel { border-top: 2px solid var(--ink); padding-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
+.panel > h2 { font-size: var(--step-1); }
+.panel p { font-size: var(--step--1); color: var(--muted); }
+@media (max-width: 960px) {
+  .cols { grid-template-columns: 1fr; }
+  .side { position: static; }
+}
+
+/* Contents list for long pages. */
+.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.toc a { display: flex; align-items: center; min-height: 32px; font-size: var(--step--1); }
+@media (pointer: coarse), (max-width: 640px) { .toc a { min-height: var(--tap); } }
+
+/* Honest gaps: a plainly marked "not written yet". */
+.gap { font-size: var(--step--1); color: var(--muted); font-style: italic; }
+
+/* Errors and loading lines that name what is happening. */
+.state { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
+.state.error { color: var(--bad); font-family: var(--body); }
+.error-box { border: 1px solid var(--bad); background: var(--bad-wash); color: var(--ink); padding: var(--space-3); border-radius: var(--radius); font-size: var(--step--1); }

@@ -19,7 +19,7 @@ def test_static_build(tmp_path):
     out.mkdir()
     models = bs.collect_models()
     bs.export_bundle(str(out), models)
-    bs.export_data(str(out))
+    bs.export_data(str(out / "data"), str(out / "figures"))
     bs.export_frontend(str(out))
 
     html = (out / "index.html").read_text()
@@ -35,6 +35,15 @@ def test_static_build(tmp_path):
     for L in LESSONS:
         assert (out / "data" / "lessons" / L.id / "solution.json").exists()
     assert (out / "data" / "report.json").exists()
+
+    # the Astro site's mode: page data elsewhere, runtime assets only
+    rt, data = tmp_path / "public-lab", tmp_path / "src-data"
+    rt.mkdir()
+    bs.export_data(str(data), str(rt / "figures"))
+    bs.export_worker(str(rt))
+    assert (data / "meta.json").exists() and (data / "methods" / "ptq.json").exists()
+    assert (rt / "worker.js").exists() and (rt / "figures").is_dir()
+    assert not (rt / "index.html").exists() and not (rt / "app.js").exists()
 
     # unpack the bundle somewhere else and use it with nothing but numpy
     root = tmp_path / "browser"

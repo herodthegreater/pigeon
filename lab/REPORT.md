@@ -40,7 +40,7 @@ over-parameterized teacher) than a refutation.
    the *exact* Bayes posterior beats labels by 2.3 points at 2×32 and 3.4 at
    2×128, and most of that is also captured by plain Bayes-argmax labels on the
    same inputs. Students are limited by their own size first.
-4. **Pruning without recovery is a cliff; with recovery it's a non-event** —
+4. **Pruning without recovery is a cliff; with recovery it's a non-event**,
    up to a point. One-shot 90% magnitude pruning drops the teacher to 0.286;
    1,500 steps of distillation bring it to 0.912 (teacher 0.914). At 98% it
    only recovers to 0.63 while a dense net with the same weight count reaches
@@ -148,8 +148,8 @@ the short-trained one 0.735.
   with the *teacher's exact architecture* agrees with it on only 95–97% of
   test inputs after distillation; a 2×64 student reaches 93% after 12,000
   steps; a 2×16 student 75%.
-- **A biased teacher** (`biased_teacher`) — half its "bird" training labels
-  said "sibling" — passes the bias on: bird AP 0.895 from pure KD vs 0.952
+- **A biased teacher** (`biased_teacher`). Half its "bird" training labels
+  said "sibling", and it passes the bias on: bird AP 0.895 from pure KD vs 0.952
   from clean labels. Mixing clean labels back in repairs it (KD weight 0.25:
   0.947).
 - **Ensembles** (`ensemble_teacher`). Eight teachers make a better ensemble
@@ -236,7 +236,7 @@ vs 0.820–0.843).
 
 | bits | teacher PTQ (per tensor / group-16) | teacher QAT + KD | student PTQ (per tensor / group-16) | student QAT + KD |
 |---|---|---|---|---|
-| 8 | 0.914 / 0.914 | — | 0.828 / 0.828 | — |
+| 8 | 0.914 / 0.914 | n/a | 0.828 / 0.828 | n/a |
 | 4 | 0.900 / 0.913 | 0.920 | 0.723 / 0.794 | 0.836 |
 | 3 | 0.777 / 0.897 | 0.919 | 0.485 / 0.640 | 0.791 |
 | 2 | 0.071 / 0.610 | 0.917 | 0.069 / 0.168 | 0.488 |
@@ -261,7 +261,7 @@ and it does *worse* than 1-bit sign quantization (teacher 0.071 vs 0.401).
 
 **Deleting layers** (`layer_drop`, 8×128 teachers). Removing even one layer
 from a plain network collapses it (0.910 → 0.062), but a short distillation
-restores it completely — even with 6 of 8 layers gone (0.914). A residual
+restores it completely, even with 6 of 8 layers gone (0.914). A residual
 network degrades gracefully without any recovery (1 layer gone: 0.867, 2:
 0.804, 4: 0.532), which is why layer dropping is practical for transformers.
 Initializing a 4-layer student from every other teacher layer gave no benefit

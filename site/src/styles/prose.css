@@ -1,0 +1,40 @@
+/* Long-form text: method write-ups, lesson intros, the results report.
+   Ruled and calm, like a printed field guide. Import from pages that render markdown. */
+
+.prose { max-width: var(--measure); }
+.prose > * + * { margin-top: var(--space-4); }
+.prose h2 { font-size: var(--step-2); margin-top: var(--space-7); padding-top: var(--space-3); border-top: 1px solid var(--rule); }
+.prose h3 { font-size: var(--step-1); margin-top: var(--space-6); }
+.prose h4 { font-family: var(--body); font-size: var(--step-0); font-weight: 600; margin-top: var(--space-5); }
+.prose h2 + *, .prose h3 + *, .prose h4 + * { margin-top: var(--space-2); }
+.prose ul, .prose ol { padding-left: 1.3em; }
+.prose li + li { margin-top: var(--space-1); }
+.prose code {
+  font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 4px; border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.prose a { overflow-wrap: anywhere; }
+
+pre, .code {
+  font-family: var(--mono); font-size: var(--step--1); line-height: 1.5;
+  background: var(--code-bg); color: var(--ink); padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius); overflow-x: auto; tab-size: 4; margin: 0;
+}
+pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+.tok-kw { color: var(--tok-kw); }
+.tok-str { color: var(--tok-str); }
+.tok-com { color: var(--tok-com); font-style: italic; }
+.tok-num { color: var(--tok-num); }
+.tok-dec { color: var(--tok-dec); }
+
+.tablewrap { overflow-x: auto; max-width: 100%; }
+.tablewrap table, table.restable { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+.tablewrap th, .tablewrap td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--rule); vertical-align: top; }
+.tablewrap th { font-weight: 600; }
+.tablewrap .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Figure plates: matplotlib figures are drawn on white, so they sit on a light
+   plate in both themes, the way a printed plate does (DESIGN.md: Composition). */
+.plate { margin: 0; background: var(--plate); border: 1px solid var(--rule); padding: var(--space-3); border-radius: var(--radius); }
+.plate img { display: block; width: 100%; height: auto; }
+.plate figcaption { color: #586970; font-size: var(--step--1); margin-top: var(--space-2); }

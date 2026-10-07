@@ -17,7 +17,9 @@ function init() {
       say("Loading numpy…");
       await py.loadPackage("numpy");
       say("Loading the lab code and trained models…");
-      const buf = await (await fetch("lab_bundle.zip")).arrayBuffer();
+      const res = await fetch("lab_bundle.zip");
+      if (!res.ok) throw new Error(`couldn't download the lab code (HTTP ${res.status})`);
+      const buf = await res.arrayBuffer();
       py.unpackArchive(buf, "zip", { extractDir: "/home/pyodide/root" });
       py.runPython(`
 import json, sys
@@ -40,6 +42,9 @@ def _check(lid, code):
       say("Python is ready.");
       return py;
     })();
+    // A failed start (a dropped download, say) must not stick: forget it so the
+    // next request tries again instead of failing until the page is reloaded.
+    ready.catch(() => { ready = null; });
   }
   return ready;
 }
@@ -54,7 +59,8 @@ onmessage = async (e) => {
   try {
     const py = await init();
     let out = "null";
-    if (kind === "run") out = py.globals.get("_run")(args.mid, JSON.stringify(args.params || {}));
+    if (kind === "warm") out = "null";  // just make sure Python is loaded
+    else if (kind === "run") out = py.globals.get("_run")(args.mid, JSON.stringify(args.params || {}));
     else if (kind === "check") out = py.globals.get("_check")(args.lid, args.code);
     postMessage({ id, ok: true, result: JSON.parse(out) });
   } catch (err) {

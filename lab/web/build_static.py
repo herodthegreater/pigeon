@@ -3,6 +3,13 @@
     python -m lab.web.build_static --out _site
     python -m lab.web.build_static --out _site --pyodide-dir /path/to/pyodide   # offline
 
+    # for the Astro site: runtime assets into public/lab, page data where Astro
+    # imports it at build time (no single-page app)
+    python -m lab.web.build_static --out site/public/lab --data-out site/src/data/lab --no-frontend
+    # the same, skipping the slow parts (no model training, no Pyodide download):
+    # enough to build and browse every page locally; Run and Check need the full build
+    python -m lab.web.build_static --out site/public/lab --data-out site/src/data/lab --no-frontend --data-only
+
 Everything the server computes on request is either pre-rendered here (method
 write-ups, source code, results, figures, lessons) or shipped to the browser
 so it can be computed there: the lab's Python files and its pre-trained models
@@ -43,7 +50,7 @@ BUNDLE_MODULES = ("__init__.py", "common.py", "nn.py", "train.py", "world.py", "
 
 
 def _write_json(out: str, rel: str, obj) -> None:
-    path = os.path.join(out, "data", rel + ".json")
+    path = os.path.join(out, rel + ".json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     text = json.dumps(obj, default=lambda o: o.item() if hasattr(o, "item") else str(o))
     text = text.replace('"/figures/', '"figures/')  # relative: Pages serves under /<repo>/
@@ -51,8 +58,9 @@ def _write_json(out: str, rel: str, obj) -> None:
         f.write(text)
 
 
-def export_data(out: str) -> None:
-    """Pre-render every GET the front end makes (same functions as the server)."""
+def export_data(out: str, figures_out: str) -> None:
+    """Pre-render every GET the front end makes (same functions as the server).
+    JSON goes to `out`; figures to `figures_out`."""
     _write_json(out, "meta", webapp.meta())
     _write_json(out, "methods", webapp.methods())
     for mid in methods.REGISTRY:
@@ -66,7 +74,7 @@ def export_data(out: str) -> None:
     for e in exps:
         _write_json(out, f"experiments/{e['name']}", webapp.experiment(e["name"]))
     _write_json(out, "report", webapp.report())
-    shutil.copytree(os.path.join(RESULTS, "figures"), os.path.join(out, "figures"),
+    shutil.copytree(os.path.join(RESULTS, "figures"), figures_out,
                     ignore=shutil.ignore_patterns("quick_*"), dirs_exist_ok=True)
 
 
@@ -143,10 +151,16 @@ def export_pyodide(out: str, pyodide_dir: str | None) -> None:
         raise SystemExit(f"pyodide files missing: {missing or 'numpy wheel'} (have {got})")
 
 
+def export_worker(out: str) -> None:
+    shutil.copy(os.path.join(HERE, "static", "worker.js"), out)
+    open(os.path.join(out, ".nojekyll"), "w").close()  # serve files as-is
+
+
 def export_frontend(out: str) -> None:
     static = os.path.join(HERE, "static")
-    for name in ("app.js", "style.css", "worker.js"):
+    for name in ("app.js", "style.css"):
         shutil.copy(os.path.join(static, name), out)
+    export_worker(out)
     html = open(os.path.join(static, "index.html")).read()
     html = html.replace('href="/static/style.css"', 'href="style.css"')
     html = html.replace('<script src="/static/app.js"></script>',
@@ -154,7 +168,6 @@ def export_frontend(out: str) -> None:
     assert "window.LAB_STATIC" in html and "/static/" not in html
     with open(os.path.join(out, "index.html"), "w") as f:
         f.write(html)
-    open(os.path.join(out, ".nojekyll"), "w").close()  # serve files as-is
 
 
 def main():
@@ -162,22 +175,36 @@ def main():
     ap.add_argument("--out", default="_site")
     ap.add_argument("--pyodide-dir", help="a directory with an extracted Pyodide release "
                                           "(default: download the release tarball)")
+    ap.add_argument("--data-out", help="write the page data (JSON) here instead of <out>/data")
+    ap.add_argument("--no-frontend", action="store_true",
+                    help="skip the single-page app (index.html, app.js, style.css); ship only "
+                         "what the Astro site needs at runtime: worker.js, Pyodide, the bundle, figures")
+    ap.add_argument("--data-only", action="store_true",
+                    help="write page data and figures only: no model training, no bundle, no Pyodide")
     args = ap.parse_args()
     if common.QUICK:
         raise SystemExit("unset LAB_QUICK: the site ships full-budget models")
     out = os.path.abspath(args.out)
-    if os.path.exists(out):
-        shutil.rmtree(out)
-    os.makedirs(out)
-    print("training / loading models ...", flush=True)
-    models = collect_models()
-    print(f"  {len(models)} models: {', '.join(models)}", flush=True)
-    export_bundle(out, models)
-    export_data(out)
-    export_frontend(out)
-    export_pyodide(out, args.pyodide_dir)
-    total = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(out) for f in fs)
-    print(f"built {out} ({total / 1e6:.1f} MB)")
+    data_out = os.path.abspath(args.data_out) if args.data_out else os.path.join(out, "data")
+    for d in sorted({out, data_out}):  # parent first if data_out sits inside out
+        if os.path.exists(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+    if not args.data_only:
+        print("training / loading models ...", flush=True)
+        models = collect_models()
+        print(f"  {len(models)} models: {', '.join(models)}", flush=True)
+        export_bundle(out, models)
+    export_data(data_out, os.path.join(out, "figures"))
+    if args.no_frontend:
+        export_worker(out)
+    else:
+        export_frontend(out)
+    if not args.data_only:
+        export_pyodide(out, args.pyodide_dir)
+    for d in sorted({out, data_out}):
+        total = sum(os.path.getsize(os.path.join(p, f)) for p, _, fs in os.walk(d) for f in fs)
+        print(f"built {d} ({total / 1e6:.1f} MB)")
 
 
 if __name__ == "__main__":

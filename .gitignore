@@ -28,6 +28,7 @@ node_modules/
 site/dist/
 site/.astro/
 site/public/lab/
+site/src/data/lab/
 
 # OS
 .DS_Store

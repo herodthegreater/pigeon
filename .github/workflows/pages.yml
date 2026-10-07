@@ -1,8 +1,8 @@
 # Builds the website and publishes it on GitHub Pages.
 #   site/  the Astro app: Pigeon, the Coop, the mascot
-#   lab/   the simulation lab, trained and pre-rendered into site/public/lab/ so the
-#          Astro build ships it under /lab/ (it runs in the visitor's browser via
-#          Pyodide, so Pages needs no server)
+#   lab/   the simulation lab: its write-ups, lessons and results become Astro pages
+#          (Field Guide, Flight School, Results); runs and lesson checks execute in
+#          the visitor's browser via Pyodide, so Pages needs no server
 # Pull requests get the same build (tests, lab, site) without the deploy.
 # One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
 name: website
@@ -39,7 +39,9 @@ jobs:
       - name: Test the lab (quick budgets)
         run: python -m pytest lab/tests -q --ignore=lab/tests/test_experiments.py
       - name: Build the lab (trains the shipped models, ~5 min)
-        run: python -m lab.web.build_static --out site/public/lab
+        # Runtime (Pyodide, the lab bundle, worker.js, figures) into public/lab;
+        # page data into src/data/lab, which the Astro pages import at build time.
+        run: python -m lab.web.build_static --out site/public/lab --data-out site/src/data/lab --no-frontend
 
       - uses: actions/setup-node@v6
         with:
