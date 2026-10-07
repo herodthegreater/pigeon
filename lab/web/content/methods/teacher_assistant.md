@@ -22,7 +22,7 @@ The method adds one full distillation run per assistant. Whether it pays depends
 
 `capacity_gap` in `lab/experiments/teacher.py` runs two experiments.
 
-First, the gap itself. `teachers = {w: teacher(hidden=[w, w, w]) for w in [16, 32, 64, 128, 256, 512]}` builds six three-layer teachers of growing width. `teacher()` in `lab/common.py` caches each one on disk, so all experiments reuse the same trained models. For each teacher, `tr = ev(t)` records its own test metrics, then `distill([sw, sw], t, s)` trains a 2x8 and a 2x32 student from it for every seed (`distill` defaults: KD at `T = 4` on the 8k labeled plus 20k unlabeled inputs). Each row stores `teacher_acc`, so the student's accuracy can be plotted against the teacher's.
+First, the gap itself. `teachers = {w: teacher(hidden=[w, w, w]) for w in [16, 32, 64, 128, 256, 512]}` builds six three-layer teachers of growing width. `teacher()` in `lab/common.py` caches each one on disk, so all experiments reuse the same trained models. For each teacher, `tr = ev(t)` records its own test metrics, then `distill([sw, sw], t, s)` trains a 2x8 and a 2x32 student from it for every seed (`distill` defaults: KD at `T = 1` on the 8k labeled plus 20k unlabeled inputs). Each row stores `teacher_acc`, so the student's accuracy can be plotted against the teacher's.
 
 Second, the chains. `big = teachers[512]`. For every seed it records `"512 -> 8 (direct)"` from `distill([8, 8], big, s)`, then for `ta in [128, 32]` it builds `mid = distill([ta, ta], big, s)` and records `distill([8, 8], mid, s)`. Every link uses the same step budget, so the chained student gets no extra training of its own; the extra cost is the assistant's run.
 
@@ -32,26 +32,27 @@ Second, the chains. `big = teachers[512]`. For every seed it records `"512 -> 8 
 
 ## What the simulations show
 
-`capacity_gap`, chains to a 2x8 student (3 seeds, 3000 steps):
+`capacity_gap`, chains to a 2x8 student (3 seeds, 3000 steps, KD at `T = 1`):
 
 | path | accuracy |
 |---|---|
-| 512 -> 8 (direct) | 0.4462 ± 0.017 |
-| 512 -> 128 -> 8 | 0.4474 ± 0.018 |
-| 512 -> 32 -> 8 | 0.4532 ± 0.013 |
+| 512 -> 8 (direct) | 0.4556 ± 0.015 |
+| 512 -> 128 -> 8 | 0.4579 ± 0.015 |
+| 512 -> 32 -> 8 | 0.4680 ± 0.014 |
 
-The differences are smaller than the seed spread. The gap experiment shows why there is little to fix:
+The best chain is ahead by less than one standard deviation. The gap experiment shows why there is little to fix:
 
 | teacher width | teacher accuracy | 2x8 student | 2x32 student |
 |---|---|---|---|
-| 16 | 0.6788 | 0.4245 | 0.6348 |
-| 64 | 0.8822 | 0.4525 | 0.8000 |
-| 256 | 0.9139 | 0.4488 | 0.8059 |
-| 512 | 0.9228 | 0.4462 | 0.8087 |
+| 16 | 0.6788 | 0.4608 | 0.6744 |
+| 32 | 0.8161 | 0.4696 | 0.7964 |
+| 64 | 0.8822 | 0.4601 | 0.8268 |
+| 256 | 0.9139 | 0.4556 | 0.8318 |
+| 512 | 0.9228 | 0.4556 | 0.8351 |
 
-The 2x8 student peaks with the 64-wide teacher and drifts down only slightly after; the 2x32 student keeps up with the biggest teachers. The 2x8 student is limited by its own size: for reference, `size_ladder` gives 0.4428 for a 2x8 trained on labels alone. A TA cannot add capacity.
+The 2x8 student gets about the same from a 16-wide teacher as from a 512-wide one; its best result comes from the 32-wide teacher, which is also the assistant in the best chain. The 2x32 student keeps improving up to the biggest teacher. The 2x8 student is limited by its own size: `size_ladder` gives 0.4428 for a 2x8 trained on labels alone. A TA cannot add capacity.
 
-This page's runs (1000 steps, seed 0) agree. Student 2x8, assistant 2x64: direct 0.3458, via assistant 0.3617. Student 2x4, assistant 2x32: 0.2434 and 0.2630. Student 2x16, assistant 2x128: 0.5534 and 0.5592. Single-seed gaps of this size are within noise. The assistant itself is weaker than the teacher (2x64 reached 0.8237 against 0.9139), so the student learns from a worse but simpler model. The toy world cannot test the regime the paper studied, convolutional students many layers shallower than their teachers, where the function mismatch is much larger.
+This page's runs (1000 steps, seed 0) agree. Student 2x8, assistant 2x64: direct 0.3706, via assistant 0.3757. Student 2x4, assistant 2x32: 0.2267 and 0.2382. Student 2x16, assistant 2x128: 0.5854 and 0.5891. Single-seed gaps of this size are within noise. The assistant is weaker than the teacher (2x64 reached 0.8572 against 0.9139), so the student learns from a worse but simpler model. The toy cannot test the regime the paper studied, convolutional students many layers shallower than their teachers, where the mismatch is much larger.
 
 ## When it breaks
 
@@ -63,7 +64,7 @@ This page's runs (1000 steps, seed 0) agree. Student 2x8, assistant 2x64: direct
 
 ## Try this
 
-- Keep **student width** at 8 and try **assistant width** 16, 64 and 256. Look for a size that helps consistently, and for whether the assistant's own accuracy predicts it.
+- Keep **student width** at 8 and try **assistant width** 16, 32, 64 and 256. Look for a size that helps consistently, and for whether the assistant's own accuracy predicts it.
 - Set **student width** to 2 or 4: the gap is largest there. Check whether the via-assistant row ever pulls clearly ahead.
 - Set **assistant width** equal to 256 (as wide as the teacher, but two layers) and compare the assistant row with the teacher row: that is what the student loses before it even starts.
 

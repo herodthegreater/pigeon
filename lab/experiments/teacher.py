@@ -114,7 +114,7 @@ def ensemble_teacher():
         for how, tl in [("avg logits", logit_avg), ("avg probs", prob_avg)]:
             for s in SEEDS:
                 m = train(net(STUDENT, s), FixedSource(X, y, d.world.C, t_logits=tl),
-                          [KD(T=4)], seed=s)
+                          [KD(T=1)], seed=s)
                 rows.append(dict(n_teachers=k, method=f"student <- {how}", seed=s,
                                  ensemble_acc=ens_acc, **ev(m)))
         rows.append(dict(n_teachers=k, method="(ensemble itself)", seed=0, acc=ens_acc))

@@ -247,7 +247,7 @@ def weight_sharing():
         for k in [2, 4, 8, 16, 32]:
             bits = int(np.log2(k))
             rows.append(dict(model=mname, bits=bits, method="uniform (per-tensor)", seed=0,
-                             **ev(quantize(m0, bits + 1 if bits < 16 else bits))))
+                             **ev(quantize(m0, bits))))
             km = kmeans_share(m0, k)
             rows.append(dict(model=mname, bits=bits, method="k-means codebook", seed=0, **ev(km)))
             # fine-tune, re-snap, repeat (what Deep Compression's centroid tuning approximates)
@@ -259,8 +259,8 @@ def weight_sharing():
     for r in rows:
         r["series"] = f"{r['model']}: {r['method']}"
     return dict(rows=rows, refs=refs(t), notes=(
-        "Uniform at 'b bits' here uses b+1-bit symmetric quantization so both schemes store "
-        "2^b-ish levels (symmetric signed quant at b bits has 2^b - 1 levels)."), plots=[
+        "Both schemes store b bits per weight: k-means has k = 2^b levels per layer, symmetric "
+        "uniform has 2^b - 1 (1 bit = sign x mean|w|, i.e. 2 levels)."), plots=[
         dict(x="bits", y="acc", group="series", filter={"model": ["teacher 3x256"]}, title="teacher"),
         dict(x="bits", y="acc", group="series", filter={"model": ["student 2x32"]}, title="student"),
     ])

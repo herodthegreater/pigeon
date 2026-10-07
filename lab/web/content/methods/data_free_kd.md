@@ -34,7 +34,7 @@ for _ in range(steps):
 - `_, dX = t.backward(cache, dz)` backpropagates through the teacher. `MLP.backward` in `lab/nn.py` returns weight gradients and, as its second value, the gradient with respect to the input; only the latter is used.
 - `opt.step([dX + l2 * X / n])` adds the gradient of the L2 prior and moves `X`.
 
-`run_data_free` in `lab/methods.py` builds the transfer inputs for the chosen `source`: the first `n` real inputs (8k labeled, then the unlabeled pool), Gaussian noise, uniform noise on `[-3, 3]`, or `invert_teacher(t, n, steps=200)`. It then trains a 2x32 student with `FixedSource(X, None, ..., teacher=t)` (teacher logits precomputed, no labels) and `KD(T=4)`, and compares it with a student trained on the 8k labels.
+`run_data_free` in `lab/methods.py` builds the transfer inputs for the chosen `source`: the first `n` real inputs (8k labeled, then the unlabeled pool), Gaussian noise, uniform noise on `[-3, 3]`, or `invert_teacher(t, n, steps=200)` wrapped in `cached(f"inversion_{n}", ...)`, so the slow inversion runs once per `n` and later runs reuse it from disk. It then trains a 2x32 student with `FixedSource(X, None, ..., teacher=t)` (teacher logits precomputed, no labels) and `KD(T=4)`, and compares it with a student trained on the 8k labels.
 
 ## What the simulations show
 
@@ -54,7 +54,7 @@ for _ in range(steps):
 
 With no real data, all three fake sources land near 0.66, about the same as distilling on 500 real inputs, and clearly better than training on 500 labels. Inversion does not beat plain noise. A look at 1000 inverted inputs explains part of it: their mean length is 2.12 against 3.39 for real test inputs (the L2 prior pulls them inward), and the teacher's mean top probability on them is 0.9983, so the targets are nearly one-hot and carry little information about the other classes. Gaussian noise, by contrast, already has the same mean length as real inputs (3.39) and the teacher assigns it to all 20 classes.
 
-This page's runs (1000 steps, seed 0, `n` = 8000): labels only 0.7398; real 0.6805, Gaussian 0.5528, uniform 0.5532, inversion 0.5656. Inversion took about 98 seconds here, much longer than the other sources. The toy flatters noise: 12 standardized numbers are a small space, so random points often land near real data. Random images almost never look like photographs.
+This page's runs (1000 steps, seed 0, default `n` = 4000): labels only 0.7398; real 0.6724, Gaussian 0.5489, uniform 0.5549, inversion 0.5632. With `n` = 500 real inputs the student reached 0.5989, and with all 28000, 0.6781. The first inversion at `n` = 4000 took 67 seconds here; after that it is cached. The toy flatters noise: 12 standardized numbers are a small space, so random points often land near real data. Random images almost never look like photographs.
 
 ## When it breaks
 
@@ -67,8 +67,8 @@ This page's runs (1000 steps, seed 0, `n` = 8000): labels only 0.7398; real 0.68
 ## Try this
 
 - Set **transfer inputs** to `gaussian`, then `uniform`, then `inversion`, at the same **number of inputs**. Compare with the labels-only row.
-- Set **transfer inputs** to `real` and **number of inputs** to 500, then 8000, then 28000. This shows how much real data the fake sources are worth.
-- Try `inversion` at 2000 inputs to see whether a smaller synthetic set loses much (it is also faster).
+- Set **transfer inputs** to `real` and **number of inputs** to 500, then 4000, then 28000. This shows how much real data the fake sources are worth.
+- Try `inversion` at 1000 inputs to see whether a smaller synthetic set loses much (the first run at a new size is slow).
 
 ## Going further
 

@@ -27,16 +27,16 @@ From `layer_drop` (accuracy on 20 classes; KD rows are mean of 2 seeds, 1,500 re
 | layers deleted | plain, none | plain + KD | residual, none | residual + KD |
 |---|---|---|---|---|
 | 0 | 0.9097 | | 0.9113 | |
-| 1 | 0.0622 | 0.9124 | 0.8666 | 0.9121 |
-| 2 | 0.0660 | 0.9119 | 0.8044 | 0.9117 |
-| 4 | 0.0534 | 0.9124 | 0.5320 | 0.9123 |
-| 6 | 0.0568 | 0.8684 | 0.2580 | 0.8773 |
+| 1 | 0.0622 | 0.9162 | 0.8666 | 0.9174 |
+| 2 | 0.0660 | 0.9163 | 0.8044 | 0.9183 |
+| 4 | 0.0534 | 0.9168 | 0.5320 | 0.9168 |
+| 6 | 0.0568 | 0.9138 | 0.2580 | 0.9117 |
 
-Deleting even one plain layer drops accuracy to chance (5% for 20 classes). Residual nets lose accuracy gradually. With recovery, the difference disappears: both architectures lose nothing with up to 4 of 8 layers gone. The teacher was deeper than this task needs. The same experiment also tried a DistilBERT-style init, building a 4-layer residual student from every other teacher layer. It scored 0.9152, against 0.9168 for a random init, so the inherited layers gave no head start.
+Deleting even one plain layer drops accuracy to chance (5% for 20 classes). Residual nets lose accuracy gradually. With recovery the difference disappears: both architectures end at or slightly above their 8-layer teacher, even with 6 of 8 hidden layers gone. That says the teacher was much deeper than this task needs. It also says the recovery is doing more than repair: distilling on the 28,000 transfer inputs is extra training the teacher never had, which is how a cut model can beat it. The same experiment tried a DistilBERT-style init, building a 4-layer residual student from every other teacher layer. It scored 0.9162, against 0.9192 for a random init, so the inherited layers gave no head start.
 
-Page runs at the defaults (residual, 2 deleted, KD): 0.8044 before recovery, 0.9131 after. Plain with 2 deleted goes from 0.066 to 0.8921 with the 500-step recovery. Residual with 6 deleted goes from 0.258 to 0.7808.
+Page runs (500 recovery steps): at the defaults (residual, 2 deleted, KD), 0.8044 before recovery and 0.9154 after. Plain with 2 deleted goes from 0.066 to 0.9064. Residual with 6 deleted goes from 0.258 to 0.8963.
 
-The toy can't measure latency, and its layers are cheap and identical. In real models, layers differ in cost and in what they do.
+The toy can't measure latency, and its layers are cheap and identical. In real models, layers differ in cost and in what they do, and a 2-layer MLP being enough here says nothing about a detector.
 
 ## When it breaks
 
@@ -44,13 +44,13 @@ The toy can't measure latency, and its layers are cheap and identical. In real m
 - **Shape changes.** Only layers with equal input and output widths can be removed this way. Downsampling layers, and layers that change channel count, need a replacement projection.
 - **Greedy is short-sighted.** The best single deletion is not always part of the best pair. Each choice is also scored on training data, so it can overfit the probe set.
 - **The probe metric.** Choosing by accuracy on 2,000 examples ignores which classes suffer. A layer that matters only for the target class could be dropped.
-- **Deep cuts.** At 6 of 8 layers, recovery no longer closes the gap. Depth was doing real work by then.
+- **Recovery hides the damage only when depth was spare.** Here even 6 of 8 layers recover, because a 2-layer MLP fits this task. On a model that needs its depth, the no-recovery column is the honest warning.
 
 ## Try this
 
 - Set **architecture** to plain and **layers to delete** to 1 with **recovery** none. Then switch to residual. Compare the "layers deleted" rows.
 - With residual and recovery none, step **layers to delete** from 1 to 6. Watch the gradual decline that the plain net never shows.
-- Set **recovery** to kd and find the largest **layers to delete** that still recovers to within 0.01 of the uncut net.
+- Set **recovery** to kd and **layers to delete** to 6. Compare plain and residual: with recovery, the architecture that survived deletion best no longer has an advantage.
 
 ## Going further
 

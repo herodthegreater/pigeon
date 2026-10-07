@@ -14,7 +14,7 @@ If you need a network of width 16, the obvious move is to train width 16. The al
 
 `train_big_then_compress` in `lab/experiments/small.py` loops over `target` in `[16, 32]` and `mult` in `[1, 2, 4, 8, 16]`, so `start = target * mult`, with 2 seeds each. `big = scratch([start, start], s)` trains the wide net for `STEPS` = 3,000 steps.
 
-The `mult == 1` branch is the baseline. `m = scratch(big, s, steps=STEPS // 2)` continues training the target-width net for the same extra 1,500 steps the pruned nets get for recovery, so every arm sees 4,500 steps in total. `scratch` trains its argument in place, so after this line `big` *is* the extended model. The next line, `distill(big.copy(), big, ...)`, then distills a network into an exact copy of itself. The KD gradient `T * (ps - pt) / N` is zero from the first step, so the "self-KD" baseline row is just the labels row again. The results show it: both read 0.6752 for 2x16.
+The `mult == 1` branch is the baseline. `m = scratch(big, s, steps=STEPS // 2)` continues training the target-width net for the same extra 1,500 steps the pruned nets get for recovery, so every arm sees 4,500 steps in total. `scratch` trains its argument in place, so after this line `big` *is* the extended model. The next line, `distill(big.copy(), big, ...)`, then distills a network into an exact copy of itself. The KD gradient `T * (ps - pt) / N` is zero from the first step, and only AdamW's weight decay moves the weights, so the "self-KD" baseline row is the labels row again. The results show it: both read 0.6863 for 2x16.
 
 For `mult > 1`, `sc = neuron_importance(big, probe.X, probe.y, "taylor")` scores every hidden neuron on 2,000 training examples. `cut = structured_prune(big, [target, target], sc)` keeps the top `target` per layer. Note that this keeps only `(target / start) ** 2` of the hidden-to-hidden weights: 1.6% at 8x. Two recoveries follow, each from a fresh `cut.copy()`: `scratch(..., steps=STEPS // 2)` on labels, and `distill(cut.copy(), big, s, steps=STEPS // 2)` with the wide net as teacher (KD at `distill`'s default T=1). Both use the default learning rate of 3e-3, the same as training from scratch, so the arms differ only in where they start.
 
@@ -22,33 +22,33 @@ For `mult > 1`, `sc = neuron_importance(big, probe.X, probe.y, "taylor")` scores
 
 ## What the simulations show
 
-From `train_big_then_compress` (accuracy on 20 classes, mean of 2 seeds; every final model has the same size):
+From `train_big_then_compress` (accuracy on 20 classes, mean of 2 seeds; every final model has the same size and the same 4,500 training steps):
 
 | trained width | final 2x16, labels | final 2x16, self-KD | final 2x32, labels | final 2x32, self-KD |
 |---|---|---|---|---|
-| = target (direct) | 0.6752 | (same) | 0.8223 | (same) |
-| 2x | 0.5749 | 0.5560 | 0.7464 | 0.7343 |
-| 4x | 0.5311 | 0.5242 | 0.7214 | 0.6778 |
-| 8x | 0.5045 | 0.4788 | 0.7052 | 0.6363 |
-| 16x | 0.4978 | 0.4463 | 0.6823 | 0.5908 |
+| = target (direct) | 0.6863 | (same) | 0.8314 | (same) |
+| 2x | 0.6425 | 0.6423 | 0.7996 | 0.8053 |
+| 4x | 0.6185 | 0.6234 | 0.8004 | 0.8105 |
+| 8x | 0.6124 | 0.6218 | 0.7955 | 0.8053 |
+| 16x | 0.6088 | 0.6211 | 0.7886 | 0.7907 |
 
-Every pruned arm is worse than training the small net directly, and the wider the starting net, the worse the result. Self-KD from the unpruned wide net does worse than plain labels in every row. The `small_tricks` experiment agrees: a 2x128 net pruned to 2x16 with self-KD reached 0.5475, against 0.6637 for the baseline.
+Every pruned arm is worse than training the small net directly: by at least 0.04 for 2x16 and 0.02 for 2x32. Most of the loss appears at the first doubling, and wider starts cost little more after that. Self-KD from the unpruned wide net is a small but consistent improvement over labels from 4x up, which fits the wide net being a better teacher than the labels. It is not enough to beat the direct baseline. The `small_tricks` experiment ran the same recipe for 2x128 → 2x16, distilling on the labeled inputs with a 50/50 mix of KD and labels.
 
-Page runs at the defaults (128 → 16): the 2x128 net reaches 0.9008, but pruned to 2x16 and recovered it scores 0.2917, against 0.6249 for 2x16 trained directly. Starting from 32 gives 0.4597, and from 256, 0.2873.
+Page runs (1,000 + 500 steps, one seed): at the defaults (128 → 16) the 2x128 net reaches 0.9008, but pruned to 2x16 and recovered it scores 0.5043, against 0.6249 for 2x16 trained directly. Starting from 32 gives 0.5499, and from 256, 0.5073. A mild cut from 128 to 64 nearly ties: 0.8649 pruned against 0.8672 direct.
 
-These are deep cuts, 2x to 16x per layer. They agree with Structured pruning, where a pruned teacher lost to a fresh net once the width fell below about a quarter. The toy does not test Li et al.'s actual regime: big models that are compute-limited, where the wide model's faster learning per step dominates, compressed lightly.
+These cuts agree with Structured pruning, where a pruned teacher lost to a fresh net once each layer was cut 8x or more. The toy does not test Li et al.'s actual regime: big models that are compute-limited, where the wide model's faster learning per step dominates, compressed lightly.
 
 ## When it breaks
 
 - **Cuts too deep for recovery.** Removing 7 of 8 neurons per layer leaves a damaged network that trains worse than a random init with the same budget.
-- **Self-KD from a much wider teacher.** The small net cannot match the wide net's function, and chasing it hurts. See the Teacher assistants page for the capacity gap.
+- **Self-KD cannot rescue a bad start.** Distilling from the unpruned wide net helps a little, but a much wider teacher has functions the small net cannot represent. See the Teacher assistants page for the capacity gap.
 - **Unequal budgets.** Here every arm gets 4,500 steps, but the wide net's steps cost far more compute. Matching FLOPs instead of steps would favour training small even more.
 - **In-place training.** Helpers that train their argument in place (`scratch`, `distill`) make it easy to reuse a model you meant to keep. Copy before you train.
 
 ## Try this
 
 - Keep **final width** 16 and step **trained width** through 32, 64, 128 and 256. Check that the pruned row falls as the start grows.
-- Set **final width** to 64 and **trained width** to 128, a mild 2x cut. See whether the pruned net now matches or beats the direct one.
+- Set **final width** to 64 and **trained width** to 128, a mild 2x cut. Compare how close the pruned net comes to the direct one with the 8x default.
 - Compare the "(before pruning)" row with the pruned row at **trained width** 256 to see how much the cut destroys before recovery can act.
 
 ## Going further

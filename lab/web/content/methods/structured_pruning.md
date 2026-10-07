@@ -27,25 +27,25 @@ For `taylor`, `p = softmax(z)` and `dz = (p - np.eye(...)[y]) / len(z)` is the g
 
 ## What the simulations show
 
-From `prune_structured` (teacher accuracy 0.9139, 20 classes). "fresh" is a randomly initialised 3xW net trained for the full 3,000 steps. Recovered arms get 1,500.
+From `prune_structured` (teacher accuracy 0.9139, 20 classes; mean of 2 seeds). "fresh" is a randomly initialised 3xW net trained for the full 3,000 steps. Recovered arms get 1,500 steps at the same learning rate.
 
-| keep width | l1, none | taylor, none | random, none | l1 + labels | taylor + labels | fresh, labels | fresh, KD |
+| keep width | l1, none | taylor, none | random, none | l1 + KD | taylor + KD | random + KD | fresh, KD |
 |---|---|---|---|---|---|---|---|
-| 128 | 0.4247 | 0.2994 | 0.3087 | 0.9090 | 0.9034 | 0.9086 | 0.9150 |
-| 64 | 0.1685 | 0.1519 | 0.1125 | 0.8727 | 0.8500 | 0.8851 | 0.8993 |
-| 32 | 0.0816 | 0.1104 | 0.0757 | 0.7297 | 0.6764 | 0.8251 | 0.8347 |
-| 16 | 0.0443 | 0.0441 | 0.0547 | 0.4965 | 0.4771 | 0.6853 | 0.6704 |
+| 128 | 0.4247 | 0.2994 | 0.3087 | 0.9163 | 0.9152 | 0.9179 | 0.9176 |
+| 64 | 0.1685 | 0.1519 | 0.1125 | 0.9035 | 0.8928 | 0.8965 | 0.9042 |
+| 32 | 0.0816 | 0.1104 | 0.0757 | 0.8292 | 0.7906 | 0.8048 | 0.8469 |
+| 16 | 0.0443 | 0.0441 | 0.0547 | 0.6253 | 0.5865 | 0.5794 | 0.7007 |
 
-Halving every layer without recovery drops accuracy from 0.9139 to between 0.30 and 0.42: the cliff pigeon's STATUS.md reports for YOLOv8n, where even a 5% one-shot channel cut sent bird mAP@50 to 0. Recovery repairs a 2x cut almost completely (0.9108 with L1 and KD). From width 64 down, a fresh net of the same shape beats every pruned-and-recovered teacher. The criterion matters less than expected. Before recovery, Taylor is no better than random at width 128. After recovery, L1, the data-free criterion, is the best pruned arm at every width shown. Recovery with labels beat recovery by KD at widths 64 and below for every criterion.
+Halving every layer without recovery drops accuracy from 0.9139 to between 0.30 and 0.42: the cliff pigeon's STATUS.md reports for YOLOv8n, where even a 5% one-shot channel cut sent bird mAP@50 to 0. Recovery repairs a 2x cut completely, and a 4x cut nearly. From width 32 down (an 8x cut per layer), a fresh net of the same shape beats every pruned-and-recovered teacher. The fresh net does get twice as many training steps, so part of that gap is budget. The criterion matters less than expected. Before recovery, Taylor is no better than random at width 128. After recovery, L1, the data-free criterion, is the best pruned arm from width 64 down, and random beats Taylor at 128, 64 and 32. Recovery by KD beat recovery by labels for every criterion and width; with labels, L1 reaches 0.8184 at width 32.
 
-Page runs at the defaults (width 32, taylor, KD, 500 recovery steps): no recovery 0.1104, recovered 0.4539, fresh 3x32 with KD 0.7599. With l1 the recovered model reaches 0.4367, and with random 0.4447.
+Page runs at the defaults (width 32, taylor, KD, 500 recovery steps): no recovery 0.1104, recovered 0.6649, fresh 3x32 with KD for 1,000 steps 0.7793. With l1 the recovered model reaches 0.7252, with random 0.6637, and with labels instead of KD 0.6648.
 
 The toy can't show the speed side. pigeon found that on Apple's MPS a 30% channel cut reduced MACs by 35% while latency got 6% worse, because small models are overhead-bound and odd channel counts tile badly.
 
 ## When it breaks
 
 - **The cliff is steep.** Without recovery, even a 2x cut loses most of the accuracy. Never measure a structurally pruned model before fine-tuning it.
-- **Big cuts lose to training from scratch.** Below about a quarter of the original width, the pruned weights are a worse starting point than a random init with the same budget.
+- **Big cuts lose to training from scratch.** At an eighth of the original width or less, the pruned weights are a worse starting point than a random init.
 - **One-shot scores go stale.** Scores are computed once, so cutting layer 1 changes what layer 2's neurons mean.
 - **Taylor scores are taken at a minimum.** On a well-trained net `dL/da` is small and noisy, so the score mostly ranks noise.
 - **Residual streams and concatenations** tie neurons across layers. Removing one without its group breaks the shapes. `keep_neurons` refuses rather than guessing.
@@ -54,7 +54,7 @@ The toy can't show the speed side. pigeon found that on Apple's MPS a 30% channe
 
 - Set **keep width** to 128 and **recovery** to none, then cycle **importance** through l1, act, taylor and random. Look at how close random comes to the "smart" criteria.
 - Keep width 128, set **recovery** to kd, and compare the recovered row with "fresh 3x128, KD from scratch". Then repeat at width 16 and see which wins.
-- At width 32, compare **recovery** labels and kd.
+- At width 32, compare **recovery** labels and kd, then try **importance** l1 with kd.
 - Push **keep width** down to 4 to find where even the fresh net collapses. That is a capacity limit, not a pruning one.
 
 ## Going further

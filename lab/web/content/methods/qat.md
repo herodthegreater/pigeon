@@ -36,17 +36,17 @@ From `quantization`. QAT rows are 1,500 steps, mean of 2 seeds. Everything uses 
 
 | model | bits | PTQ | QAT + labels | QAT + KD |
 |---|---|---|---|---|
-| teacher 3x256 (fp32 0.9139) | 3 | 0.8970 | 0.9144 | 0.9137 |
-| teacher | 2 | 0.6098 | 0.9065 | 0.9117 |
-| teacher | 1 | 0.4356 | 0.9147 | 0.9137 |
-| student 2x32 (fp32 0.8009) | 4 | 0.7670 | 0.8001 | 0.8020 |
-| student | 3 | 0.6283 | 0.7603 | 0.7663 |
-| student | 2 | 0.2173 | 0.4592 | 0.5184 |
-| student | 1 | 0.1767 | 0.4714 | 0.5293 |
+| teacher 3x256 (fp32 0.9139) | 3 | 0.8970 | 0.9160 | 0.9186 |
+| teacher | 2 | 0.6098 | 0.9093 | 0.9171 |
+| teacher | 1 | 0.4356 | 0.9178 | 0.9194 |
+| student 2x32 (fp32 0.8281) | 4 | 0.7944 | 0.8327 | 0.8360 |
+| student | 3 | 0.6397 | 0.7909 | 0.7912 |
+| student | 2 | 0.1683 | 0.4789 | 0.4880 |
+| student | 1 | 0.1680 | 0.5377 | 0.5291 |
 
-The big teacher can be trained down to 1 bit per weight (plus one fp16 scale per 16 weights) with no loss at all. The 2,132-parameter student cannot: QAT more than doubles its 2-bit accuracy over PTQ, but still ends far below fp32. For the student at 3 bits and below, KD beats labels in every row, and the bird AP shows the same: at 2 bits, 0.7183 with KD against 0.6249 with labels.
+The big teacher can be trained down to 1 bit per weight (plus one fp16 scale per 16 weights) and ends *above* its fp32 accuracy. That is not because the rounding helps: the QAT run is also 1,500 more training steps, which the fp32 model never got. The 2,132-parameter student cannot do the same. QAT roughly triples its 2-bit accuracy over PTQ but still ends far below fp32. Labels and KD come out almost even for the student. The bird AP at 2 bits even favours labels (0.7592 against 0.7024).
 
-Page runs (500 steps): the default student at 2 bits goes from 0.2173 with PTQ to 0.4765 with KD (0.4673 with labels). The teacher at 1 bit goes from 0.4356 to 0.8983 with KD.
+Page runs (500 steps): the default student at 2 bits goes from 0.1683 with PTQ to 0.4576 with KD (0.476 with labels). The teacher at 1 bit goes from 0.4356 to 0.9165 with KD.
 
 ## When it breaks
 
@@ -59,7 +59,7 @@ Page runs (500 steps): the default student at 2 bits goes from 0.2173 with PTQ t
 ## Try this
 
 - Keep **model** on student and step **bits** from 4 down to 1 with **train with** kd. Find where QAT stops closing the gap to fp32.
-- At **bits** 2 on the student, compare **train with** labels and kd, and look at `target_ap` as well as accuracy.
+- At **bits** 2 on the student, compare **train with** labels and kd, and look at `target_ap` as well as accuracy. Neither teacher signal nor labels can buy back capacity the 2-bit grid removed.
 - Switch **model** to teacher and set **bits** to 1. Compare the PTQ row with the QAT row.
 
 ## Going further

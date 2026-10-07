@@ -34,13 +34,13 @@ From `quantization`, accuracy on 20 classes. The "teacher" is the 3x256 net (140
 
 | bits | teacher, per-tensor | teacher, group-16 | student, per-tensor | student, group-16 |
 |---|---|---|---|---|
-| fp32 | 0.9139 | 0.9139 | 0.8009 | 0.8009 |
-| 8 | 0.9140 | 0.9138 | 0.8010 | 0.8014 |
-| 6 | 0.9139 | 0.9133 | 0.7966 | 0.7965 |
-| 4 | 0.8998 | 0.9128 | 0.7186 | 0.7670 |
-| 3 | 0.7766 | 0.8970 | 0.4461 | 0.6283 |
-| 2 | 0.0707 | 0.6098 | 0.0764 | 0.2173 |
-| 1 | 0.4013 | 0.4356 | 0.1662 | 0.1767 |
+| fp32 | 0.9139 | 0.9139 | 0.8281 | 0.8281 |
+| 8 | 0.9140 | 0.9138 | 0.8276 | 0.8282 |
+| 6 | 0.9139 | 0.9133 | 0.8238 | 0.8280 |
+| 4 | 0.8998 | 0.9128 | 0.7229 | 0.7944 |
+| 3 | 0.7766 | 0.8970 | 0.4851 | 0.6397 |
+| 2 | 0.0707 | 0.6098 | 0.0686 | 0.1683 |
+| 1 | 0.4013 | 0.4356 | 0.1522 | 0.1680 |
 
 8 and 6 bits are free for both models. Below that, group scales are worth a lot (teacher at 3 bits: 0.7766 → 0.8970), and the small student degrades much earlier than the big teacher. Per-tensor 2-bit is worse than 1-bit. At 2 bits only 3,616 of the teacher's 140,052 weights stay nonzero, while 1-bit keeps every weight as ±mean.
 

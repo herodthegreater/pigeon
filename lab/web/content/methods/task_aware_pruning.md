@@ -20,7 +20,22 @@ Ordinary importance scores ask "which neurons matter for everything this network
 
 ## What the simulations show
 
-SIMS-TODO
+From `specialist_prune` (bird AP on the full test set; recovered arms are mean of 2 seeds and get the same 3,000 steps as the fresh specialist; teacher AP 0.9885):
+
+| keep width | all-class, none | bird, none | all-class, 20-way KD | all-class, collapsed + grouped KD | bird, collapsed + grouped KD | fresh 3xW specialist |
+|---|---|---|---|---|---|---|
+| 128 | 0.3660 | 0.7581 | 0.9901 | 0.9893 | 0.9866 | 0.9891 |
+| 64 | 0.1487 | 0.5333 | 0.9834 | 0.9863 | 0.9862 | 0.9866 |
+| 32 | 0.0823 | 0.4997 | 0.9611 | 0.9676 | 0.9566 | 0.9649 |
+| 16 | 0.0963 | 0.5097 | 0.8464 | 0.8723 | 0.8616 | 0.8931 |
+| 8 | 0.0980 | 0.5308 | 0.7040 | 0.4917 | 0.7560 | 0.7391 |
+| 4 | 0.0807 | 0.4403 | 0.5308 | 0.4317 | 0.4012 | 0.3903 |
+
+Task-aware scoring does exactly what it promises *before* recovery: at every width the bird-scored cut keeps around 0.44-0.76 bird AP, against 0.08-0.37 for the all-class cut. The two criteria pick different neurons. In the second hidden layer, the kept sets overlap by 55% at width 128, 33% at 64, 16% at 32, and 0% at 4. After a full recovery, though, the advantage mostly disappears. The bird-scored carve wins clearly only at width 8. At 16 and 32 the all-class carve recovers slightly better, and at 16 a fresh specialist of the same shape beats both. Collapsing the head and distilling only the grouped task helps over 20-way KD at widths 16-64, but not at the smallest widths.
+
+Page runs (500 recovery steps, one seed; "no recovery" here is measured after the head collapse): width 16 with bird importance goes from 0.5068 to 0.7303, and with all-class importance from 0.1015 to 0.5404. At width 64: bird 0.5095 → 0.9653, all classes 0.1538 → 0.9547. With a short recovery budget, the better starting point still shows.
+
+So the toy's answer: task-aware importance matters most when recovery is short or impossible. With enough recovery data and steps, which neurons you kept matters less than how many.
 
 ## When it breaks
 

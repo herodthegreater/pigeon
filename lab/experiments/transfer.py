@@ -65,7 +65,7 @@ def transfer_set():
         rows.append(dict(source="(labels only, 500 scratch)", seed=s,
                          **ev(scratch(STUDENT, s, d=data(n_train=500)), t)))
         for name, mk in srcs.items():
-            m = train(net(STUDENT, s), mk(), [KD(T=4)], seed=s)
+            m = train(net(STUDENT, s), mk(), [KD(T=1)], seed=s)
             rows.append(dict(source=name, seed=s, **ev(m, t)))
     return dict(rows=agg(rows, ["source"]), refs=refs(t), plots=[
         dict(x="source", y="acc", kind="bar", hlines=["teacher"]),

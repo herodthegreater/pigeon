@@ -25,15 +25,17 @@ The two controls follow. "ticket mask, fresh init" puts the rewind-to-init arm's
 
 ## What the simulations show
 
-From `lottery_ticket` (2x128, mean of 2 seeds; dense accuracy 0.904). The saved results were produced by an earlier `magnitude_prune` that measured sparsity as a fraction of the *surviving* weights, so the rounds compounded: round 2 removed 75% of the 50% left. The real sparsity, from `macs` out of 20,480, is in the second column:
+From `lottery_ticket` (2x128 with 20,480 weights, mean of 2 seeds; dense accuracy 0.904). Each round halves the surviving weights:
 
-| label | real sparsity | rewind to init | rewind to early | fine-tune trained | ticket mask, fresh init | random mask, original init |
-|---|---|---|---|---|---|---|
-| 0.5 | 50% | 0.9038 | 0.9022 | 0.9005 | 0.8921 | 0.8966 |
-| 0.75 | 87.5% | 0.8500 | 0.8522 | 0.8125 | 0.8303 | 0.8337 |
-| 0.875 | 98.4% | 0.1392 | 0.1333 | 0.1227 | 0.1310 | 0.0759 |
+| sparsity | rewind to init | rewind to early | fine-tune trained | ticket mask, fresh init | random mask, original init |
+|---|---|---|---|---|---|
+| 50% | 0.9038 | 0.9022 | 0.9013 | 0.8921 | 0.8966 |
+| 75% | 0.8986 | 0.8951 | 0.8847 | 0.8758 | 0.8778 |
+| 87.5% | 0.8690 | 0.8690 | 0.8506 | 0.8344 | 0.8361 |
+| 93.75% | 0.7884 | 0.7887 | 0.7332 | 0.7196 | 0.7083 |
+| 96.9% | 0.6118 | 0.6115 | 0.4866 | 0.4801 | 0.3219 |
 
-At 87.5% sparsity the rewound tickets beat both controls by about 0.02 accuracy, a real but small effect. Fine-tuning the trained weights (at a lower learning rate) did worst there. By 98.4% (320 weights left) every arm is close to chance, and the rows past that have 20, then 1, nonzero weights.
+This is the lottery-ticket pattern. The rewound tickets (mask plus original or early weights) hold up best at every sparsity, and the gap grows as the network gets sparser. At 96.9% (640 weights) they score 0.61, while the same mask with fresh random weights gets 0.48 and a random mask on the original init only 0.32. Both ingredients matter. With the same original init, the ticket mask scores 0.6118 and a random mask 0.3219. With the same ticket mask, the original init scores 0.6118 and a fresh one 0.4801. Rewinding to init and to the early snapshot are indistinguishable here. Fine-tuning the trained weights, which is what most pruning pipelines do, lands with the controls rather than the tickets once sparsity passes 90%.
 
 Page runs with the current code (2x64, one seed; dense 0.8511):
 
@@ -45,13 +47,13 @@ Page runs with the current code (2x64, one seed; dense 0.8511):
 | 4 (93.8%) | 0.4159 | 0.4747 | 0.4470 |
 | 6 (98.4%) | 0.2299 | 0.2098 | 0.1911 |
 
-Rewinding beats a random reinit by 0.06 at 50% and the gap narrows to about 0.01 by 87.5%. At 93.8% the order changes, which at one seed is within noise.
+In this smaller net with a third of the training, rewinding beats a random reinit by 0.06 at 50%, and the gap narrows to about 0.01 by 87.5%. At 93.8% the order changes, which at one seed is within noise. The ticket effect needs the larger net and longer training of the experiment to show clearly.
 
 The toy cannot test the regime where the hypothesis is most interesting: large vision models, where Frankle et al. found that rewinding to init stops working and rewinding to an early point is needed.
 
 ## When it breaks
 
-- **Compounding schedules.** If the pruning function ranks only survivors, a schedule of total sparsities overshoots fast, as in the saved results above. Always check the nonzero count.
+- **Compounding schedules.** If the pruning function ranks only survivors, a schedule of total sparsities overshoots fast. An earlier version of this experiment did that, and its "75%" round was really 87.5%. Always check the nonzero count.
 - **Tickets are not cheaper to find.** You need the full training run to get the mask, then a full retrain per round. It is a scientific probe, not a compression shortcut.
 - **Small or capacity-starved nets** show little difference between ticket and random mask, as the 2x64 runs do.
 - **Masks are unstructured**, so tickets bring no speedup without sparse kernels (see Magnitude pruning).

@@ -33,22 +33,20 @@ In the global branch, `flat = np.concatenate([np.abs(net.eff(i)).ravel() for i i
 
 ## What the simulations show
 
-The teacher is a 3x256 MLP with 140,052 parameters, 0.9139 accuracy on the 20 classes and 0.9885 average precision (AP) on class 0, the "bird". AP is the ranking score `lab/train.py` computes in the same way as pigeon's bird mAP@50. Accuracy after one-shot pruning, from `prune_unstructured` (recovery is 1500 steps, mean of 2 seeds):
+The teacher is a 3x256 MLP with 140,052 parameters, 0.9139 accuracy on the 20 classes and 0.9885 average precision (AP) on class 0, the "bird". AP is the ranking score `lab/train.py` computes in the same way as pigeon's bird mAP@50. Accuracy from `prune_unstructured` (recovery is 1,500 steps, mean of 2 seeds; "gradual" spreads the same 1,500 steps over 5 prune-and-recover rounds):
 
-| sparsity | no recovery | + labels | + KD from unpruned self | dense net, same weight count, KD |
-|---|---|---|---|---|
-| 0.5 | 0.8961 | 0.9132 | 0.9137 | 0.9184 |
-| 0.75 | 0.7500 | 0.9137 | 0.9173 | 0.9162 |
-| 0.9 | 0.2864 | 0.8904 | 0.8830 | 0.9058 |
-| 0.95 | 0.1211 | 0.8192 | 0.7857 | 0.8910 |
-| 0.98 | 0.0595 | 0.4098 | 0.3375 | 0.8306 |
-| 0.99 | 0.0540 | 0.0775 | 0.0517 | 0.7572 |
+| sparsity | no recovery | + labels | + KD from unpruned self | gradual (5 steps) + KD | dense net, same weight count, KD |
+|---|---|---|---|---|---|
+| 0.5 | 0.8961 | 0.9154 | 0.9193 | 0.9173 | 0.9203 |
+| 0.75 | 0.7500 | 0.9142 | 0.9199 | 0.9183 | 0.9188 |
+| 0.9 | 0.2860 | 0.9019 | 0.9125 | 0.9038 | 0.9107 |
+| 0.95 | 0.1206 | 0.8741 | 0.8891 | 0.8576 | 0.8977 |
+| 0.98 | 0.0597 | 0.6215 | 0.6289 | 0.6179 | 0.8531 |
+| 0.99 | 0.0540 | 0.0804 | 0.0883 | 0.4007 | 0.7792 |
 
-Three things stand out. Without recovery there is a cliff between 75% and 90% sparsity, the same shape pigeon saw for structural cuts on YOLOv8n. Recovery brings 90% sparsity back to within about 0.03 of the teacher. And from 90% sparsity upward, a small *dense* network with the same number of weights, distilled from the teacher, beats every sparse one.
+Without recovery there is a cliff between 75% and 90% sparsity, the same shape pigeon saw for structural cuts on YOLOv8n. Recovery by KD brings 90% sparsity back to 0.9125, level with the teacher. Recovered models at 50-75% sparsity even score slightly *above* the teacher. Recovery is also extra training on 28,000 inputs the teacher never trained on, so "above the teacher" says more about the teacher than about pruning. KD beats labels at every sparsity. Gradual pruning is slightly worse than one-shot up to 98%, but at 99% it is the only sparse arm that survives (0.4007 against 0.0883): a one-shot cut that deep disconnects too much for recovery to find. From 95% up, a small *dense* network with the same number of weights beats every sparse one.
 
-The saved `prune_unstructured` results also contain rows labelled "gradual (5 steps) + KD". They were produced by an earlier `magnitude_prune` that measured `sparsity` as a fraction of the surviving weights, so the steps compounded. Their `macs` show it: the row labelled 0.5 has 17,407 nonzero weights out of 139,264, which is 87.5% sparsity. Ignore those rows until the experiment is re-run.
-
-Runs on this page use a shorter recovery (500 steps in total). At the defaults (0.9, KD, global) accuracy recovers from 0.286 to 0.7813. With **recovery** set to labels it reaches 0.8499. With a per-layer ranking, the unrecovered model scores 0.1367 and recovers only to 0.6457. Gradual pruning in 5 steps to 0.9 scored 0.7409, below one-shot's 0.7813, because each of its 5 recoveries gets only 100 steps. At 0.95 the gradual run had lower accuracy (0.5072 vs 0.545) but higher bird AP (0.8251 vs 0.8121).
+Runs on this page use a shorter recovery (500 steps in total). At the defaults (0.9, KD, global), accuracy recovers from 0.286 to 0.8945. With **recovery** set to labels it reaches 0.8901. With a per-layer ranking, the unrecovered model scores 0.1367 and recovers to 0.8573. Gradual pruning in 5 steps scored 0.8641 at 0.9 and 0.7097 at 0.95, both below one-shot (0.8945 and 0.8213), because each of its 5 recoveries gets only 100 steps.
 
 The toy world can't tell us about speed. Every model here runs dense numpy matmuls, so zeros cost as much as any other weight.
 
@@ -56,8 +54,8 @@ The toy world can't tell us about speed. Every model here runs dense numpy matmu
 
 - **Sparse is not small or fast by itself.** The zeros still occupy the dense matrix and still get multiplied. You only save memory with a sparse storage format, and you only save time with sparse kernels or hardware that supports a fixed pattern such as 2:4.
 - **Per-layer ranking hurts.** It forces the tiny 12x256 input layer and the 256x20 output layer to lose as large a share as the big 256x256 hidden layers.
-- **Fraction of what?** A pruning function that ranks only the surviving weights reads its argument as a fraction of those survivors. Repeated calls with rising total targets then compound and overshoot, which is what happened to the saved gradual rows. Always check the nonzero count.
-- **Past the cliff, recovery stops working.** At 99% sparsity no recovery arm beats 0.08 accuracy, because whole neurons have lost every input or output weight.
+- **Fraction of what?** A pruning function that ranks only the surviving weights reads its argument as a fraction of those survivors. Repeated calls with rising total targets then compound and overshoot. An earlier version of this lab's `magnitude_prune` did exactly that, and its 5-step "0.9" schedule ended at 99.9% sparsity. Always check the nonzero count.
+- **Past the cliff, one-shot recovery stops working.** At 99% sparsity, one-shot pruning followed by either recovery stays below 0.09 accuracy. Whole neurons have lost every input or output weight, and there is nothing left to retrain. Only gradual pruning gets through, and a dense net of the same size does far better.
 - **Magnitude is only a proxy.** A small weight on an input with a large activation can matter more than a large weight on an input that is nearly always zero.
 
 ## Try this

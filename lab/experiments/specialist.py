@@ -52,7 +52,7 @@ def spec_distill(m: MLP, t: MLP, Gm: np.ndarray, seed: int, X=None, steps=None, 
     """KD in a collapsed label space: teacher probs are summed into groups."""
     if X is None:
         X, _ = transfer_X(data())
-    return train(m, FixedSource(X, None, Gm.shape[1], teacher=t), [KD(T=4, group=Gm)],
+    return train(m, FixedSource(X, None, Gm.shape[1], teacher=t), [KD(T=1, group=Gm)],
                  steps=steps, seed=seed, lr=lr)
 
 

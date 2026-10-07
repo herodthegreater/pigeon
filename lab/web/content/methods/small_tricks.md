@@ -38,12 +38,12 @@ From `small_tricks`, 3,000 steps, mean of 3 seeds, accuracy on 20 classes. The 3
 | EMA of weights | 0.6481 | 0.8065 |
 | 4x longer training | 0.7146 | 0.8405 |
 | over-parameterize, then collapse | 0.7099 | 0.8420 |
-| KD from teacher + pool | 0.6398 | 0.8059 |
+| KD from teacher + pool | 0.6714 | 0.8318 |
 | KD + pool + online mixup + EMA, 4x long | 0.7100 | 0.8607 |
 
-Training longer is the only one of the four tricks with a clear gain. Label smoothing is within noise (the 2x16 standard deviations are about 0.008). Mixup and EMA hurt. That pattern fits underfitting: regularizers fight memorisation, and this model has none to fight. Distilling from the big teacher doesn't help either, unless it is combined with more steps and fresh inputs.
+Training longer is the only one of the four tricks with a clear gain. Label smoothing is within noise (the 2x16 standard deviations are about 0.008). Mixup and EMA hurt. That pattern fits underfitting: regularizers fight memorisation, and this model has none to fight. Distilling from the big teacher (at T=1, on the labeled inputs plus 20,000 unlabeled ones) adds only 0.0077 for 2x16 and 0.0148 for 2x32. It takes the combination with more steps and fresh mixup inputs to match or beat training longer.
 
-Page runs (1,000 steps, width 16): baseline 0.5803, label smoothing 0.5846, mixup 0.5397, 4x longer 0.6909, EMA 0.351. That EMA collapse is the initial-weights effect described above: 37% of the shipped average is still the random init.
+Page runs (1,000 steps, width 16): baseline 0.5803, label smoothing 0.5846, mixup 0.5397, 4x longer 0.6909, EMA 0.351. That EMA collapse is the initial-weights effect described above: 37% of the shipped average is still the random init. At width 64 EMA also falls, from 0.8511 to 0.7082.
 
 The toy has 8,000 clean labels and no input noise, so it cannot show the regime where these regularizers usually help: big models on small or noisy datasets.
 
@@ -51,12 +51,12 @@ The toy has 8,000 clean labels and no input noise, so it cannot show the regime 
 
 - **EMA too slow for the run.** The decay must suit the step count: the average spans roughly `1 / (1 - ema)` steps. Start the shadow after a warm-up, or bias-correct it the way Adam corrects its moments.
 - **Mixup on an underfitting model.** It makes the training task harder. That helps only when the model can already fit the plain task.
-- **Label smoothing and distillation.** A smoothed model's probabilities carry less information about class similarity, which can make it a worse teacher. In the `teacher_smoothing` experiment, a 2x16 student distilled at T=4 reached 0.6398 from the plain teacher and 0.5738 from a teacher trained with smoothing 0.1, even though that teacher was more accurate (0.9216 vs 0.9139).
+- **Label smoothing and distillation.** A smoothed model's probabilities carry less information about class similarity, which can make it a worse teacher. In the `teacher_smoothing` experiment, a 2x16 student distilled at T=4 reached 0.6398 from the plain teacher and 0.5738 from a teacher trained with smoothing 0.1, even though that teacher was more accurate (0.9216 vs 0.9139). At T=1 the difference nearly vanishes (0.6714 vs 0.6696).
 - **Comparisons at unequal budgets.** "4x longer" uses 4x the compute. Compare tricks at matched steps before concluding that a trick works.
 
 ## Try this
 
-- Run **trick** = ema at **width** 16, then at **width** 64. The init's share of the average is the same 0.368 in both. See whether the wider net, which trains faster, suffers less.
+- Run **trick** = ema at **width** 16, then at **width** 64. The init's share of the average is 0.368 in both, so both lose accuracy. Compare how much.
 - Switch **trick** between label smoothing and mixup at **width** 64. See whether a wider model, closer to fitting the task, changes the sign.
 - Run **trick** = 4x longer at widths 4, 16 and 64. The gain from more steps should shrink as the model gets big enough to converge early.
 

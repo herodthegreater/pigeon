@@ -27,21 +27,36 @@ Scoring and pruning are done once: `sc = neuron_importance(t, probe.X, probe.y, 
 
 ## What the simulations show
 
-SIMS-TODO
+From `specialist_data` (bird AP on the full test set, mean of 2 seeds; the teacher gets 0.9885):
+
+| recovery inputs | pruned teacher 3x32 (recovered) | fresh specialist 2x16 |
+|---|---|---|
+| everything (28,000) | 0.9566 | 0.8800 |
+| birds only (1,403) | 0.9071 | 0.8745 |
+| birds + siblings | 0.9076 | 0.9097 |
+| birds + equal number of random others (2,806) | 0.9668 | 0.9148 |
+| birds + noise negatives (2,806) | 0.9572 | 0.8905 |
+| random 2,806, no bird filter | 0.9392 | 0.8585 |
+
+Positive-only recovery costs the carved model 0.05 AP (0.9566 → 0.9071). The fresh specialist loses almost nothing (0.8800 → 0.8745), even though it never saw a non-bird. A model carved out of the teacher starts with a boundary for "not bird", and bird-only data drags that boundary without anything to hold it in place. Adding the 3 sibling classes does not fix the carved model (0.9076), so the confusers alone are not the missing piece. A balanced set, birds plus the same number of random non-birds, is the best set for both models. It beats all 28,000 inputs while using a tenth of them. A random sample of the same size without the bird filter (about 5% birds) does worse, so the ratio of positives matters as well as the presence of negatives. Even Gaussian noise as negatives restores the carved model to 0.9572, because standardized noise falls in the same region as the real inputs.
+
+Page runs (fresh 2x16, 1,000 steps, one seed): everything 0.8256, birds only 0.7363, birds + random others 0.8836, birds + noise 0.7994. With a third of the training budget, the fresh model also suffers from bird-only data.
+
+The toy's "birds only" is purer than any real image set. Every input is a positive, with nothing else in it.
 
 ## When it breaks
 
 - **No negatives, no boundary.** Recovery trains the model only where data exists. On a bird-only set, nothing pins down the outputs for inputs far from birds, so what the model says about them is an accident of the init and the pruned weights.
 - **The carved model keeps old habits.** A pruned teacher starts with a decision boundary. Positive-only data can shift that boundary in ways nothing corrects, which a fresh model with no prior boundary does not have to unlearn.
-- **Fake negatives cover the wrong region.** Noise covers the input space evenly, but real confusers sit close to birds. Noise teaches "not everywhere", not "not a sibling".
+- **Fake negatives only work where they land.** Here standardized Gaussian noise happens to fall where real inputs live, so it works almost as well as real negatives for the carved model. In image space, random noise looks nothing like a real non-bird scene, so this result should not be expected to transfer.
 - **Many epochs on a small set.** With a fixed step budget, 1,403 inputs are seen far more often than 28,000, which can overfit the teacher's outputs on those exact points.
 
 ## Try this
 
-- Run **recovery inputs** = everything, then birds only. Compare `target_ap` and note how much the drop is for a fresh 2x16 model.
+- Run **recovery inputs** = everything, then birds only. This page trains a fresh 2x16 model. Compare its drop with the experiment's carved 3x32 model above.
 - Run birds + random others. It has the same bird count as birds only plus an equal number of negatives. Check whether it matches or beats everything with a tenth of the data.
 - Run birds + noise and compare with birds + random others. Same count, but fake negatives instead of real ones.
 
 ## Going further
 
-pigeon's recovery set (`build_finetune_set.py`) is 400 COCO images that contain birds, labelled in the model's 80-class space with bird = class 14. A detection image is not the same as a toy "bird input": every image also contains background, and a detector learns from the locations where no bird is. So pigeon's images are not purely positive in the way the toy set is. What the toy does say is that the choice of non-bird content matters, and that real negatives near the target are the most useful kind. For pigeon, adding COCO images with no birds, especially ones with other animals, is the analogue of "birds + random others". STATUS.md lists more training data (2k+ bird images) as the first lever for stronger recovery. The toy suggests checking what those images contain besides birds.
+pigeon's recovery set (`build_finetune_set.py`) is 400 COCO images that contain birds, labelled in the model's 80-class space with bird = class 14. A detection image is not the same as a toy "bird input": every image also contains background, and a detector learns from the locations where no bird is. So pigeon's images are not purely positive in the way the toy set is. What the toy does say is that the non-bird content matters. Here the best recipe was a balanced mix of positives and negatives drawn from everything else, not only near-confusers. For pigeon, adding a similar number of COCO images with no birds is the analogue of "birds + random others". STATUS.md lists more training data (2k+ bird images) as the first lever for stronger recovery. The toy suggests checking what those images contain besides birds.

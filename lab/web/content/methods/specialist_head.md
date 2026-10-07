@@ -30,15 +30,15 @@ From `specialist_size` (bird AP, mean of 3 seeds; the teacher gets 0.9885 and th
 
 | width | generalist 20-way, KD | binary, labels only | binary, KD | siblings head, KD | supers head, KD |
 |---|---|---|---|---|---|
-| 2 | 0.1640 | 0.5149 | 0.5086 | 0.3208 | 0.1820 |
-| 4 | 0.6170 | 0.8592 | 0.8677 | 0.5384 | 0.4680 |
-| 8 | 0.7376 | 0.9243 | 0.9302 | 0.8173 | 0.7054 |
-| 16 | 0.8455 | 0.9530 | 0.9627 | 0.9161 | 0.8804 |
-| 32 | 0.9406 | 0.9743 | 0.9813 | 0.9715 | 0.9631 |
+| 2 | 0.1286 | 0.5149 | 0.5086 | 0.3208 | 0.1820 |
+| 4 | 0.6475 | 0.8592 | 0.8677 | 0.5384 | 0.4680 |
+| 8 | 0.7397 | 0.9243 | 0.9302 | 0.8173 | 0.7054 |
+| 16 | 0.8619 | 0.9530 | 0.9627 | 0.9161 | 0.8804 |
+| 32 | 0.9544 | 0.9743 | 0.9813 | 0.9715 | 0.9631 |
 
-Specializing the head is a large win: a width-8 binary specialist (194 parameters) beats a width-16 generalist (820 parameters). But the richer heads lose to the plain binary head at every width, and the more outputs, the worse. At these sizes the hidden layers cannot afford to serve extra outputs, and the dark knowledge those outputs carry doesn't pay for the capacity they take. Distillation adds little over labels for the binary head (0.9302 vs 0.9243 at width 8). Width 2 is unstable: the standard deviation of the binary arms is about 0.33.
+Specializing the head is a large win: a width-8 binary specialist (194 parameters) beats a width-16 generalist (820 parameters). But the richer heads lose to the plain binary head at every width, and the more outputs, the worse. At these sizes the hidden layers cannot afford to serve extra outputs, and the dark knowledge those outputs carry doesn't pay for the capacity they take. Distillation adds little over labels for the binary head (0.9302 vs 0.9243 at width 8). Width 2 is unstable: the standard deviation of the binary arms is about 0.33. One mismatch to keep in mind: the generalist column is distilled at T=1 (`distill`'s default), the specialist heads at T=4 (`spec_distill`'s fixed setting). The specialist columns compare like with like. The generalist column does not quite.
 
-Page runs at width 4, one seed: generalist 0.5726, binary with labels 0.8073, binary with KD 0.8043, siblings 0.6088, supers 0.2698. The supers number is far below the 3-seed mean of 0.468, which shows how much one seed varies at this size.
+Page runs at width 4, one seed: generalist 0.6148, binary with labels 0.8073, binary with KD 0.8043, siblings 0.6088, supers 0.2698. The supers number is far below the 3-seed mean of 0.468, which shows how much one seed varies at this size.
 
 Superclasses in this world are weak structure. Class centres are spread 1.0 around superclass centres spread 1.2, and each class's modes are spread 2.5. So "sibling" knowledge may matter less here than it does for real birds against other animals.
 

@@ -26,34 +26,34 @@ Both are added to the KD loss with a weight, and both need the teacher's hidden 
 
 `SP._gram(h)` returns `A = h @ h.T`, the row norms `nrm`, and `A / nrm`. `SP.__call__` builds `Gs` and `Gt`, then `loss = ((Gs - Gt) ** 2).sum() / (N * N)`. `dG = 2 * (Gs - Gt) / (N * N)` is the gradient with respect to `Gs`. `dA = (dG - Gs * (Gs * dG).sum(1, keepdims=True)) / nrm` pushes it back through the row normalization: the subtracted term removes the part of `dG` that only changes a row's length, which normalization would undo anyway. Since `A = h hᵀ` uses `h` twice, `dh = (dA + dA.T) @ hs`.
 
-`run_feature_kd` in `lab/methods.py` uses `Hint(1, 2, w, 256, ...)` or `SP(1, 2, ...)`: student layer 1 (the last of its two hidden layers) against teacher layer 2 (the last of its three 256-wide layers). It trains labels only, KD, and KD plus your term.
+`run_feature_kd` in `lab/methods.py` distills at `distill`'s default `T = 1` and uses `Hint(1, 2, w, 256, ...)` or `SP(1, 2, ...)`: student layer 1 (the last of its two hidden layers) against teacher layer 2 (the last of its three 256-wide layers). It trains labels only, KD, and KD plus your term.
 
 ## What the simulations show
 
-`loss_zoo` (2x16 student, 3 seeds, 3000 steps; hint weight 0.05, SP weight 50):
+`loss_zoo` (2x16 student, 3 seeds, 3000 steps, KD at `T = 1`; hint weight 0.05, SP weight 50):
 
 | arm | accuracy |
 |---|---|
 | labels only | 0.6637 |
-| KD T=4 | 0.6398 |
-| KD + FitNets hint | 0.6395 |
-| KD + similarity-preserving | 0.6415 |
+| KD T=1 | 0.6714 |
+| KD + FitNets hint | 0.6719 |
+| KD + similarity-preserving | 0.6666 |
 | hint only (+labels) | 0.6223 |
 
-Neither term moves accuracy beyond seed noise (standard deviations here are 0.016-0.017), and a hint with labels but no KD is worse than labels alone. This page's runs (1000 steps, seed 0, width 16) agree: KD 0.5534; KD + SP at weight 1 gave 0.5540, at weight 50 gave 0.5580; KD + hint at weight 0.05 gave 0.5556, at weight 5 gave 0.5325.
+Neither term adds to plain KD beyond seed noise (standard deviations here are 0.004-0.010), and a hint with labels but no KD is worse than labels alone. This page's runs (1000 steps, seed 0, width 16) agree: KD 0.5854; KD + SP at weight 50 gave 0.5829, at weight 1 gave 0.5850; KD + hint at weight 0.05 gave 0.5897, at weight 5 gave 0.5116.
 
 A likely reason: forcing 16 student units to linearly predict 256 teacher units uses capacity the student needs for the task. The toy also lacks what makes these methods work on images: spatial feature maps, where "which region is active" is a cheap, transferable signal.
 
 ## When it breaks
 
-- The loss weight must be tuned to the term's natural scale. Here a hint works around 0.05 and SP around 50; the page default of 1.0 is far from the SP range.
-- Too large a hint weight crowds out the task (0.5325 at weight 5 above).
+- The loss weight must be tuned to the term's natural scale: here a hint works around 0.05 and SP around 50 (the page default).
+- Too large a hint weight crowds out the task (0.5116 at weight 5 above).
 - Which layers to pair is a guess; a hint at the wrong depth can fight the student's own solution.
 - SP depends on the batch: with very small batches the Gram matrix is a poor summary, and its cost grows as `N²`.
 
 ## Try this
 
-- Set **extra loss** to `sp` and **loss weight** to 50, the scale used in `loss_zoo`. Compare with weight 1.
+- Keep **extra loss** at `sp` and compare **loss weight** 50 (the scale used in `loss_zoo`) with 1 and 100.
 - Set **extra loss** to `hint` and sweep **loss weight** over 0.05, 0.5 and 5. Watch for the point where accuracy drops below plain KD.
 - Raise **student width** to 64 with `hint`; a wider student has capacity to spare.
 
