@@ -607,7 +607,9 @@ def run_tricks(p):
         m = train(net(hid, 0), OnlineSource(d.train.X, d.train.y, d.world.C, None),
                   [CE()], steps=STEPS)
     elif tr == "ema":
-        m = scratch(hid, 0, steps=STEPS, ema=0.999)
+        # average over roughly the last 10% of training; a 0.999 decay over a
+        # 1,000-step run would mostly average the untrained early weights
+        m = scratch(hid, 0, steps=STEPS, ema=1 - 10 / STEPS)
     else:
         m = scratch(hid, 0, steps=4 * STEPS)
     return result([row("baseline", scratch(hid, 0, steps=STEPS)), row(tr, m)])
@@ -713,10 +715,14 @@ def run_spec_data(p):
          "birds + random others": np.concatenate([bird, others]),
          "birds + noise": np.concatenate([bird, rng.standard_normal(bird.shape).astype(np.float32)])
          }[p["data"]]
-    m = S.spec_distill(S.spec_student(16, G["supers"].shape[1], 0), t, G["supers"], 0, X=X,
-                       steps=STEPS)
-    return result([teacher_row(), dict(label=f"2x16 specialist on '{p['data']}' ({len(X)})",
-                                       **S.spec_eval(m))], metric="target_ap")
+    def fit_on(Xs):
+        return S.spec_eval(S.spec_distill(S.spec_student(16, G["supers"].shape[1], 0), t,
+                                          G["supers"], 0, X=Xs, steps=STEPS))
+    rows = [teacher_row()]
+    if p["data"] != "everything":
+        rows.append(dict(label=f"2x16 specialist on everything ({len(X_all)})", **fit_on(X_all)))
+    rows.append(dict(label=f"2x16 specialist on '{p['data']}' ({len(X)})", **fit_on(X)))
+    return result(rows, metric="target_ap")
 
 
 # ===========================================================================

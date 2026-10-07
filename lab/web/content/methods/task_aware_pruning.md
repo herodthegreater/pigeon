@@ -16,26 +16,26 @@ Ordinary importance scores ask "which neurons matter for everything this network
 
 `collapse_head` copies the net. `norm = G / G.sum(0, keepdims=True)` divides each column of `G` by its group size, so `net.W[-1] @ norm` replaces the 256x20 output matrix with a 256xK one whose column `k` is the average of its member classes' weight columns. The bias is treated the same way. `net.masks[-1] = None` drops any output mask and `net.sizes[-1] = G.shape[1]` records the new width. For a group of one class (the bird) the column is copied unchanged, so the bird *logit* is exact. The bird *probability* still changes, because the softmax now runs over 8 averaged logits instead of 20. Averaging logits is not the same as summing probabilities, so merged groups start out wrong and need the recovery step.
 
-`run_task_prune` in `lab/methods.py` computes `sc` with `group=G["binary"]` (criterion "bird") or `None` ("all classes"). It prunes the 3x256 teacher to `[w] * 3`, collapses it to the 8-output `supers` head, and recovers a copy with `S.spec_distill(cut.copy(), t, G["supers"], 0, steps=FT, lr=FT_LR)`, which is KD at T=4 with the teacher's probabilities grouped. The `.copy()` matters: `spec_distill` trains its argument in place, so without it the "no recovery" row would be evaluated on the already-recovered network.
+`run_task_prune` in `lab/methods.py` computes `sc` with `group=G["binary"]` (criterion "bird") or `None` ("all classes"). It prunes the 3x256 teacher to `[w] * 3`, collapses it to the 8-output `supers` head, and recovers a copy with `S.spec_distill(cut.copy(), t, G["supers"], 0, steps=FT, lr=FT_LR)`, which is KD at T=1 with the teacher's probabilities grouped. The `.copy()` matters: `spec_distill` trains its argument in place, so without it the "no recovery" row would be evaluated on the already-recovered network.
 
 ## What the simulations show
 
-From `specialist_prune` (bird AP on the full test set; recovered arms are mean of 2 seeds and get the same 3,000 steps as the fresh specialist; teacher AP 0.9885):
+From `specialist_prune` (bird AP on the full test set; recovered arms are mean of 2 seeds, KD at T=1, and get the same 3,000 steps as the fresh specialist; teacher AP 0.9885):
 
 | keep width | all-class, none | bird, none | all-class, 20-way KD | all-class, collapsed + grouped KD | bird, collapsed + grouped KD | fresh 3xW specialist |
 |---|---|---|---|---|---|---|
-| 128 | 0.3660 | 0.7581 | 0.9901 | 0.9893 | 0.9866 | 0.9891 |
-| 64 | 0.1487 | 0.5333 | 0.9834 | 0.9863 | 0.9862 | 0.9866 |
-| 32 | 0.0823 | 0.4997 | 0.9611 | 0.9676 | 0.9566 | 0.9649 |
-| 16 | 0.0963 | 0.5097 | 0.8464 | 0.8723 | 0.8616 | 0.8931 |
-| 8 | 0.0980 | 0.5308 | 0.7040 | 0.4917 | 0.7560 | 0.7391 |
-| 4 | 0.0807 | 0.4403 | 0.5308 | 0.4317 | 0.4012 | 0.3903 |
+| 128 | 0.3660 | 0.7581 | 0.9901 | 0.9900 | 0.9864 | 0.9889 |
+| 64 | 0.1487 | 0.5333 | 0.9834 | 0.9879 | 0.9862 | 0.9873 |
+| 32 | 0.0823 | 0.4997 | 0.9611 | 0.9755 | 0.9679 | 0.9667 |
+| 16 | 0.0963 | 0.5097 | 0.8464 | 0.8950 | 0.8916 | 0.9079 |
+| 8 | 0.0980 | 0.5308 | 0.7040 | 0.6406 | 0.7289 | 0.7485 |
+| 4 | 0.0807 | 0.4403 | 0.5308 | 0.4885 | 0.4850 | 0.3796 |
 
-Task-aware scoring does exactly what it promises *before* recovery: at every width the bird-scored cut keeps around 0.44-0.76 bird AP, against 0.08-0.37 for the all-class cut. The two criteria pick different neurons. In the second hidden layer, the kept sets overlap by 55% at width 128, 33% at 64, 16% at 32, and 0% at 4. After a full recovery, though, the advantage mostly disappears. The bird-scored carve wins clearly only at width 8. At 16 and 32 the all-class carve recovers slightly better, and at 16 a fresh specialist of the same shape beats both. Collapsing the head and distilling only the grouped task helps over 20-way KD at widths 16-64, but not at the smallest widths.
+Task-aware scoring does exactly what it promises *before* recovery: at every width the bird-scored cut keeps 0.44-0.76 bird AP, against 0.08-0.37 for the all-class cut. The two criteria pick different neurons. In the second hidden layer, the kept sets overlap by 55% at width 128, 33% at 64, 16% at 32, and 0% at 4. After a full recovery the advantage mostly disappears. From width 16 up, the all-class carve recovers as well or slightly better, and the bird-scored carve wins clearly only at width 8 (0.7289 against 0.6406). At widths 8 and 16 a fresh specialist of the same shape beats both carves. Collapsing the head and distilling only the grouped task beats 20-way KD at widths 16-64 (0.8950 against 0.8464 at 16), but not at the smallest widths.
 
-Page runs (500 recovery steps, one seed; "no recovery" here is measured after the head collapse): width 16 with bird importance goes from 0.5068 to 0.7303, and with all-class importance from 0.1015 to 0.5404. At width 64: bird 0.5095 → 0.9653, all classes 0.1538 → 0.9547. With a short recovery budget, the better starting point still shows.
+Page runs (500 recovery steps, one seed; "no recovery" here is measured after the head collapse): width 16 with bird importance goes from 0.5068 to 0.7607, and with all-class importance from 0.1015 to 0.7187. At width 64: bird 0.5095 → 0.9694, all classes 0.1538 → 0.9736. With a short budget the better starting point still shows at width 16, but not at 64.
 
-So the toy's answer: task-aware importance matters most when recovery is short or impossible. With enough recovery data and steps, which neurons you kept matters less than how many.
+So the toy's answer: task-aware importance matters most when recovery is short or impossible. With enough recovery data and steps, *how many* neurons you keep matters more than *which*.
 
 ## When it breaks
 

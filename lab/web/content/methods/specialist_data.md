@@ -11,7 +11,7 @@ After you cut a generalist down to a bird specialist, it has to be fine-tuned ba
    - birds + an equal number of random non-birds.
    - birds + noise: birds plus the same number of random Gaussian vectors.
    - random: 2 x 1,403 inputs drawn without looking at the class.
-2. For each set, recover a specialist with grouped KD. The teacher's probabilities at T=4 are summed into 8 groups (bird, 3 siblings, 4 other superclasses), and the student matches them.
+2. For each set, recover a specialist with grouped KD. The teacher's probabilities (at T=1) are summed into 8 groups (bird, 3 siblings, 4 other superclasses), and the student matches them.
 3. Two specialists: the teacher pruned to 3x32 with bird-aware importance and a collapsed head, and a fresh 2x16 specialist trained only on the set.
 4. Score both by bird average precision (AP) on the shared 10,000-example test set, which has every class.
 
@@ -27,33 +27,33 @@ Scoring and pruning are done once: `sc = neuron_importance(t, probe.X, probe.y, 
 
 ## What the simulations show
 
-From `specialist_data` (bird AP on the full test set, mean of 2 seeds; the teacher gets 0.9885):
+From `specialist_data` (bird AP on the full test set, mean of 2 seeds, KD at T=1; the teacher gets 0.9885):
 
 | recovery inputs | pruned teacher 3x32 (recovered) | fresh specialist 2x16 |
 |---|---|---|
-| everything (28,000) | 0.9566 | 0.8800 |
-| birds only (1,403) | 0.9071 | 0.8745 |
-| birds + siblings | 0.9076 | 0.9097 |
-| birds + equal number of random others (2,806) | 0.9668 | 0.9148 |
-| birds + noise negatives (2,806) | 0.9572 | 0.8905 |
-| random 2,806, no bird filter | 0.9392 | 0.8585 |
+| everything (28,000) | 0.9679 | 0.8933 |
+| birds only (1,403) | 0.7971 | 0.7213 |
+| birds + siblings | 0.8856 | 0.8571 |
+| birds + equal number of random others (2,806) | 0.9620 | 0.9246 |
+| birds + noise negatives (2,806) | 0.9406 | 0.8835 |
+| random 2,806, no bird filter | 0.9271 | 0.8733 |
 
-Positive-only recovery costs the carved model 0.05 AP (0.9566 → 0.9071). The fresh specialist loses almost nothing (0.8800 → 0.8745), even though it never saw a non-bird. A model carved out of the teacher starts with a boundary for "not bird", and bird-only data drags that boundary without anything to hold it in place. Adding the 3 sibling classes does not fix the carved model (0.9076), so the confusers alone are not the missing piece. A balanced set, birds plus the same number of random non-birds, is the best set for both models. It beats all 28,000 inputs while using a tenth of them. A random sample of the same size without the bird filter (about 5% birds) does worse, so the ratio of positives matters as well as the presence of negatives. Even Gaussian noise as negatives restores the carved model to 0.9572, because standardized noise falls in the same region as the real inputs.
+Bird-only recovery is the worst set for both models: the carved model drops from 0.9679 to 0.7971, and the fresh one from 0.8933 to 0.7213 (with a large seed spread, 0.092). Negatives are what pins down where "bird" ends. Adding the 3 sibling classes, the closest confusers, recovers about half of the carved model's loss (0.8856). A balanced set of birds plus the same number of random non-birds nearly matches all 28,000 inputs for the carved model (0.9620) and beats it for the fresh one (0.9246 against 0.8933), with a tenth of the data. A random sample of the same size without the bird filter (about 5% birds) does worse than the balanced set, so the ratio of positives matters, not only the presence of negatives. Even Gaussian noise as negatives gets the carved model to 0.9406, because standardized noise falls in the same region as the real inputs.
 
-Page runs (fresh 2x16, 1,000 steps, one seed): everything 0.8256, birds only 0.7363, birds + random others 0.8836, birds + noise 0.7994. With a third of the training budget, the fresh model also suffers from bird-only data.
+Page runs (fresh 2x16, 1,000 steps, one seed): everything 0.8406, birds only 0.665, birds + random others 0.9055, birds + noise 0.7968.
 
 The toy's "birds only" is purer than any real image set. Every input is a positive, with nothing else in it.
 
 ## When it breaks
 
 - **No negatives, no boundary.** Recovery trains the model only where data exists. On a bird-only set, nothing pins down the outputs for inputs far from birds, so what the model says about them is an accident of the init and the pruned weights.
-- **The carved model keeps old habits.** A pruned teacher starts with a decision boundary. Positive-only data can shift that boundary in ways nothing corrects, which a fresh model with no prior boundary does not have to unlearn.
+- **Inherited boundaries drift too.** A pruned teacher starts with a decision boundary, but bird-only data drags it with nothing to hold it in place. In the experiment the carved model lost as much bird AP (0.17) as the fresh one.
 - **Fake negatives only work where they land.** Here standardized Gaussian noise happens to fall where real inputs live, so it works almost as well as real negatives for the carved model. In image space, random noise looks nothing like a real non-bird scene, so this result should not be expected to transfer.
 - **Many epochs on a small set.** With a fixed step budget, 1,403 inputs are seen far more often than 28,000, which can overfit the teacher's outputs on those exact points.
 
 ## Try this
 
-- Run **recovery inputs** = everything, then birds only. This page trains a fresh 2x16 model. Compare its drop with the experiment's carved 3x32 model above.
+- Run **recovery inputs** = everything, then birds only. This page trains a fresh 2x16 model. Compare its drop with the experiment's numbers above.
 - Run birds + random others. It has the same bird count as birds only plus an equal number of negatives. Check whether it matches or beats everything with a tenth of the data.
 - Run birds + noise and compare with birds + random others. Same count, but fake negatives instead of real ones.
 

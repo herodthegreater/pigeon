@@ -301,7 +301,8 @@ The two tricks that work for a capacity-starved model both change
 over-parameterized version and multiply the extra matrices back in (the
 collapsed network is exactly the same size). Regularizers (mixup, EMA,
 self-distillation) hurt at a fixed budget, because the model is underfitting,
-not overfitting. The best 2×32 combines the teacher, the unlabeled pool,
+not overfitting. (EMA used a 0.999 decay over 3,000 steps, which still leans on
+fairly early weights; a decay matched to the run length would hurt less.) The best 2×32 combines the teacher, the unlabeled pool,
 consistent online augmentation and a longer schedule (0.861).
 
 **Train big, then compress** (`train_big_then_compress`). Not in this regime:
