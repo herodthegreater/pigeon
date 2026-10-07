@@ -1,7 +1,8 @@
 """First real accuracy curve: sweep the doubt-dial (bit-width) on the detector
 and measure bird mAP@50 on the fixed COCO bird set at each level.
 
-    python carve.py
+    python carve.py                          # YOLOv8n, the cockpit's model
+    python carve.py --weights yolo11n.pt     # the original YOLO11n curve
 
 This uses fake-quantization (accuracy changes, size/speed don't yet). Channel
 pruning -- which also moves size/speed -- lands next, behind the same seam.
@@ -23,23 +24,28 @@ EVAL_ROOT = "eval_set"
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--weights", default="yolov8n.pt")
     ap.add_argument("--group-size", type=int, default=None,
                     help="weights sharing one scale (None = whole tensor)")
-    ap.add_argument("--skip", nargs="*", default=[],
+    # the DFL conv's weights are the fixed bin positions 0..15 used to decode
+    # box edges, not learned weights; a real quantized export keeps them as is
+    ap.add_argument("--skip", nargs="*", default=[".dfl."],
                     help="module-name substrings to keep at native precision")
     args = ap.parse_args()
 
     device = "mps" if torch.backends.mps.is_available() else "cpu"
-    yolo = YOLO("yolo11n.pt")
+    yolo = YOLO(args.weights)
     yolo.model.to(device).eval()
-    # Warm up so conv+bn fuse before we snapshot/carve.
+    # Fuse explicitly before we snapshot/carve: some Ultralytics versions'
+    # predict() fuses only a private copy, leaving yolo.model unfused.
+    yolo.model.fuse(verbose=False)
     yolo.predict(source=EVAL_ROOT + "/images/val", classes=[14],
                  conf=0.25, device=device, verbose=False, stream=True).__next__()
     snap = snapshot(yolo.model)
 
     ev = BirdmAPEvaluator(EVAL_ROOT, device=device)
     print(f"eval: {ev.name} on {len(ev.images)} images / {ev.n_gt} birds")
-    print(f"config: group_size={args.group_size}  skip={args.skip or 'none'}\n")
+    print(f"config: {args.weights}  group_size={args.group_size}  skip={args.skip or 'none'}\n")
 
     print(f"{'bits':>4}  {'bird mAP@50':>11}  {'vs native':>10}")
     print("-" * 32)

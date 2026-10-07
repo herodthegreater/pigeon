@@ -15,8 +15,9 @@ import fiftyone.zoo as foz
 import yaml
 from ultralytics import YOLO
 
-OUT = "/Users/jarodferkin/Projects/pigeon/finetune_data"
-NAMES = [YOLO("yolov8n.pt").names[i] for i in range(80)]  # COCO order; bird=14
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(HERE, "finetune_data")
+NAMES = [YOLO(os.path.join(HERE, "yolov8n.pt")).names[i] for i in range(80)]  # COCO order; bird=14
 
 
 def pull(split, n, name):
@@ -34,8 +35,10 @@ def main() -> None:
                   label_field="ground_truth", classes=NAMES, split=split)
 
     with open(os.path.join(OUT, "data.yaml"), "w") as f:
+        # no "path" key: Ultralytics then resolves the splits next to this
+        # yaml, so the repo can move without regenerating the dataset
         yaml.safe_dump(
-            {"path": OUT, "train": "images/train", "val": "images/val",
+            {"train": "images/train", "val": "images/val",
              "names": {i: n for i, n in enumerate(NAMES)}},
             f, sort_keys=False,
         )
