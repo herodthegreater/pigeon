@@ -172,6 +172,55 @@ scale per group (or per tensor), and keeps biases and the DFL at 16-bit: group
 128 at 8 / 6 / 4 bits = 3.21 / 2.42 / 1.63 MB (was 3.15 / 2.36 / 1.58), of a
 6.30 MB fp16 fused model.
 
+## Precision lab + honesty pass (cockpit v3)
+Trigger: "only one or two kinds of quantizing didn't break the whole thing" —
+on the old cockpit, 4/3/2/1-bit all read mAP 0.000 with no explanation and no
+way forward. Verified on a VOC-2007 bird stand-in set (cloud session, CPU):
+native 0.8357 on the 40-img live set; relative numbers below.
+
+**Bugs found by playing the site (fixed):**
+- **Head was cuttable.** `stage_table` excluded `model.23` (YOLO11's head); on
+  YOLOv8n the head is `model.22`, so "Scan → Apply cut" suggested cutting the
+  Detect head (zeroing DFL bins + class logits) while Export never prunes it.
+  Now found dynamically (`head_stage`).
+- **Nothing was actually fused** (in the cloud session's Ultralytics 8.4.x).
+  There `predict()` fused a private *copy* and `yolo.model` stayed unfused; on
+  8.4.104 on the M4 it fuses in place, so it depends on the version. So masking left BN's shift alive (a
+  "masked" channel emitted a constant, not zero) and quantization rounded pre-BN
+  weights. Now `fuse(yolo)` is explicit (server, recover job, carve, sweep), and
+  masking zeros weight rows **and** the folded bias.
+- **Stride-2 FLOPs were 4x inflated.** `stage_table` counted MACs at the conv's
+  *input* resolution; stride-2 stages (L1/3/5/7/16/19) looked 4x more expensive,
+  skewing the glow and value ranking. The head is ~41% of conv compute.
+- **Compute estimate under-counted coupling.** Replaced the per-stage share sum
+  with `active_cost`: one hooked forward that counts only live in/out channels.
+  L15/16/19 @20%: estimate 94.9% vs real Export 95% (old estimate: 97.7%).
+- **Levers didn't stack.** Quantizing cleared masks; measuring a cut discarded
+  quantization. Now one recipe `{masks, quant}` drives every measurement.
+- Recover's "done" set the scoreboard to *native* mAP; now shows the real
+  before → after on the cockpit metric. Build scripts had `/Users/...` paths.
+
+**Findings (4-bit, fused, % of native):** INT/tensor 0 · INT/channel 16 ·
+INT/group32 59 (4.5 b/w) · **FP4 (E2M1)/channel 79** · FP4 + L0–L2@8 **92**
+(4.04 b/w) · FP4 + L0–L4@8 93 (4.13 b/w). Per-stage 4-bit scan: L0–L4 hold ~3%
+of weights but most of the fragility; head (28% of weights) ~indifferent.
+MSE clipping *hurts* (FP4 79→18, INT5 83→67). 3-bit post-training ≈ 0 with any
+protection. **QAT** (quantizer in the fine-tune loop, STE): 3-bit FP + L0–L4@8
+(3.16 b/w), cockpit metric **0.003 → 0.584 (70% of native) in 3 CPU epochs**
+(val curve 0.24 → 0.43 → 0.48). The regrow lever works on precision too.
+Structure with true masking is harsh: scan @10% says L7/L16/L19 are ~free;
+most other stages are load-bearing; one-shot cuts buy ~1–2% compute before the
+cliff. Masked preview vs real Export (L15/16/19 @20%): 26% vs 13% of native
+— with per-conv L1 masking; masking now uses Export's own plan and matches it
+(see "Masking = Export" above).
+
+**Built:** `harness/precision.py` (granularity, INT/FP levels, clip, per-stage
+bits, storage accounting, microscope, QAT); cockpit v3 UI — sticky live
+readout (scoreboard w/ bits/weight, detection preview, clickable frontier),
+precision lab (ladder memory, scheme knobs, microscope, mixed-precision grid
+with fragility scan + auto-mix, confession-curve overlay), missions (10),
+QAT-aware Regrow, Export reports real pre-regrow mAP.
+
 ## Design consequences (locked)
 - Auto-prune "training mode" = prune -> fine-tune -> test, repeat.
 - Interactive demo value = "how small can I shrink while regrowing mAP back",
@@ -184,10 +233,18 @@ scale per group (or per tensor), and keeps biases and the DFL at 16-bit: group
 1. **Stronger recovery** (loop is proven; now push the number up): more train
    data (2k+ bird imgs), more epochs, and/or iterative small prunes with
    fine-tuning between each cut — target mAP back near native 0.43.
-2. Snap channel counts to multiples of 8.
-
-(Per-stage control, compute-weighted columns and the web cockpit are done. On
-v8n the head is ~41% of conv MACs, then L4 and L6 at 7.2% each.)
+2. Wire **auto-shrink** into the cockpit (the iterative re-prune bug is fixed,
+   see above): scan → cut top-value → regrow → re-scan, as a button, plotted
+   on the frontier.
+3. **Real low-bit export**: pack weights + scales (e.g. ONNX/QDQ or a custom
+   int/FP4 blob) so the size readout becomes a measured file size.
+4. **Activation quantization** (weights-only today): calibrate per-tensor
+   activation scales; the microscope and scan extend naturally.
+5. Snap channel counts to multiples of 8 on Export (`round_to=8`).
+6. Auto-mix ranks stages by a one-at-a-time scan, which ignores interactions;
+   at <=3 bits protecting stages one by one never revives the model. Try a
+   leave-one-out ranking (all at N bits except one stage at 8) or a budgeted
+   bit-allocation search, and hand off to QAT automatically when PTQ stalls.
 
 ## Env
 Shared venv: `../weight-harness/.venv` (torch, transformers, ultralytics,

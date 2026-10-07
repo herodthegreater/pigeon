@@ -1,12 +1,18 @@
 # pigeon — roadmap
 
 ## Now: the pigeon reverse-training cockpit
-Functional demo over the real `yolo11n`:
-- Node-grid UI, 20 nodes/column = 5% each, FLOP-weighted columns, snap-to-8.
-- Live-mask preview (instant accuracy) → **Apply** does real dependency-aware
-  removal (`torch-pruning`) + re-benchmark (real latency/FLOPs) + **Undo**.
-- Real fine-tuning (bonsai regrow) in settings.
-- Auto-prune "training mode": shrink until the metric drops past a threshold.
+Functional over the real `yolov8n` (see STATUS for what's verified):
+- [x] Node-grid UI, 20 nodes/column = 5% each, FLOP-weighted columns.
+- [x] Live-mask preview (real accuracy, live-channel compute) → **Export** does
+  real dependency-aware removal + re-benchmark + real pre-regrow mAP.
+- [x] Real fine-tuning (bonsai regrow) — and QAT when the recipe quantizes.
+- [x] One stackable recipe (masks + quant) behind every measurement.
+- [x] Precision lab: granularity, INT/FP levels, clipping, mixed precision
+  (fragility scan + auto-mix), microscope, confession curves.
+- [x] Detection preview ("through the model's eyes"), frontier, missions.
+- [ ] Auto-shrink "training mode": scan → cut → regrow → repeat until the metric
+  drops past a threshold (blocked on the iterative re-prune bug).
+- [ ] Snap-to-8 channels on Export; Undo; real packed low-bit export.
 
 ## Phase 2 (PARKED, but keep the door open): LLM benchmark track
 Take a large-ish LLM, reverse-train it with the *same harness* (`weight-harness/` is

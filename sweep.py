@@ -4,8 +4,8 @@ detection survives as precision drops. The vision twin of the LLM smoke test.
     python sweep.py --source samples/birds.jpg
     python sweep.py --source samples/birds.jpg --group-size 64 --skip model.23
 
-We warm up (which fuses conv+bn) *before* snapshotting, so the weights we
-carve are exactly the ones that run at inference.
+We fuse conv+bn *before* snapshotting, so the weights we carve are exactly
+the ones that run at inference.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import argparse
 import torch
 from ultralytics import YOLO
 
-from harness.model import apply_uniform, restore, snapshot
+from harness.model import apply_uniform, fuse, restore, snapshot
 
 BIRD = 14  # COCO 'bird'
 LADDER = [16, 8, 6, 4, 3, 2, 1]
@@ -48,10 +48,8 @@ def main() -> None:
 
     yolo = YOLO(args.model)
     yolo.model.to(args.device).eval()
-    # Warm up first: this fuses conv+bn in place, so snapshot/carve act on the
-    # exact weights inference uses.
-    yolo.predict(source=args.source, classes=[BIRD], conf=args.conf,
-                 device=args.device, verbose=False)
+    # Fuse first, so snapshot/carve act on the exact weights inference uses.
+    fuse(yolo)
     snap = snapshot(yolo.model)
 
     print(f"\n{'bits':>4}  {'birds':>5}  {'mean_conf':>9}   carved modules")

@@ -58,7 +58,7 @@ COCO bird set, measured on an M4, unless a row says otherwise.
 
 | Operation | Effect on the model | Effect on accuracy |
 |---|---|---|
-| **Quantize** (fewer bits/weight) | smaller on disk | **graceful** — ~free at 8-bit, −9% at 6-bit with per-group scales, collapses at 4-bit |
+| **Quantize** (fewer bits/weight) | smaller on disk | **graceful, then a cliff** — ~free at 8-bit, −9% at 6-bit with per-group scales, naive rounding collapses at 4-bit… but the cliff can be pushed back (see below) |
 | **Structural prune** (remove channels) | smaller **and** faster | **a cliff** — even a 5% one-shot cut drops mAP to 0.000 |
 | **Prune + fine-tune** (cut then regrow) | smaller and faster | **recovers** — a pruned model climbs back toward native |
 
@@ -80,7 +80,7 @@ weights.
 
 Takeaways that shaped the tool:
 
-- **Quantization degrades gracefully**, so there's free precision headroom.
+- **Quantization has headroom**, and more of it than naive rounding suggests.
 - **Structural removal is all-or-nothing without regrowth** — removing whole
   channels severs feature pathways the rest of the network depends on. So the
   auto-shrink loop must be *prune → fine-tune → test*, never *prune → test*.
@@ -93,6 +93,40 @@ Takeaways that shaped the tool:
   the **MAC/param** reduction, which pays off on edge hardware — so the UI
   reports both, and never leans on Mac latency alone.
 
+### Pushing the precision cliff back
+
+Uniform 4-bit rounding kills YOLOv8n (only 8/16-bit, and 6-bit at a push,
+"didn't break the whole thing"). The precision lab shows *why* and what fixes
+it. Measured in the cockpit on the fused model, % of native bird mAP@50
+(40-image live set; this table was produced on a VOC-2007 bird set, so read the
+*relative* numbers):
+
+| 4-bit recipe | bits/weight (incl. scales) | mAP vs native |
+|---|---|---|
+| INT, one scale for the whole tensor | 4.00 | 0% |
+| INT, one scale per output channel | 4.03 | 16% |
+| INT, one scale per 32 weights | 4.50 | 59% |
+| **FP4** levels (E2M1), per channel | 4.03 | **79%** |
+| FP4 + L0–L2 kept at 8-bit (auto-mix) | 4.04 | **92%** |
+| FP4 + L0–L4 kept at 8-bit | 4.13 | 93% |
+| FP4, per channel, **MSE-clipped** range | 4.03 | 18% |
+
+- **Put the levels where the weights are.** Weights are bell-shaped; FP4's grid
+  is dense near zero and sparse in the tails. Same bits, 16% → 79%.
+- **Fragility isn't where the weight is.** Quantizing one stage at a time shows
+  L0–L4 hold ~3% of the weights but most of the sensitivity, while the head
+  (28% of weights) barely notices 4-bit. Protecting the tiny early stages costs
+  ~0.01–0.1 bits/weight and buys back most of the accuracy.
+- **Count effective bits.** Every shared scale is 16 bits of metadata: groups of
+  32 are really 4.5 bits/weight, groups of 16 are 5.
+- **Measure the task, not a proxy.** Clipping the range to minimize weight MSE
+  *lowers* accuracy (FP4: 79% → 18%; INT5: 83% → 67%) — it flattens the rare
+  large weights that matter most.
+- **Below ~3.5 bits, post-training rounding can't save it** — even with
+  protected stages, 3-bit scores ~0. Regrowing with the quantizer in the loop
+  (QAT, now wired into the Regrow lever) took that same 3.16-bit recipe from
+  0% to **70% of native in 3 epochs** on CPU.
+
 Full running log of findings and gotchas lives in [`STATUS.md`](STATUS.md).
 
 ---
@@ -100,42 +134,71 @@ Full running log of findings and gotchas lives in [`STATUS.md`](STATUS.md).
 ## The reverse-training cockpit (the flagship)
 
 A local web app (`server.py` + `static/index.html`) that makes the whole loop
-tactile.
+tactile. Every lever writes into **one recipe** — `{masks, quant}` — so they
+stack, and every accuracy number is the **real** mAP of that combined model.
 
 ```
-┌ node grid ────────────────────────────────┐  ┌ panel ───────────────┐
-│ L0  L1  L2  L3 … L21   (real YOLOv8n stages)│  │ bird mAP@50   0.3465 │
-│ ▓▓  ▓▓  ▓▓  ▓▓        each column = 20 nodes │  │ compute    4.40 GMAC │
-│ ▓▓  ▓▓  ▓▓  ▓▓        1 node = 5% of channels│  │ ▶ Measure mAP        │
-│ ░░  ▓▓  ░░  ▓▓        brighter = more compute│  │ ⤓ Export real model  │
-│ ░░  ▓▓  ░░  ▓▓        red = masked/removed   │  │ 🌱 Export + Recover  │
-└────────────────────────────────────────────┘  └──────────────────────┘
+┌ levers ─────────────────────────────────────────┐ ┌ live readout (sticky) ──┐
+│ 🎯 Missions   10 challenges, auto-checked        │ │ bird mAP@50  0.7804 93% │
+│ 🎚️ Precision  bits ladder (remembers each result)│ │ size 1.64MB  4.13 b/w   │
+│    scale: tensor|channel|group · levels: INT|FP  │ │ compute 4.39G           │
+│    🔬 microscope  🧩 mixed precision  📈 curves   │ │ 🐦 through the model's  │
+│ ✂️ Structure  scan → value-ranked cut, node grid │ │    eyes: boxes on photos│
+│ 🌱 Regrow     fine-tune (+ QAT if quantized)     │ │ 📉 your frontier        │
+└──────────────────────────────────────────────────┘ └─────────────────────────┘
 ```
 
-Each **column is a real stage** of the network (the detection head, L22, is not
-a column: Export never prunes it); each column is **20 nodes = 5%** of that
-stage's channels; columns **glow in proportion to the compute (MACs)** they
-burn, so you attack the expensive stages first. The head alone is ~41% of
-YOLOv8n's conv compute, so the 16 columns cover the other ~59%. The four actions:
+**The live readout** (right, sticky) shows the recipe's real mAP, estimated
+size (weights + scale metadata), true bits/weight, and compute; a **"through
+the model's eyes"** photo panel with the live model's boxes against the ground
+truth (found / missed / false alarms, with the native model as a ghost); and
+**your frontier** — every recipe you measure is a dot on size-or-compute vs.
+mAP, the Pareto line is drawn, and clicking a dot reloads that recipe.
 
-- **Click nodes** → *mask* those channels (zero exactly the channels Export
-  would remove). Instant, reversible, never crashes. Compute saved is the exact
-  MAC count of the model Export would produce.
-- **▶ Measure mAP** → runs the **real** detector on bird images and reports the
-  **real** `mAP@50` (~1.2 s). This is measured, not estimated — you see exactly
-  which stages the task is sensitive to.
-- **⤓ Export real model** → performs **real, dependency-aware channel removal**
-  honoring your per-column cuts, measures the genuinely-smaller model
-  (params / MACs / latency), and saves it to `runs/pigeon_pruned.pt`.
-- **🌱 Export + Recover** → prunes **and then fine-tunes** the pruned model in a
-  background job, streaming per-epoch `mAP` back to the panel so you watch
-  accuracy **climb off the cliff**, then saves the recovered model.
+**🎚️ Precision** — the bits ladder (16 → 1) measures on click and remembers the
+result under each button for the current scheme. Three scheme knobs:
+*scale shared by* (tensor / channel / group 32 / group 16, with the metadata
+cost shown), *level spacing* (INT even grid vs. FP minifloat grid — E2M1 at
+4-bit), and *range* (fit max vs. MSE clip). A contextual hint explains each
+collapse and suggests the next experiment. Three tabs:
+
+- **🔬 Microscope** — one scale-sharing row of a stage's native weights, drawn
+  as dots with lines to where each one snaps; zeroed weights in red, clipped in
+  orange, representable levels as ticks. Plus SQNR, % rounded to zero, distinct
+  values, and true cost. At 2-bit you watch ~96% of a layer become zero.
+- **🧩 Mixed precision** — per-stage bit cells over a bar of each stage's weight
+  share. **Scan fragility** quantizes one stage at a time and colours them;
+  **Auto-mix** starts everything at the dial's bits and promotes stages to 8-bit
+  in order of fragility-per-weight until mAP reaches your goal, logging each
+  step live.
+- **📈 Confession curves** — sweep all bit-widths for the current scheme and
+  overlay up to six schemes on one chart.
+
+**✂️ Structure** — each column is a real stage; each column is **20 nodes = 5%**
+of that stage's channels; columns glow with their share of the model's MACs. **Scan** probes
+each stage (mask 10%, measure), badges it safe/careful/costly, and suggests the
+best value cuts. Clicking nodes masks exactly the channels Export would remove
+and re-measures automatically.
+The detection head is excluded (it writes the boxes, and Export never prunes it).
+
+**🌱 Regrow** — fine-tunes the recipe in a background process. Cuts are pruned
+for real first; if the recipe quantizes, the quantizer rides inside the training
+loop (QAT, straight-through gradients) so the network learns to live on the
+coarse grid. Reports before → after on the scoreboard's own metric.
+
+**⤓ Export** — real dependency-aware channel removal, measured (params, MACs,
+latency **and real mAP before regrow**), saved to `runs/pigeon_pruned.pt`.
+
+**🎯 Missions** — ten challenges that walk the lessons: *Free lunch* (8-bit),
+*Find the cliff*, *Look closer* (microscope), *Float beats int*, *Protect the
+fragile*, *Scientist* (compare curves), *Surgeon* (a free structural cut),
+*Stack the levers*, *Phoenix* (regrow), *Pigeon legend* (≤3.2 bits via QAT).
+Progress is kept in the browser.
 
 ### Why two layers (masking vs. real removal)
 
 The cockpit deliberately separates a **cheap, live editing layer** from an
-**expensive, real commit** — the same "edit-cheaply, bake-for-real" split used
-for quantization:
+**expensive, real commit**:
 
 - **Masking** (zeroing channels) leaves tensor shapes unchanged, so it's always
   safe and instantly reversible, and its accuracy is **the same** as really
@@ -143,16 +206,29 @@ for quantization:
   remove (whole dependency groups, e.g. both sides of a residual add), then
   zeroes each one's weights *and* bias, so the channel outputs SiLU(0) = 0
   exactly as if it were gone. Masked and exported mAP match to 4 decimals on
-  every cut tested (see `STATUS.md`). It does *not* shrink the file or change
-  speed.
+  every cut tested (see `STATUS.md`). The compute/size readout counts the
+  channels that would really disappear, including downstream inputs. Masking
+  does *not* shrink the file or change speed.
 - **Export** actually deletes the channels (via `torch-pruning`), which is what
   makes the model smaller/faster — but is slower, structurally constrained, and
   needs fine-tuning after. You only pay that cost when you commit.
 
-So you explore with masking (real accuracy feedback, zero risk) and commit with
-Export/Recover (real artifact).
+### Web edition (no server)
 
----
+`build_web.py` packs the fused YOLOv8n (fp16 weights), its layer graph, and 32
+eval photos into `web/`, and assembles `web/index.html`: the same cockpit, with
+the detector running **in the browser** via TensorFlow.js (WebGL).
+`web/engine.js` is a line-for-line port of the forward pass, Ultralytics NMS,
+the AP@50 scorer, masking and the precision lab. Its raw head outputs match
+PyTorch to 1e-4, and its mAP matches the Python harness to four decimals on
+every recipe tested. It measures at 416 px on 32 photos, so its numbers differ
+a little from the server's (640 px, 40 photos). Training and real channel
+removal can't run in a tab, so Regrow and Export replay recorded server runs.
+
+```bash
+python build_web.py                      # -> web/index.html + model.json + weights.txt + photos/
+python -m http.server -d web 8765        # open http://localhost:8765
+```
 
 ## Architecture & components
 
@@ -161,8 +237,9 @@ Export/Recover (real artifact).
 | File | Responsibility |
 |---|---|
 | `quant.py` | **The doubt-dial.** `fake_quantize(w, bits, group_size)` rounds a tensor to the values an *N*-bit encoding could store, then leaves it in float. A forward pass through fake-quantized weights is numerically identical to a real quantize-then-dequantize path, so accuracy measured here transfers exactly to a real export. Handles 1-bit (binary) through 16-bit; the *scale* is shared per group (a per-weight scale is a no-op). |
-| `model.py` | Applies the dial across a whole model: `snapshot`/`restore` (weights and biases, so quantization and masking both undo without reloading), `apply_uniform` (with a `skip` list; the cockpit and `carve.py` spare the DFL's fixed bin positions). Quantizable modules are `Conv2d`, `Linear`, `Embedding` — the vision retarget was literally adding `Conv2d`. |
-| `mask.py` | **The live UI layer.** `stage_table` runs one forward with hooks to get each stage's channel count and share of the model's MACs (counted at each conv's *output* resolution), excluding the head (derived from the model: `model.22` on YOLOv8n). `apply_plan` zeroes the weight and bias of the channels `prune.removal_plan` lists, which reproduces the exported model. |
+| `precision.py` | **The precision lab.** `quantize_weight(w, bits, granularity, levels, clip)` — scales per tensor / output channel / in-channel group, INT or FP (minifloat, e.g. E2M1) level grids, max-fit or MSE-clipped range. `apply_precision` applies a default bit-width plus per-stage overrides (mixed precision) and returns honest storage accounting (weight bits + scale bits → effective bits/weight). `inspect_weights` feeds the microscope. `QATConv2d` / `enable_qat` put the quantizer inside training with straight-through gradients. |
+| `model.py` | Applies the dial across a whole model: `fuse` (fold BN into convs, explicitly — depending on the Ultralytics version, `predict()` fuses in place or only a private copy), `snapshot`/`restore` (weights + biases), `apply_uniform` (with a `skip` list; `carve.py` spares the DFL's fixed bin positions). Quantizable modules are `Conv2d`, `Linear`, `Embedding` — the vision retarget was literally adding `Conv2d`. |
+| `mask.py` | **The live UI layer.** `stage_table` runs one forward with hooks to get each stage's channel count and share of the model's MACs (counted at each conv's *output* resolution), excluding the head (derived from the model: `model.22` on YOLOv8n). `apply_plan` zeroes the weight and bias of the channels `prune.removal_plan` lists, which reproduces the exported model. `active_cost` counts the MACs/weights of only the live channels — what that export keeps. |
 | `prune.py` | **Real structural removal.** Ports `torch-pruning`'s official YOLOv8 recipe: swaps Ultralytics' `C2f` for a traceable `C2f_v2` (splitting the `chunk()` the tracer can't follow), sets `requires_grad` so the autograd trace sees every layer, then prunes in *train* mode with the `Detect` head ignored. `structured_prune` (same ratio for every group, local L2 ranking), `structured_prune_per_stage` (honors the UI's per-column fractions via `pruning_ratio_dict`) and `removal_plan` (which channels that would remove, without removing them). |
 | `evaluate.py` | **The accuracy backbone.** `BirdmAPEvaluator` computes single-class `AP@0.50` (VOC all-points interpolation) by treating every ground-truth box as "bird" and asking the detector for COCO class 14 — sidesteps label-space mismatches and is fast enough for the live loop (`max_images` subsets it). Defined behind an `Evaluator` interface so a different task/metric drops in. |
 
@@ -175,16 +252,16 @@ reverse-trains both (see *Provenance* below).
 
 | File | Responsibility |
 |---|---|
-| `server.py` | FastAPI backend. Loads YOLOv8n once in its prunable `C2f_v2` form, fuses it, snapshots native weights, and serves: `GET /api/structure` (grid + native stats), `GET /api/sensitivity` (probe every stage), `POST /api/apply` (mask → real mAP + the exact MACs/params Export would give), `POST /api/quantize` (fake-quantize → real mAP + estimated size, per-group scales included), `POST /api/export` (real per-stage removal → measured + saved model), `POST /api/recover` + `GET /api/recover_status` (start/poll a fine-tune job), `POST /api/reset`. Compute is reported in **GMACs** (1 MAC = 2 FLOPs). All paths are absolute so it runs from any cwd. |
-| `static/index.html` | The self-contained node-grid UI (vanilla JS, dark "terminal" theme, responsive). Renders the compute-weighted grid, handles clicks → masks, and drives Measure / Export / Recover with live polling. |
-| `recover_job.py` | The recovery **subprocess** (run detached to avoid MPS/threading/signal issues). Prunes per the masks, measures the pruned model's mAP (the first point of the curve), fine-tunes it via Ultralytics' `DetectionTrainer`, and streams per-epoch `mAP` to a JSON file the server polls. |
+| `server.py` | FastAPI backend. Loads YOLOv8n once in its prunable `C2f_v2` form, fuses it, snapshots native weights, keeps the current **recipe** `{masks, quant}`, and serves: `GET /api/structure` (grids + native stats), `POST /api/measure` (apply a recipe — masks zero exactly what Export removes — → real mAP + estimated size/bits/compute; `commit:false` for what-ifs), `GET /api/sensitivity` (structure scan), `POST /api/precision_scan` (fragility per stage at N bits), `GET /api/inspect` (microscope), `GET /api/preview` + `/api/preview_img/{i}` (live boxes on eval photos), `POST /api/export` (real per-stage removal → measured + saved), `POST /api/recover` + `GET /api/recover_status` (start/poll a regrow job), `POST /api/reset`. Compute is in **GMACs** (1 MAC = 2 FLOPs). All paths are absolute so it runs from any cwd. |
+| `static/index.html` | The self-contained cockpit (vanilla JS + inline SVG, dark "terminal" theme, responsive): missions, precision lab (ladder, scheme knobs, microscope, mixed-precision grid, confession curves), structure grid, regrow, and the sticky live readout (scoreboard, detection preview, frontier). |
+| `recover_job.py` | The regrow **subprocess** (run detached to avoid MPS/threading/signal issues). Prunes per the masks, enables QAT if the recipe quantizes, fine-tunes via Ultralytics' `DetectionTrainer`, streams per-epoch `mAP` to a JSON file the server polls, and scores before/after with the cockpit's own metric. |
 
 ### Command-line experiments (each reproduces one finding)
 
 | Script | What it does |
 |---|---|
 | `benchmark.py` | Baseline yardstick: params, on-disk size, latency/FPS on this machine. |
-| `carve.py` | Quantization confession curve — bird `mAP@50` vs. bit-width (16→1), with `--weights` (YOLOv8n by default), `--group-size` and `--skip` (DFL spared by default). Shows the graceful degradation and what per-group scales buy. |
+| `carve.py` | Quantization confession curve — bird `mAP@50` vs. bit-width (16→1), with `--weights` (YOLOv8n by default), `--group-size` and `--skip` (DFL spared by default). Shows the graceful degradation and what per-group scales buy. (The cockpit's 📈 tab does this interactively, with more schemes.) |
 | `prune_sweep.py` | Structural confession curve — really removes channels at several ratios and shows the cliff (5% → 0). |
 | `real_prune_test.py` | Proves real structured removal: params/MACs/latency before vs. after a 30% cut. |
 | `finetune.py` | Prune 20% then fine-tune → recovery (the loop, headless). |
@@ -275,6 +352,20 @@ git-ignored; the two `build_*` scripts regenerate them.
   and `best.pt` is chosen on it.
 - "Bird" stands in for the single task; specializing to *pigeons specifically*
   would need a labeled pigeon dataset and head collapse to one class.
+- **Quantization is fake-quantized, not packed.** Accuracy transfers to a real
+  export that uses the same scheme; the size is an estimate (weights + fp16
+  scales). Export writes the *structural* cuts only — a deploy runtime applies
+  the bit-width.
+- **QAT learns on unfused convs.** Per-channel and in-channel-group scales fold
+  through BatchNorm exactly, so that's what QAT uses (a per-tensor recipe is
+  trained per-channel). The before/after score applies the recipe to the fused
+  model, as the cockpit does.
+- **The web edition's masking is only a preview.** The server cockpit masks
+  exactly the channels Export removes (torch-pruning's plan), so its masked mAP
+  is the exported model's. `web/engine.js` can't run torch-pruning, so in the
+  browser masking zeroes each conv's lowest-L1 channels on its own; its
+  accuracy is an optimistic preview (Export removes whole dependency groups and
+  bites harder), and Export there replays recorded server runs.
 
 ## Status & roadmap
 

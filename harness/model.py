@@ -25,23 +25,33 @@ def iter_weight_modules(model):
             yield name, module
 
 
+def fuse(yolo):
+    """Fold every BatchNorm into its conv, in place, so edits act on the exact
+    weights inference runs. Do this explicitly: newer Ultralytics `predict()`
+    fuses a private *copy* and leaves `yolo.model` unfused, so "warm up with a
+    predict" no longer fuses anything. Idempotent. Returns `yolo`."""
+    if not yolo.model.is_fused():
+        yolo.model.fuse(verbose=False)
+    return yolo
+
+
 def snapshot(model) -> dict[str, torch.Tensor]:
-    """Clone every quantizable weight (and bias, which masking zeroes) so we
-    can restore the native model."""
+    """Clone every quantizable weight (and its bias, which masking also edits)
+    so we can restore the native model."""
     snap = {}
     for name, mod in iter_weight_modules(model):
         snap[name] = mod.weight.detach().clone()
         if getattr(mod, "bias", None) is not None:
-            snap[name + ".bias"] = mod.bias.detach().clone()
+            snap[name + "#bias"] = mod.bias.detach().clone()
     return snap
 
 
 def restore(model, snap: dict[str, torch.Tensor]) -> None:
-    """Copy the native weights back in, undoing any quantization or masking."""
+    """Copy the native weights back in, undoing any quantization/masking in place."""
     for name, mod in iter_weight_modules(model):
         mod.weight.data.copy_(snap[name])
-        if name + ".bias" in snap:
-            mod.bias.data.copy_(snap[name + ".bias"])
+        if name + "#bias" in snap:
+            mod.bias.data.copy_(snap[name + "#bias"])
 
 
 @torch.no_grad()
