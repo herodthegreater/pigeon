@@ -89,14 +89,18 @@ class World:
     def _warp(self, z: np.ndarray) -> np.ndarray:
         return z @ self.R1.T + self.spec.warp * np.sin(z @ self.R2.T)
 
-    def _posterior(self, z: np.ndarray) -> np.ndarray:
-        """Exact p(y|z) for the equal-weight isotropic Gaussian mixture."""
+    def _posterior(self, z: np.ndarray, chunk: int = 2000) -> np.ndarray:
+        """Exact p(y|z) for the equal-weight isotropic Gaussian mixture.
+        Chunked so memory stays small (it also runs in a browser)."""
         s = self.spec
-        diff = z[:, None, None, :] - self.centres[None]          # N,C,M,d
-        logp = -0.5 * (diff ** 2).sum(-1) / s.noise ** 2          # N,C,M
-        m = logp.max(axis=(1, 2), keepdims=True)
-        lik = np.exp(logp - m).sum(-1)                            # N,C
-        return lik / lik.sum(1, keepdims=True)
+        out = []
+        for i in range(0, len(z), chunk):
+            diff = z[i:i + chunk, None, None, :] - self.centres[None]   # n,C,M,d
+            logp = -0.5 * (diff ** 2).sum(-1) / s.noise ** 2             # n,C,M
+            m = logp.max(axis=(1, 2), keepdims=True)
+            lik = np.exp(logp - m).sum(-1)                               # n,C
+            out.append(lik / lik.sum(1, keepdims=True))
+        return np.concatenate(out)
 
     def sample(self, n: int, rng: np.random.Generator, label_noise: float = 0.0,
                class_probs: np.ndarray | None = None) -> Split:

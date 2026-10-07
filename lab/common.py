@@ -62,8 +62,17 @@ def net(hidden: list[int], seed: int = 0, **kw) -> MLP:
 
 
 def cached(key: str, build):
+    """Build once, then load from lab/.cache. A ``<key>.npz`` (a model saved
+    with ``MLP.save_npz`` or a single array under ``array``) takes precedence
+    over the pickle; that's how the static website ships pre-trained models."""
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, ("q_" if QUICK else "") + key + ".pkl")
+    stem = os.path.join(CACHE, ("q_" if QUICK else "") + key)
+    if os.path.exists(stem + ".npz"):
+        with np.load(stem + ".npz") as z:
+            if "array" in z.files:
+                return z["array"]
+        return MLP.load_npz(stem + ".npz")
+    path = stem + ".pkl"
     if os.path.exists(path):
         with open(path, "rb") as f:
             return pickle.load(f)

@@ -49,35 +49,64 @@ def get(lesson_id: str) -> Lesson:
     raise KeyError(lesson_id)
 
 
-_HARNESS = r'''
-import json, sys, traceback, types
-sys.path.insert(0, {root!r})
-import numpy as np
-result = {{"tests": []}}
-try:
-    import student
-except Exception:
-    result["error"] = "Your code failed to import:\n" + traceback.format_exc(limit=3)
-    print(json.dumps(result)); sys.exit(0)
-ns = {{"student": student, "np": np}}
-exec(compile({tests!r}, "lesson_tests", "exec"), ns)
-for name, fn in list(ns.items()):
-    if name.startswith("test_") and callable(fn):
-        doc = (fn.__doc__ or "").strip()
+def run_tests(tests_src: str, code: str) -> dict:
+    """Import ``code`` as a fresh module named ``student`` and run every
+    ``test_*`` function in ``tests_src`` against it. Returns the same shape as
+    ``check``. Runs in the current process: ``check`` wraps it in a subprocess
+    with a time limit; the static website calls it inside a Web Worker."""
+    import traceback
+    import types
+
+    import numpy as np
+    result: dict = {"tests": []}
+    student = types.ModuleType("student")
+    student.__file__ = "student.py"
+    prev = sys.modules.get("student")
+    sys.modules["student"] = student
+    try:
         try:
-            fn()
-            result["tests"].append({{"name": name, "doc": doc, "ok": True}})
-        except NotImplementedError:
-            result["tests"].append({{"name": name, "doc": doc, "ok": False,
-                                     "message": "not implemented yet"}})
-        except AssertionError as e:
-            result["tests"].append({{"name": name, "doc": doc, "ok": False,
-                                     "message": str(e) or "assertion failed"}})
-        except Exception as e:
-            tb = traceback.format_exc(limit=-2)
-            result["tests"].append({{"name": name, "doc": doc, "ok": False,
-                                     "message": type(e).__name__ + ": " + str(e), "trace": tb}})
-print(json.dumps(result))
+            exec(compile(code, "student.py", "exec"), student.__dict__)
+        except Exception:
+            result["error"] = "Your code failed to import:\n" + traceback.format_exc(limit=3)
+            return result
+        ns = {"student": student, "np": np}
+        exec(compile(tests_src, "lesson_tests", "exec"), ns)
+        for name, fn in list(ns.items()):
+            if not (name.startswith("test_") and callable(fn)):
+                continue
+            doc = (fn.__doc__ or "").strip()
+            try:
+                fn()
+                result["tests"].append({"name": name, "doc": doc, "ok": True})
+            except NotImplementedError:
+                result["tests"].append({"name": name, "doc": doc, "ok": False,
+                                        "message": "not implemented yet"})
+            except AssertionError as e:
+                result["tests"].append({"name": name, "doc": doc, "ok": False,
+                                        "message": str(e) or "assertion failed"})
+            except Exception as e:
+                result["tests"].append({"name": name, "doc": doc, "ok": False,
+                                        "message": type(e).__name__ + ": " + str(e),
+                                        "trace": traceback.format_exc(limit=-2)})
+        return result
+    finally:
+        if prev is None:
+            sys.modules.pop("student", None)
+        else:
+            sys.modules["student"] = prev
+
+
+def check_inprocess(lesson_id: str, code: str) -> dict:
+    out = run_tests(get(lesson_id).tests, code)
+    out["passed"] = "error" not in out and bool(out["tests"]) and all(t["ok"] for t in out["tests"])
+    return out
+
+
+_HARNESS = r'''
+import json, sys
+sys.path.insert(0, {root!r})
+from lab.lessons import run_tests
+print(json.dumps(run_tests({tests!r}, open("student.py").read())))
 '''
 
 

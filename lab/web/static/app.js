@@ -10,13 +10,64 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } },
 };
 
+// Two backends behind one function. Served by `python -m lab.web`, everything
+// goes to the FastAPI server. In the static build (GitHub Pages) page data is
+// pre-rendered JSON, and runs + lesson checks execute in the browser through
+// Pyodide in a Web Worker (worker.js).
+const STATIC = !!window.LAB_STATIC;
+
 async function api(path, body) {
+  if (STATIC) return staticApi(path, body);
   const r = await fetch(path, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.detail || `${r.status} ${r.statusText}`);
   return data;
+}
+
+let worker = null, seq = 0;
+const pending = new Map();
+function pyStatus(text) { window.dispatchEvent(new CustomEvent("pystatus", { detail: text })); }
+function pyCall(kind, args, timeoutMs) {
+  if (!worker) {
+    worker = new Worker("worker.js");
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "status") return pyStatus(m.text);
+      const p = pending.get(m.id);
+      if (!p) return;
+      pending.delete(m.id); clearTimeout(p.timer);
+      m.ok ? p.resolve(m.result) : p.reject(new Error(m.error));
+    };
+  }
+  return new Promise((resolve, reject) => {
+    const id = ++seq;
+    const timer = timeoutMs ? setTimeout(() => {
+      // a runaway check: kill the whole worker (Python can't be interrupted otherwise)
+      worker.terminate(); worker = null;
+      for (const [, p] of pending) { clearTimeout(p.timer); p.reject(new Error(`timed out after ${timeoutMs / 1000}s (Python was restarted)`)); }
+      pending.clear();
+    }, timeoutMs) : null;
+    pending.set(id, { resolve, reject, timer });
+    worker.postMessage({ id, kind, args });
+  });
+}
+
+async function staticApi(path, body) {
+  let m;
+  if (body !== undefined && (m = path.match(/^\/api\/methods\/([^/]+)\/run$/))) {
+    const t0 = performance.now();
+    const res = await pyCall("run", { mid: m[1], params: body.params });
+    return { ...res, seconds: ((performance.now() - t0) / 1000).toFixed(1) };
+  }
+  if (body !== undefined && (m = path.match(/^\/api\/lessons\/([^/]+)\/check$/))) {
+    await pyCall("warm", {});                       // loading Python doesn't count against the limit
+    return pyCall("check", { lid: m[1], code: body.code }, 30000);
+  }
+  const r = await fetch(path.replace(/^\/api\//, "data/") + ".json");
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
 }
 
 // ---------------------------------------------------------------- theme
@@ -258,7 +309,9 @@ async function pageMethod(id) {
   const runBox = m.status === "runnable" ? `
     <div class="box"><h3>Run it</h3><form id="runform">${m.params.map(paramField).join("")}
       <div class="btns"><button class="btn" type="submit">Run</button></div></form>
-      <div id="runout" aria-live="polite"><div class="status-line">Trains and evaluates real models on the toy world. Most runs take 2–15 s; the very first one also trains the shared teacher.</div></div></div>`
+      <div id="runout" aria-live="polite"><div class="status-line">${STATIC
+        ? "Trains and evaluates real models on the toy world, in your browser. The first run downloads Python (about 20 MB); most runs then take 5–60 s."
+        : "Trains and evaluates real models on the toy world. Most runs take 2–15 s; the very first one also trains the shared teacher."}</div></div></div>`
     : m.status === "cockpit" ? `<div class="box"><h3>Run it in the cockpit</h3><p class="muted" style="font-size:.9rem">This is pigeon's real detector code. It needs torch, ultralytics and torch-pruning, then:</p><pre><code>uvicorn server:app --port 8000</code></pre><p class="muted" style="font-size:.9rem">The closest thing that runs here is linked in the write-up.</p></div>`
     : `<div class="box"><h3>Reference only</h3><p class="muted" style="font-size:.9rem;margin:0">This method needs a kind of model this repo doesn't have. The write-up explains the algorithm and points to the closest code you can run here.</p></div>`;
   const side = `<aside class="panel">${runBox}
@@ -292,9 +345,11 @@ async function pageMethod(id) {
     const btn = form.querySelector("button"), out = $("#runout");
     btn.disabled = true; btn.textContent = "Running…";
     out.innerHTML = `<div class="status-line">Training… started ${new Date().toLocaleTimeString()}</div>`;
+    const onStatus = (ev) => { const sl = out.querySelector(".status-line"); if (sl) sl.textContent = ev.detail; };
+    window.addEventListener("pystatus", onStatus);
     try { out.innerHTML = resultView(await api(`/api/methods/${id}/run`, { params })); }
     catch (err) { out.innerHTML = `<div class="err">${esc(err.message)}</div>`; }
-    finally { btn.disabled = false; btn.textContent = "Run"; }
+    finally { btn.disabled = false; btn.textContent = "Run"; window.removeEventListener("pystatus", onStatus); }
   };
 }
 
@@ -304,7 +359,9 @@ async function pageLearn() {
   const lessons = await api("/api/lessons");
   render(`<h1>Build it yourself</h1>
     <p class="lede">Write each algorithm from scratch in plain numpy. Each lesson explains the idea, gives you a skeleton, and runs hidden tests against your code: numerical gradient checks, comparisons with the lab's own implementation, or a model that has to reach an accuracy.</p>
-    <p class="muted">Your code runs on your machine, in a separate Python process with a time limit. Drafts are saved in this browser.</p>
+    <p class="muted">${STATIC
+      ? "Your code runs in your own browser (Python compiled to WebAssembly), in a background worker with a 30-second limit. Nothing is sent to a server. Drafts are saved in this browser."
+      : "Your code runs on your machine, in a separate Python process with a time limit. Drafts are saved in this browser."}</p>
     <ol class="lessons">${lessons.map(lessonItem).join("")}</ol>`, "learn");
 }
 
@@ -352,6 +409,8 @@ async function pageLesson(id) {
   $("#check").onclick = async () => {
     const btn = $("#check"), out = $("#results");
     btn.disabled = true; btn.textContent = "Checking…";
+    const onStatus = (ev) => { out.innerHTML = `<div class="status-line">${esc(ev.detail)}</div>`; };
+    window.addEventListener("pystatus", onStatus);
     try {
       const r = await api(`/api/lessons/${id}/check`, { code: ta.value });
       if (r.passed) store.set("passed:" + id, "1");
@@ -359,7 +418,7 @@ async function pageLesson(id) {
         (r.tests.length ? `<ul class="tests">${r.tests.map((t) => `<li class="${t.ok ? "ok" : "no"}"><b>${t.ok ? "Pass" : "Fail"}</b> · ${esc(t.doc || t.name)}${t.ok ? "" : `<span class="msg">${esc(t.message)}${t.trace ? "\n" + esc(t.trace) : ""}</span>`}</li>`).join("")}</ul>` : "") +
         (r.passed ? `<p><strong>All tests pass.</strong>${L.next ? ` <a href="#/learn/${L.next}">Next lesson</a>` : ""}</p>` : "");
     } catch (err) { out.innerHTML = `<div class="err">${esc(err.message)}</div>`; }
-    finally { btn.disabled = false; btn.textContent = "Check my code"; }
+    finally { btn.disabled = false; btn.textContent = "Check my code"; window.removeEventListener("pystatus", onStatus); }
   };
 }
 
@@ -408,7 +467,7 @@ async function route() {
     else notFound();
     app.focus({ preventScroll: true });
   } catch (err) {
-    app.innerHTML = `<div class="err">Couldn't load this page: ${esc(err.message)}. Is the server running (python -m lab.web)?</div>`;
+    app.innerHTML = `<div class="err">Couldn't load this page: ${esc(err.message)}.${STATIC ? "" : " Is the server running (python -m lab.web)?"}</div>`;
   }
 }
 window.addEventListener("hashchange", route);

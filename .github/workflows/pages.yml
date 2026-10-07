@@ -1,0 +1,48 @@
+# Builds the lab website as a static site and publishes it on GitHub Pages.
+# Everything runs in the visitor's browser (Pyodide), so Pages needs no server.
+# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+name: lab website
+
+on:
+  push:
+    branches: [main]
+    paths: ["lab/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # same Python as Pyodide 0.27
+      - name: Install
+        run: pip install numpy matplotlib fastapi uvicorn pytest httpx
+      - name: Test (quick budgets)
+        run: python -m pytest lab/tests -q --ignore=lab/tests/test_experiments.py
+      - name: Build static site (trains the shipped models, ~5 min)
+        run: python -m lab.web.build_static --out _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

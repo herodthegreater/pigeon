@@ -74,6 +74,31 @@ class MLP:
         self.qgroup: int | None = None
 
     # -- bookkeeping ---------------------------------------------------------
+    def save_npz(self, path: str) -> None:
+        """Plain-array snapshot (portable across numpy versions, unlike pickle;
+        the static website ships trained models this way)."""
+        arrs = {f"W{i}": w for i, w in enumerate(self.W)}
+        arrs.update({f"b{i}": b for i, b in enumerate(self.b)})
+        arrs.update({f"m{i}": m for i, m in enumerate(self.masks) if m is not None})
+        np.savez(path, sizes=np.array(self.sizes), res=np.array(self.res),
+                 lin=np.array(self.lin), qbits=np.array(self.qbits or 0),
+                 qgroup=np.array(self.qgroup or 0), **arrs)
+
+    @classmethod
+    def load_npz(cls, path: str) -> "MLP":
+        z = np.load(path)
+        net = cls.__new__(cls)
+        net.sizes = [int(v) for v in z["sizes"]]
+        n = len(net.sizes) - 1
+        net.W = [z[f"W{i}"] for i in range(n)]
+        net.b = [z[f"b{i}"] for i in range(n)]
+        net.masks = [z[f"m{i}"] if f"m{i}" in z.files else None for i in range(n)]
+        net.res = [bool(v) for v in z["res"]]
+        net.lin = [bool(v) for v in z["lin"]]
+        net.qbits = int(z["qbits"]) or None
+        net.qgroup = int(z["qgroup"]) or None
+        return net
+
     @property
     def n_layers(self) -> int:
         return len(self.W)

@@ -24,3 +24,6 @@ lab/.cache/
 lab/results/quick_*
 lab/results/RESULTS_quick.md
 lab/results/figures/quick_*
+
+# Static website build
+_site/

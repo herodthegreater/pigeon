@@ -203,7 +203,10 @@ python -m pytest lab/tests   # tests generated from the method registry
 
 The website groups methods by model family (small networks, language models,
 vision/YOLO), lets you run each one, shows the exact code, and has a
-"build it yourself" track of 10 coding lessons with tests.
+"build it yourself" track of 10 coding lessons with tests. It is also published
+as a static site on GitHub Pages (`.github/workflows/pages.yml`), where the same
+Python runs in the visitor's browser via Pyodide; see
+[`lab/README.md`](lab/README.md#the-same-site-on-github-pages-no-server).
 
 ## Quickstart
 

@@ -30,6 +30,27 @@ python -m lab.web                 # http://127.0.0.1:8100
   your machine. The server only listens on localhost for that reason.
 - **Results**: the report and every experiment's figures and table.
 
+### The same site on GitHub Pages (no server)
+
+`python -m lab.web.build_static --out _site` builds a static copy in which all
+the Python runs **in the visitor's browser**: Pyodide (CPython compiled to
+WebAssembly, ~20 MB, self-hosted from the official release) runs the same
+`lab/` files inside a Web Worker. Page data, source code and results are
+pre-rendered JSON; the trained models ship as `.npz` files in
+`lab_bundle.zip`; lesson checks run in the worker with a 30-second limit
+(a runaway loop just restarts Python). Nothing needs a backend, so it's free to
+host and safe to make public.
+
+`.github/workflows/pages.yml` runs the tests, builds the site and deploys it on
+every push to `main` that touches `lab/`. One-time setup: in the repository's
+Settings, under Pages, set the source to "GitHub Actions". To preview a build
+locally:
+
+```bash
+python -m lab.web.build_static --out _site
+python -m http.server -d _site 8300      # http://127.0.0.1:8300
+```
+
 Everything on the site comes from one registry, [`methods.py`](methods.py),
 and the test suite is generated from the same registry, so a method can't be
 on the site without being tested:
@@ -80,7 +101,7 @@ Superclass structure is what gives soft labels *dark knowledge*: "70 % bird,
 | `layerwise.py` | LLM compression algorithms, one linear layer at a time on calibration data: RTN, GPTQ, AWQ, SmoothQuant (+ function-preserving outlier injection), Wanda, SparseGPT, QLoRA, ShortGPT block influence |
 | `methods.py` | the registry behind the website and the tests: 43 methods, their parameters, run functions and source pointers |
 | `lessons.py` | the 10 build-it-yourself lessons and the sandboxed checker |
-| `web/` | FastAPI server + a dependency-free single-page front end; `web/content/methods/*.md` are the write-ups |
+| `web/` | FastAPI server + a dependency-free single-page front end; `web/content/methods/*.md` are the write-ups; `web/build_static.py` + `web/static/worker.js` make the in-browser (GitHub Pages) version |
 | `tests/` | pytest suite generated from the registry |
 | `common.py` | shared world, cached teachers, step-budgeted `scratch` / `distill` helpers, registry |
 | `experiments/` | the 28 experiments |
