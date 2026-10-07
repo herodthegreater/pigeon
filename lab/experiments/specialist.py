@@ -111,7 +111,7 @@ def specialist_prune():
         rows.append(dict(width=w, method="all-class importance, no recovery", seed=0, **ev(cut_all)))
         rows.append(dict(width=w, method="bird importance, no recovery", seed=0, **ev(cut_bird)))
         for s in SEEDS[:2]:
-            ft = dict(steps=STEPS // 2, lr=1e-3)
+            ft = dict(steps=STEPS)  # same budget as the fresh specialist
             arms = {
                 "all-class importance, 20-way KD": lambda: distill(cut_all.copy(), t, s, **ft),
                 "all-class importance, collapsed head + grouped KD": lambda: spec_eval(
@@ -168,7 +168,7 @@ def specialist_data():
     for name, X in sets.items():
         for s in SEEDS[:2]:
             pruned = collapse_head(structured_prune(t, [32] * 3, sc), Gm)
-            r = spec_eval(spec_distill(pruned, t, Gm, s, X=X, steps=STEPS // 2, lr=1e-3))
+            r = spec_eval(spec_distill(pruned, t, Gm, s, X=X))
             rows.append(dict(data=name, model="pruned teacher 3x32 (recovered)", seed=s, **r))
             r = spec_eval(spec_distill(spec_student(16, Gm.shape[1], s), t, Gm, s, X=X))
             rows.append(dict(data=name, model="fresh specialist 2x16", seed=s, **r))

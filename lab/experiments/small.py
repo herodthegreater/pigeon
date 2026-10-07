@@ -40,7 +40,7 @@ def small_tricks():
                 big = scratch([128, 128], s)
                 sc = neuron_importance(big, d.train.X[:2000], d.train.y[:2000], "taylor")
                 return distill(structured_prune(big, [w, w], sc), big, s, transfer="train",
-                               alpha=0.5, lr=1e-3)
+                               alpha=0.5)
 
             def self_distill():
                 return distill(hid, scratch(hid, s), s + 100, transfer="train", T=2, alpha=0.5)
@@ -85,20 +85,19 @@ def train_big_then_compress():
             start = target * mult
             for s in SEEDS[:2]:
                 big = scratch([start, start], s)
-                if mult == 1:
-                    m = scratch(big, s, steps=STEPS // 2, lr=1e-3)  # same extra budget
+                if mult == 1:  # baseline: the same extra budget, no pruning
+                    # (no self-KD arm here: distilling a net into an exact copy of
+                    # itself has zero gradient)
+                    m = scratch(big, s, steps=STEPS // 2)
                     rows.append(dict(target=f"final 2x{target}", start_width=start, method="labels",
-                                     seed=s, **ev(m)))
-                    m = distill(big.copy(), big, s, steps=STEPS // 2, lr=1e-3)
-                    rows.append(dict(target=f"final 2x{target}", start_width=start, method="self-KD",
                                      seed=s, **ev(m)))
                     continue
                 sc = neuron_importance(big, probe.X, probe.y, "taylor")
                 cut = structured_prune(big, [target, target], sc)
                 rows.append(dict(target=f"final 2x{target}", start_width=start, method="labels", seed=s,
-                                 **ev(scratch(cut.copy(), s, steps=STEPS // 2, lr=1e-3))))
+                                 **ev(scratch(cut.copy(), s, steps=STEPS // 2))))
                 rows.append(dict(target=f"final 2x{target}", start_width=start, method="self-KD", seed=s,
-                                 **ev(distill(cut.copy(), big, s, steps=STEPS // 2, lr=1e-3))))
+                                 **ev(distill(cut.copy(), big, s, steps=STEPS // 2))))
     rows = agg(rows, ["target", "start_width", "method"])
     for r in rows:
         r["series"] = f"{r['target']}, recover by {r['method']}"

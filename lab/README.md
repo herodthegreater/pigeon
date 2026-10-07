@@ -10,6 +10,42 @@ so that the edge cases can be poked on purpose.
 **Findings are in [`REPORT.md`](REPORT.md).** Raw tables and every figure are in
 [`results/RESULTS.md`](results/RESULTS.md).
 
+## The website
+
+```bash
+pip install numpy matplotlib fastapi uvicorn
+python -m lab.web                 # http://127.0.0.1:8100
+```
+
+- **Small networks / Language models / Vision**: every method on its own page
+  with a plain-language write-up, the exact source code that runs (read from
+  the repo), a **Run it** panel that trains and compresses a real model in
+  seconds, and the simulation figures. Methods are tagged *runs here*,
+  *runs in the cockpit* (pigeon's YOLO code, needs torch) or *reference*
+  (needs a model this repo doesn't have, e.g. a language model).
+- **Build it yourself**: 10 coding lessons, from softmax and backprop to
+  distillation, pruning, quantization, the SVD and GPTQ. You write the code in
+  the page; it runs hidden tests against it (gradient checks, comparisons with
+  the lab's implementation, accuracy targets) in a separate Python process on
+  your machine. The server only listens on localhost for that reason.
+- **Results**: the report and every experiment's figures and table.
+
+Everything on the site comes from one registry, [`methods.py`](methods.py),
+and the test suite is generated from the same registry, so a method can't be
+on the site without being tested:
+
+```bash
+pip install pytest httpx
+python -m pytest lab/tests        # ~5 min; quick-mode budgets
+```
+
+The tests check every method's metadata, source pointers and write-up, run
+every runnable method at its defaults *and* at both ends of every parameter
+range, check that every lesson's reference solution passes and its skeleton
+fails, and hit every API route.
+
+## The simulations
+
 ```bash
 python -m lab.selftest            # finite-difference check of all backprop + losses
 python -m lab.run --list          # 28 experiments in 6 groups
@@ -41,6 +77,11 @@ Superclass structure is what gives soft labels *dark knowledge*: "70 % bird,
 | `nn.py` | numpy MLP with hand-written backprop: masks (sparsity), fake-quant with STE (QAT, same rounding as `harness/quant.py`), residual layers, linear layers, real neuron removal, layer deletion, linear-collapse, input gradients |
 | `train.py` | batch sources (fixed / online-augmented teacher queries) × loss zoo (CE, KD: KL / reverse-KL / MSE / hard / top-k / grouped, FitNets hint, similarity-preserving), training loop (AdamW, cosine, EMA), metrics (acc, target AP, NLL, ECE, KL-to-Bayes, teacher fidelity) |
 | `compress.py` | magnitude pruning, neuron importance (L1 / activation / Taylor / task-aware Taylor), structured pruning, head collapse, PTQ, k-means weight sharing, SVD low-rank, layer dropping |
+| `layerwise.py` | LLM compression algorithms, one linear layer at a time on calibration data: RTN, GPTQ, AWQ, SmoothQuant (+ function-preserving outlier injection), Wanda, SparseGPT, QLoRA, ShortGPT block influence |
+| `methods.py` | the registry behind the website and the tests: 43 methods, their parameters, run functions and source pointers |
+| `lessons.py` | the 10 build-it-yourself lessons and the sandboxed checker |
+| `web/` | FastAPI server + a dependency-free single-page front end; `web/content/methods/*.md` are the write-ups |
+| `tests/` | pytest suite generated from the registry |
 | `common.py` | shared world, cached teachers, step-budgeted `scratch` / `distill` helpers, registry |
 | `experiments/` | the 28 experiments |
 | `report.py` | results → figures + `results/RESULTS.md` |

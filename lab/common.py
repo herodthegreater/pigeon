@@ -118,11 +118,15 @@ def transfer_X(d: Data, transfer: str = "pool") -> tuple[np.ndarray, np.ndarray]
     raise ValueError(transfer)
 
 
-def distill(student, t: MLP, seed: int = 0, transfer: str = "pool", T: float = 4.0,
+def distill(student, t: MLP, seed: int = 0, transfer: str = "pool", T: float = 1.0,
             alpha: float = 1.0, kind: str = "kl", k: int = 3, d: Data | None = None, steps=None,
             source=None, extra_terms=(), **kw) -> MLP:
     """Train ``student`` (hidden widths or an MLP to continue from) on
-    ``alpha * KD + (1 - alpha) * CE``."""
+    ``alpha * KD + (1 - alpha) * CE``.
+
+    Default T=1: in this world a higher temperature makes capacity-limited
+    students *worse* (see the temperature_alpha experiment), so every
+    experiment that isn't about temperature distills at T=1."""
     d = d or data()
     m = net(student, seed=seed) if not isinstance(student, MLP) else student
     if source is None:

@@ -11,3 +11,9 @@ uvicorn
 
 # Only needed to (re)build the bird eval set from COCO
 fiftyone
+
+# Simulation lab (lab/): numpy + matplotlib only; the website reuses fastapi/uvicorn
+matplotlib
+# Lab tests
+pytest
+httpx

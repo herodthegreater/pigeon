@@ -25,20 +25,29 @@ F = np.float32
 # ---------------------------------------------------------------------------
 def magnitude_prune(net: MLP, sparsity: float, global_: bool = True,
                     spare_last: bool = False) -> MLP:
-    """Zero the smallest-|w| weights. ``global_`` ranks across all layers (lets
-    big redundant layers absorb more of the cut); otherwise per-layer."""
+    """Zero the smallest-|w| weights until ``sparsity`` of *all* weights (not of
+    the ones still alive) are zero, so calling it repeatedly with a rising
+    target (gradual pruning, lottery-ticket rounds) does not compound.
+    ``global_`` ranks across all layers (lets big redundant layers absorb more
+    of the cut); otherwise each layer gets the same sparsity."""
     net = net.copy()
     layers = [i for i in range(net.n_layers) if not (spare_last and i == net.n_layers - 1)]
+
+    def mask_for(mags: np.ndarray, flat: np.ndarray) -> np.ndarray:
+        k = int(round(sparsity * flat.size))
+        if k == 0:
+            return mags != 0 if (flat == 0).any() else np.ones_like(mags, bool)
+        thr = np.partition(flat, k - 1)[k - 1]
+        return mags > thr
+
     if global_:
-        alive = np.concatenate([np.abs(net.eff(i))[net.eff(i) != 0] for i in layers])
-        thr = np.quantile(alive, sparsity) if sparsity > 0 else -1
+        flat = np.concatenate([np.abs(net.eff(i)).ravel() for i in layers])
         for i in layers:
-            net.masks[i] = (np.abs(net.eff(i)) > thr).astype(F)
+            net.masks[i] = mask_for(np.abs(net.eff(i)), flat).astype(F)
     else:
         for i in layers:
             w = np.abs(net.eff(i))
-            thr = np.quantile(w[w != 0], sparsity) if sparsity > 0 else -1
-            net.masks[i] = (w > thr).astype(F)
+            net.masks[i] = mask_for(w, w.ravel()).astype(F)
     net.apply_masks()
     return net
 

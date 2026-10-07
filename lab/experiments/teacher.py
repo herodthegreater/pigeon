@@ -107,8 +107,8 @@ def ensemble_teacher():
     for k in ([1] if QUICK else [1, 2, 4, 8]):
         sub = ts[:k]
         logit_avg = np.mean([t.logits(X) for t in sub], 0)
-        from ..train import softmax
-        prob_avg = np.log(np.mean([softmax(t.logits(X)) for t in sub], 0) + 1e-8)
+        from ..train import log_mean_softmax, softmax
+        prob_avg = log_mean_softmax([t.logits(X) for t in sub])
         test_probs = np.mean([softmax(t.logits(d.test.X)) for t in sub], 0)
         ens_acc = float((test_probs.argmax(1) == d.test.y).mean())
         for how, tl in [("avg logits", logit_avg), ("avg probs", prob_avg)]:
@@ -142,7 +142,7 @@ def oracle_teacher():
                 "KD from trained teacher": lambda: distill(hid, t, s),
                 "KD from Bayes posterior": lambda: train(net(hid, s), FixedSource(
                     X, None, d.world.C, t_logits=soft), [KD(T=1)], seed=s),  # T=1: exact probs
-                "Bayes-argmax labels (denoised)": lambda: train(net(hid, s), FixedSource(
+                "Bayes-argmax labels on all 28k inputs": lambda: train(net(hid, s), FixedSource(
                     X, None, d.world.C, t_logits=soft), [KD(kind="hard")], seed=s),
             }
             for name, make in arms.items():
@@ -162,7 +162,7 @@ def born_again():
     for arch_name, hid in [("2x32 (student-size)", STUDENT), ("3x256 (teacher-size)", [256, 256, 256])]:
         for transfer in ["train", "pool"]:
             for s in SEEDS[:2]:
-                prev = scratch(hid, s) if hid != [256, 256, 256] else teacher(seed=s)
+                prev = scratch(hid, s)  # generation 0 gets the same budget as the rest
                 rows.append(dict(arch=arch_name, transfer=transfer, generation=0, seed=s, **ev(prev)))
                 for g in range(1, 4):
                     cur = distill(hid, prev, seed=100 * g + s, transfer=transfer, T=2,

@@ -196,8 +196,14 @@ Findings, and what they imply for pigeon's cut-and-regrow loop, are in
 [`lab/REPORT.md`](lab/REPORT.md).
 
 ```bash
-python -m lab.run            # ~35 min on 4 cores; LAB_QUICK=1 for a 2-min smoke test
+python -m lab.web            # the website: every method, runnable, with its source and lessons
+python -m lab.run            # re-run all simulations (~35 min on 4 cores)
+python -m pytest lab/tests   # tests generated from the method registry
 ```
+
+The website groups methods by model family (small networks, language models,
+vision/YOLO), lets you run each one, shows the exact code, and has a
+"build it yourself" track of 10 coding lessons with tests.
 
 ## Quickstart
 

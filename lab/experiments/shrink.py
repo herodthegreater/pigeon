@@ -14,7 +14,8 @@ from ..nn import MLP
 
 G = "4 · Shrinking a trained model"
 FT = STEPS // 2          # recovery budget after a cut
-FT_LR = 1e-3             # gentler LR when continuing from trained weights
+FT_LR = 3e-3             # same optimizer settings as training from scratch, so
+                         # "pruned + recover" vs "fresh" differs only in the init
 
 
 def storage_bits(m: MLP, bits: int = 32, group: int | None = None, sparse: bool = False) -> int:
@@ -78,10 +79,10 @@ def prune_unstructured():
 
 
 # ---------------------------------------------------------------------------
-@experiment("prune_structured", G, "Structured (neuron) pruning: criteria x recovery",
-            "Delete whole neurons so the net is genuinely smaller. Which importance "
-            "criterion picks the right ones, and is a pruned teacher a better start "
-            "than training the small shape from scratch?")
+@experiment("prune_structured", G, "Structured (neuron) pruning: criteria, recovery, budget",
+            "Delete whole neurons so the net is genuinely smaller. Which importance criterion "
+            "picks the right ones, and is a pruned teacher a head start over training the "
+            "small shape fresh, at the same number of training steps?")
 def prune_structured():
     d = data()
     t = teacher()
@@ -90,30 +91,36 @@ def prune_structured():
     rng = np.random.default_rng(0)
     scores = {c: neuron_importance(t, probe.X, probe.y, c, rng=rng)
               for c in ["l1", "act", "taylor", "random"]}
+    budgets = {"short": STEPS // 4, "full": STEPS}
     for keep in [0.5, 0.25, 0.125, 0.0625]:
         width = int(256 * keep)
         for crit, sc in scores.items():
             cut = structured_prune(t, keep, sc)
             rows.append(dict(width=width, criterion=crit, recovery="none", seed=0, **ev(cut)))
             for s in SEEDS[:2]:
-                rows.append(dict(width=width, criterion=crit, recovery="labels", seed=s,
-                                 **ev(ce_ft(cut.copy(), s))))
-                rows.append(dict(width=width, criterion=crit, recovery="KD", seed=s,
-                                 **ev(kd_ft(cut.copy(), t, s))))
+                for bname, steps in budgets.items():
+                    rows.append(dict(width=width, criterion=crit, recovery=f"KD, {bname}", seed=s,
+                                     **ev(distill(cut.copy(), t, s, steps=steps))))
+                rows.append(dict(width=width, criterion=crit, recovery="labels, full", seed=s,
+                                 **ev(scratch(cut.copy(), s, steps=STEPS))))
         for s in SEEDS[:2]:
             hid = [width] * 3
-            rows.append(dict(width=width, criterion="(fresh init)", recovery="labels", seed=s,
-                             **ev(scratch(hid, s))))
-            rows.append(dict(width=width, criterion="(fresh init)", recovery="KD", seed=s,
-                             **ev(distill(hid, t, s))))
+            for bname, steps in budgets.items():
+                rows.append(dict(width=width, criterion="(fresh init)", recovery=f"KD, {bname}",
+                                 seed=s, **ev(distill(hid, t, s, steps=steps))))
+            rows.append(dict(width=width, criterion="(fresh init)", recovery="labels, full", seed=s,
+                             **ev(scratch(hid, s, steps=STEPS))))
     rows = agg(rows, ["width", "criterion", "recovery"])
     for r in rows:
         r["arm"] = f"{r['criterion']} / {r['recovery']}"
-    return dict(rows=rows, refs=refs(t), plots=[
+    return dict(rows=rows, refs=refs(t), notes=(
+        f"'short' = {STEPS // 4} steps, 'full' = {STEPS} steps; pruned and fresh nets use the "
+        "same optimizer and learning rate, so the only difference is the starting weights."), plots=[
         dict(x="width", y="acc", group="arm", xlog=True, hlines=["teacher"],
-             filter={"recovery": ["KD"]}, title="recovered with KD (+ fresh-init baseline)"),
+             filter={"recovery": ["KD, full"]}, title="recovered with KD, full budget (+ fresh init)"),
         dict(x="width", y="acc", group="arm", xlog=True, hlines=["teacher"],
-             filter={"criterion": ["taylor", "(fresh init)"]}, title="recovery method"),
+             filter={"criterion": ["taylor", "(fresh init)"], "recovery": ["KD, short", "KD, full"]},
+             title="does the pruned start help? short vs full budget"),
         dict(x="width", y="acc", group="arm", xlog=True, filter={"recovery": ["none"]},
              title="no recovery: the cliff"),
     ])
@@ -173,7 +180,7 @@ def lottery_ticket():
 def quantization():
     t = teacher()
     models = {"teacher 3x256": t,
-              "student 2x32 (KD-trained)": cached("q_student32", lambda: distill(STUDENT, t, 0))}
+              "student 2x32 (KD-trained)": cached("student32_kdT1", lambda: distill(STUDENT, t, 0))}
     rows = []
     for mname, m0 in models.items():
         r0 = ev(m0)
@@ -234,7 +241,7 @@ def low_rank_exp():
             "bits/weight, does a learned, non-uniform codebook beat uniform rounding?")
 def weight_sharing():
     t = teacher()
-    st = cached("q_student32", lambda: distill(STUDENT, t, 0))
+    st = cached("student32_kdT1", lambda: distill(STUDENT, t, 0))
     rows = []
     for mname, m0 in {"teacher 3x256": t, "student 2x32": st}.items():
         for k in [2, 4, 8, 16, 32]:

@@ -40,6 +40,14 @@ def log_softmax(z: np.ndarray, T: float = 1.0) -> np.ndarray:
     return z - np.log(np.exp(z).sum(1, keepdims=True))
 
 
+def log_mean_softmax(logit_list: list[np.ndarray]) -> np.ndarray:
+    """log of the average of several models' probabilities, computed exactly
+    (log-sum-exp of log-softmaxes). Use it as 'logits' for an ensemble teacher."""
+    ls = np.stack([log_softmax(z) for z in logit_list])
+    m = ls.max(0)
+    return m + np.log(np.exp(ls - m).mean(0))
+
+
 def onehot(y: np.ndarray, C: int) -> np.ndarray:
     out = np.zeros((len(y), C), F)
     ok = y >= 0
@@ -172,12 +180,19 @@ class KD:
 
     def _teacher_probs(self, tl):
         T = 1.0 if self.kind == "hard" else self.T
-        p = softmax(tl, T)
         if self.kind == "topk":
+            # An API reveals the top-k probabilities at T=1 and nothing else.
+            # Spread the unknown remainder uniformly, *then* apply temperature.
+            p = softmax(tl)
             thr = -np.sort(-p, 1)[:, self.k - 1:self.k]
             keep = p >= thr
             rest = (1 - (p * keep).sum(1, keepdims=True)) / (~keep).sum(1, keepdims=True).clip(1)
-            p = np.where(keep, p, rest)
+            p = np.where(keep, p, np.maximum(rest, 1e-12))
+            if T != 1:
+                p = p ** (1 / T)
+                p = p / p.sum(1, keepdims=True)
+        else:
+            p = softmax(tl, T)
         if self.G is not None:
             p = p @ self.G
         if self.kind == "hard":
@@ -196,7 +211,9 @@ class KD:
             return self.w * loss, self.w * (softmax(z) - pt) / N, {}
         ls = log_softmax(z, T)
         ps = np.exp(ls)
-        lt = np.log(pt + 1e-8)
+        # exact teacher log-probs when we can (log(p + eps) distorts tiny probabilities)
+        lt = log_softmax(b.t_logits, T) if self.kind == "kl" and self.G is None \
+            else np.log(pt + 1e-12)
         if self.kind == "rkl":
             per = (ps * (ls - lt)).sum(1, keepdims=True)
             loss = T * T * per.sum() / N

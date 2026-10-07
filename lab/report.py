@@ -202,9 +202,10 @@ def _table(res):
 def build(quick: bool | None = None):
     quick = QUICK if quick is None else quick
     os.makedirs(FIGS, exist_ok=True)
-    pat = "quick_*.json" if quick else "[!q]*.json"
     results = []
-    for p in sorted(glob.glob(os.path.join(RESULTS, pat))):
+    for p in sorted(glob.glob(os.path.join(RESULTS, "*.json"))):
+        if os.path.basename(p).startswith("quick_") != quick:
+            continue
         with open(p) as f:
             results.append(json.load(f))
     results.sort(key=lambda r: (r["group"], r["name"]))
