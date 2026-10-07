@@ -1,0 +1,9 @@
+torch>=2.4
+torchvision>=0.19
+onnx>=1.16
+onnxscript
+onnxruntime>=1.18
+numpy
+pillow
+pandas
+tqdm

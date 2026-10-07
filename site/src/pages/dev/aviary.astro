@@ -1,0 +1,32 @@
+---
+// Mascot art check: every species in every condition. Not linked from the site.
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pigeon aviary</title>
+    <style>
+      :root { --bird-line: #2a2f33; --bird-rib: #5b4a3c; --bird-shadow: rgba(0,0,0,.08); --bone: #efe8d8; --rule: #c9d2ca; }
+      body { background: #eef1eb; font: 13px system-ui; padding: 16px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+      figure { margin: 0; background: #f7f9f5; border: 1px solid #c9d2ca; padding: 6px; }
+      figcaption { text-align: center; color: #586970; }
+    </style>
+  </head>
+  <body>
+    <div class="grid" id="grid"></div>
+    <script>
+      import { mascotSVG, SPECIES } from "../../lib/ui/mascot";
+      const grid = document.getElementById("grid")!;
+      const conds: [string, number, number][] = [["healthy", 0.95, 0.98], ["thin", 0.82, 0.9], ["starving", 0.66, 0.6], ["skeleton", 0.5, 0.3]];
+      const ratios = [1, 2, 4, 8, 16];
+      for (const r of ratios) {
+        for (const [label, acc, pt] of conds) {
+          const m = mascotSVG({ ratio: r, accuracy: acc, pointing: pt });
+          grid.insertAdjacentHTML("beforeend", `<figure>${m.svg}<figcaption>${m.dodo ? "Dodo" : m.species.name} · ${label}</figcaption></figure>`);
+        }
+      }
+    </script>
+  </body>
+</html>

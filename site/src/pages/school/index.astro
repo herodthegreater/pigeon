@@ -1,0 +1,27 @@
+---
+import Base from "../../layouts/Base.astro";
+const lessons = [
+  ["What a weight is", "FP32 → FP16 / BF16: bits, range and precision"],
+  ["Scale and zero-point", "The one formula behind all quantization"],
+  ["Bits and rounding", "INT8 → INT4 → INT2 → binary"],
+  ["Granularity", "Per tensor, per channel, per group: the knob that matters most"],
+  ["Outliers", "Why a few huge values ruin everything"],
+  ["Activations and calibration", "Weight-only vs W8A8, static vs dynamic"],
+  ["Sensitivity and mixed precision", "Not every layer is equal"],
+  ["Codebooks", "Non-uniform levels and palettes"],
+  ["Pruning", "Unstructured, 2:4 and structured, and the cliff"],
+  ["Recovery", "Fine-tuning and quantization-aware training"],
+  ["Distillation", "A big teacher trains a small student"],
+  ["Low-rank", "One big matrix becomes two thin ones"],
+];
+---
+<Base title="Flight School · Pigeon" active="school">
+  <main style="max-width: 760px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: flex; flex-direction: column; gap: 20px;">
+    <p class="label">Coming next</p>
+    <h1 style="font-size: var(--step-3)">Flight School</h1>
+    <p style="color: var(--muted)">Twelve lessons, each with one interactive on Pigeon's real weights. They're being written now. Until then, the Coop is open.</p>
+    <ol style="display: flex; flex-direction: column; gap: 10px; padding-left: 1.4em;">
+      {lessons.map(([t, d]) => <li><strong>{t}</strong><br /><span style="color: var(--muted)">{d}</span></li>)}
+    </ol>
+  </main>
+</Base>

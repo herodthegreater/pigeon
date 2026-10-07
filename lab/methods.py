@@ -47,7 +47,7 @@ FAMILIES = {
     "vision": dict(title="Vision / detector (pigeon)", blurb=(
         "What changes when the model is a convolutional detector like YOLOv8: channels instead "
         "of neurons, dependency groups, batch-norm. The cockpit methods run in pigeon's web UI "
-        "(server.py) on a real model; the rest are explained for reference.")),
+        "(cockpit/server.py) on a real model; the rest are explained for reference.")),
 }
 
 CATEGORIES = {
@@ -476,7 +476,7 @@ def run_layer_drop(p):
 @method(id="ptq", name="Post-training quantization", family="small", category="quantize",
         summary="Round every weight to one of 2^b levels after training. No data, no "
                 "gradients; how fine the scale groups are decides how low b can go.",
-        code=["lab/nn.py:fake_quantize", "lab/compress.py:quantize", "harness/quant.py:fake_quantize"],
+        code=["lab/nn.py:fake_quantize", "lab/compress.py:quantize", "cockpit/harness/quant.py:fake_quantize"],
         params=[P("bits", "bits", "int", 4, 1, 8, 1),
                 P("group", "scale shared by", "choice", "16",
                   choices=["tensor", "64", "16", "4"]),
@@ -939,23 +939,23 @@ reference(id="channel_pruning", name="Channel pruning with dependency groups", f
           category="prune", status="cockpit",
           summary="In a CNN with skip connections and concatenations, a channel can't be "
                   "removed from one layer alone; every layer that shares it must lose it too.",
-          code=["harness/prune.py:structured_prune", "harness/prune.py:structured_prune_per_stage",
-                "harness/prune.py:C2f_v2"],
+          code=["cockpit/harness/prune.py:structured_prune", "cockpit/harness/prune.py:structured_prune_per_stage",
+                "cockpit/harness/prune.py:C2f_v2"],
           experiments=["prune_structured"],
           papers=["Fang et al. DepGraph: Towards Any Structural Pruning (2023)"])
 reference(id="conv_quantization", name="Quantizing a detector", family="vision",
           category="quantize", status="cockpit",
           summary="The same fake-quantization dial applied to YOLOv8's convolutions, with "
                   "per-group scales and an optional spared detection head.",
-          code=["harness/quant.py:fake_quantize", "harness/model.py:apply_uniform",
-                "harness/model.py:fuse"],
+          code=["cockpit/harness/quant.py:fake_quantize", "cockpit/harness/model.py:apply_uniform",
+                "cockpit/harness/model.py:fuse"],
           experiments=["quantization"],
           papers=["Nagel et al. A White Paper on Neural Network Quantization (2021)"])
 reference(id="prune_and_regrow", name="Prune, then fine-tune (cut and regrow)", family="vision",
           category="prune", status="cockpit",
           summary="pigeon's core loop: remove channels, then fine-tune the survivor on bird "
                   "images until mAP climbs back.",
-          code=["harness/prune.py:removal_plan", "harness/mask.py:apply_plan", "recover_job.py:main"],
+          code=["cockpit/harness/prune.py:removal_plan", "cockpit/harness/mask.py:apply_plan", "cockpit/recover_job.py:main"],
           experiments=["prune_structured", "specialist_data"],
           papers=["Han et al. (2015)", "Liu et al. Rethinking the Value of Network Pruning (2019)"])
 reference(id="deepinversion", name="DeepInversion (data-free via batch-norm statistics)",

@@ -1,12 +1,18 @@
-# Builds the lab website as a static site and publishes it on GitHub Pages.
-# Everything runs in the visitor's browser (Pyodide), so Pages needs no server.
+# Builds the website and publishes it on GitHub Pages.
+#   site/  the Astro app: Pigeon, the Coop, the mascot
+#   lab/   the simulation lab, trained and pre-rendered into site/public/lab/ so the
+#          Astro build ships it under /lab/ (it runs in the visitor's browser via
+#          Pyodide, so Pages needs no server)
+# Pull requests get the same build (tests, lab, site) without the deploy.
 # One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
-name: lab website
+name: website
 
 on:
   push:
     branches: [main]
-    paths: ["lab/**", ".github/workflows/pages.yml"]
+    paths: ["site/**", "lab/**", ".github/workflows/pages.yml"]
+  pull_request:
+    paths: ["site/**", "lab/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -23,22 +29,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"   # same Python as Pyodide 0.27
-      - name: Install
+      - name: Install the lab
         run: pip install numpy matplotlib fastapi uvicorn pytest httpx
-      - name: Test (quick budgets)
+      - name: Test the lab (quick budgets)
         run: python -m pytest lab/tests -q --ignore=lab/tests/test_experiments.py
-      - name: Build static site (trains the shipped models, ~5 min)
-        run: python -m lab.web.build_static --out _site
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
+      - name: Build the lab (trains the shipped models, ~5 min)
+        run: python -m lab.web.build_static --out site/public/lab
+
+      - uses: actions/setup-node@v6
         with:
-          path: _site
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install the site
+        run: npm ci
+        working-directory: site
+      - name: Test the site
+        run: npm test
+        working-directory: site
+      - name: Build the site
+        run: npm run build
+        working-directory: site
+
+      - uses: actions/configure-pages@v6
+        if: github.event_name != 'pull_request'
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          path: site/dist
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

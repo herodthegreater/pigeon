@@ -1,0 +1,14 @@
+---
+import Base from "../../layouts/Base.astro";
+const used = ["GGUF k-quants + importance matrix", "AWQ", "GPTQ", "FP8 (E4M3 / E5M2)", "FP4 microscaling (NVFP4 / MXFP4)", "bitsandbytes NF4 + QLoRA", "SmoothQuant", "Rotations (QuaRot / SpinQuant / ParoQuant)", "KV-cache quantization", "MLX", "2:4 sparsity", "Prune + distill", "Quantization-aware distillation", "TorchAO / LiteRT / Core ML"];
+---
+<Base title="Field Guide · Pigeon" active="guide">
+  <main style="max-width: 760px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: flex; flex-direction: column; gap: 20px;">
+    <p class="label">Coming next</p>
+    <h1 style="font-size: var(--step-3)">Field Guide</h1>
+    <p style="color: var(--muted)">A card for every technique, at three depths, with code for your own models. First up, the methods people actually use in 2026:</p>
+    <ul style="display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0;">
+      {used.map((m) => <li style="border: 1px solid var(--rule); background: var(--card); padding: 3px 10px; font-size: 0.9rem;">{m}</li>)}
+    </ul>
+  </main>
+</Base>

@@ -1,6 +1,6 @@
 """Pull the source of a function or class out of a file *without importing it*.
 
-Uses ``ast`` so it works for files that need torch (harness/, recover_job.py)
+Uses ``ast`` so it works for files that need torch (cockpit/harness/, cockpit/recover_job.py)
 even where torch isn't installed. A reference looks like
 ``"lab/train.py:KD.__call__"`` (path relative to the repo root).
 """

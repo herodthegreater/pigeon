@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pigeon-site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/jarodferkin/Projects/pigeon/site", "run", "dev", "--", "--port", "4321"],
+      "port": 4321
+    },
+    {
+      "name": "pigeon-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/jarodferkin/Projects/pigeon/site", "run", "preview", "--", "--port", "4322"],
+      "port": 4322
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+---
+import "../styles/tokens.css";
+interface Props { title: string; description?: string; active?: "school" | "coop" | "guide" }
+const { title, description = "Learn model compression by shrinking a real bird-spotting model.", active } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href={base}><span class="wordmark">Pigeon</span><span class="latin">Columba compressa</span></a>
+      <nav aria-label="Sections">
+        <a href={`${base}school/`} aria-current={active === "school" ? "page" : undefined}>Flight School</a>
+        <a href={`${base}coop/`} aria-current={active === "coop" ? "page" : undefined}>The Coop</a>
+        <a href={`${base}guide/`} aria-current={active === "guide" ? "page" : undefined}>Field Guide</a>
+        <a href={`${base}lab/`}>Lab</a>
+      </nav>
+    </header>
+    <slot />
+    <style>
+      .top {
+        display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px;
+        padding-inline: 20px; padding-block: 14px; border-bottom: 1px solid var(--rule);
+      }
+      .brand { display: flex; align-items: baseline; gap: 10px; text-decoration: none; color: var(--ink); }
+      .wordmark { font-family: var(--display); font-weight: 600; font-size: var(--step-2); }
+      .latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
+      nav { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+      nav a { color: var(--muted); text-decoration: none; font-size: 0.95rem; padding-block: 2px; border-bottom: 2px solid transparent; }
+      nav a:hover { color: var(--ink); }
+      nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--teal); }
+      @media (pointer: coarse), (max-width: 640px) {
+        .brand { padding-block: 4px; }
+        nav a { display: inline-flex; align-items: center; min-height: 44px; }
+      }
+    </style>
+  </body>
+</html>
