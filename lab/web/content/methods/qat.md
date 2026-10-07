@@ -1,6 +1,6 @@
 ## The idea
 
-Post-training quantization rounds a finished network and hopes it copes. *Quantization-aware training* (QAT) lets the network adapt to the rounding. It keeps training with quantized weights in the forward pass, so the loss sees the real rounding error, while a full-precision copy of every weight collects the gradient updates. Rounding has a derivative of zero almost everywhere, so a plain gradient would never move anything. The *straight-through estimator* (STE) handles this by pretending rounding is the identity in the backward pass: the gradient computed for the rounded weight is applied directly to the full-precision weight.
+Post-training quantization rounds a finished network and hopes it copes. *Quantization-aware training* (QAT) lets the network adapt to the rounding. It trains with quantized weights in the forward pass, so the loss sees the real rounding error, while a full-precision copy of every weight collects the updates. Rounding has zero derivative almost everywhere. The *straight-through estimator* (STE) handles this by pretending rounding is the identity in the backward pass: the gradient computed for the rounded weight is applied directly to the full-precision weight.
 
 ## How it works
 
@@ -64,4 +64,4 @@ Page runs (500 steps): the default student at 2 bits goes from 0.1683 with PTQ t
 
 ## Going further
 
-On large networks QAT is standard for int4 and below, usually with learned scales (LSQ), per-channel weight scales and simulated activation quantization, and often with distillation from the full-precision model, as in the KD arm here. pigeon has no QAT path yet. Its cockpit's Precision module is PTQ, and `carve.py` found PTQ collapsing at 4 bits on YOLOv8n. These numbers suggest the way below that floor is the same move pigeon already makes after pruning: fine-tune with the cut in place. For a detector, that means running the Ultralytics trainer with `harness/quant.py:fake_quantize` applied in the forward pass and an STE in the backward pass. See the Quantizing a detector page.
+On large networks QAT is standard for int4 and below, usually with learned scales (LSQ), per-channel weight scales and simulated activation quantization, and often with distillation from the full-precision model, as in the KD arm here. pigeon has no QAT path yet. Its cockpit's Precision module is PTQ, and `carve.py` found PTQ collapsing at 4 bits on YOLOv8n. The way below that floor is the move pigeon already makes after pruning: fine-tune with the cut in place. For a detector, that means running the Ultralytics trainer with `harness/quant.py:fake_quantize` applied in the forward pass and an STE in the backward pass. (see Quantizing a detector).

@@ -1,6 +1,6 @@
 ## The idea
 
-Unstructured pruning leaves zeros that still get stored and multiplied. Structured pruning deletes whole *neurons*. Removing one hidden unit removes one column of the matrix feeding it and one row of the matrix it feeds, so the matrices really shrink and the model is smaller and faster on any hardware. Each neuron takes all its connections with it, so choosing *which* to keep matters. That choice is made by an *importance score*. In a conv net the same idea removes channels, which is what pigeon does to YOLOv8n.
+Unstructured pruning leaves zeros that still get stored and multiplied. Structured pruning deletes whole *neurons*. Removing one hidden unit removes one column of the matrix feeding it and one row of the matrix it feeds, so the matrices really shrink and the model is smaller and faster on any hardware. Which neurons to keep is decided by an *importance score*. In a conv net the same idea removes channels, which is what pigeon does to YOLOv8n.
 
 ## How it works
 
@@ -13,11 +13,11 @@ Unstructured pruning leaves zeros that still get stored and multiplied. Structur
 
 `neuron_importance` in `lab/compress.py` returns one score array per hidden layer. For `l1`, `np.abs(net.W[i]).sum(0)` sums each column of `W[i]`, the weights going *into* each neuron. It never looks at data. The other criteria run `z, hid, cache = net.forward(X, cache=True)`, where `hid` holds each hidden layer's post-ReLU output, and `act` is `np.abs(h).mean(0)`.
 
-For `taylor`, `dz = (p - np.eye(...)[y]) / len(z)` is the gradient of mean cross-entropy with respect to the logits. `net.backward(cache, dz, hidden_grads=hg)` stores `dL/d(hidden[i])` in `hg[i]`, and the score is `np.abs(h * g).sum(0)`. The absolute value is taken per example before summing, so a neuron that helps some examples and hurts others still scores high. The `group` branch is the task-aware variant (see Task-aware pruning).
+For `taylor`, `dz = (p - np.eye(...)[y]) / len(z)` is the gradient of mean cross-entropy with respect to the logits. `net.backward(cache, dz, hidden_grads=hg)` stores `dL/d(hidden[i])` in `hg[i]`, and the score is `np.abs(h * g).sum(0)`. Taking `abs` per example means a neuron that helps some examples and hurts others still scores high. The `group` branch is the task-aware variant (see Task-aware pruning).
 
 `structured_prune` copies the net, takes `idx = np.argsort(-scores[i])[:k]` per hidden layer, and calls `net.keep_neurons(i, idx)`. Scores are computed once, on the unpruned net.
 
-`MLP.keep_neurons` in `lab/nn.py` does the surgery. `self.W[layer][:, idx]` keeps the chosen output columns, `self.b[layer][idx]` their biases, and `self.W[layer + 1][idx, :]` the matching input rows of the next layer, so shapes still line up. Masks are sliced the same way and `self.sizes[layer + 1] = len(idx)` records the new width. The first line refuses residual layers. On a stream `h + f(h)`, one neuron index is shared by every layer that adds into it, and that *dependency group* must be cut together. This is the problem torch-pruning solves for YOLO.
+`MLP.keep_neurons` in `lab/nn.py` does the surgery. `self.W[layer][:, idx]` keeps the chosen output columns, `self.b[layer][idx]` their biases, and `self.W[layer + 1][idx, :]` the matching input rows of the next layer, so shapes still line up. Masks are sliced the same way and `self.sizes[layer + 1] = len(idx)` records the new width. The first line refuses residual layers. On a stream `h + f(h)`, one neuron index is shared by every layer that adds into it, and that *dependency group* must be cut together.
 
 `run_structured` in `lab/methods.py` prunes the 3x256 teacher to `[w] * 3`, recovers for `FT` = 500 steps, and compares with a fresh 3x`w` net distilled for 1,000 steps at the same learning rate.
 
@@ -62,7 +62,6 @@ The toy can't show speed. On Apple's MPS, pigeon saw a 30% channel cut reduce MA
 - Set **keep width** 128, **recovery** none, and cycle **importance**. See how close random comes.
 - At **keep width** 128 with **recovery** kd, compare the recovered row with "fresh 3x128, KD from scratch". Repeat at 16.
 - At width 32, compare **recovery** labels and kd, then **importance** l1.
-- Push **keep width** to 4 to find where even the fresh net collapses, a capacity limit.
 
 ## Going further
 

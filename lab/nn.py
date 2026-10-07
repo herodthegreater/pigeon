@@ -103,6 +103,8 @@ class MLP:
             w = w * self.masks[i]
         if self.qbits is not None:
             w = fake_quantize(w, self.qbits, self.qgroup)
+            if self.masks[i] is not None:  # 1-bit sign() would revive pruned zeros
+                w = w * self.masks[i]
         return w
 
     # -- forward / backward --------------------------------------------------

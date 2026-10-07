@@ -166,6 +166,8 @@ def low_rank(net: MLP, rank: int, layers: list[int] | None = None) -> MLP:
     implemented as two layers with no nonlinearity in between. Only applied
     where it actually saves parameters: r * (in + out) < in * out."""
     src = net
+    if any(src.res) or any(m is not None for m in src.masks) or src.qbits is not None:
+        raise ValueError("low_rank expects a dense, unmasked, unquantized, non-residual net")
     layers = layers if layers is not None else list(range(src.n_layers))
     sizes, W, b, lin = [src.sizes[0]], [], [], []
     for i in range(src.n_layers):

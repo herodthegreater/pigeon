@@ -1,6 +1,6 @@
 ## The idea
 
-A generalist model spends part of its capacity telling apart 20 classes. If you only need "bird or not", a *specialist* can drop that work by shrinking its output layer (the *head*) to a coarser set of labels. The open question is how coarse. A 2-output head (bird, rest) is cheapest. Hinton's argument for distillation suggests keeping some "what else could it be" knowledge: outputs for bird's 3 sibling classes, its usual confusers, and maybe one per other superclass. This page compares those heads at very small widths, where every output competes for capacity.
+A generalist spends capacity telling 20 classes apart. If you only need "bird or not", a *specialist* can drop that work by shrinking its output layer (the *head*) to a coarser set of labels. A 2-output head (bird, rest) is cheapest. Hinton's argument for distillation suggests keeping some "what else could it be" knowledge: outputs for bird's 3 sibling classes, its usual confusers, and maybe one per other superclass. This page compares those heads at very small widths, where every output competes for capacity.
 
 ## How it works
 
@@ -17,7 +17,7 @@ A generalist model spends part of its capacity telling apart 20 classes. If you 
 
 Inside `KD._teacher_probs` (`lab/train.py`), `p = softmax(tl, T)` softens the teacher, then `p = p @ self.G` sums each group's probabilities. Grouping happens *after* the temperature. At T=1 that makes no difference, but with `T > 1` a large group such as the 19-class "rest" would receive more mass than the teacher gives it. The student side is unchanged: `log_softmax(z, T)` over its `K` outputs and gradient `T * (ps - pt) / N`.
 
-`spec_student(width, k, seed)` is a plain `[12, width, width, k]` MLP. `spec_eval` calls `evaluate(..., full_space=False)`, which reports only `target_ap` from output 0.
+`spec_eval` calls `evaluate(..., full_space=False)`, which reports only `target_ap` from output 0.
 
 `run_specialist_head` in `lab/methods.py` adds two comparison arms. "generalist" is a 20-way `2xW` student distilled normally with `distill` (KD over all 20 classes, also at T=1). "binary labels" trains the binary head with plain cross-entropy on `yb = (d.train.y != 0)`, where 0 means bird, with no teacher at all.
 
@@ -41,7 +41,7 @@ Superclasses here are weak structure (class centres scatter with std 1.0 around 
 
 ## When it breaks
 
-- **Too many outputs for the width.** Every extra output needs features. At widths 2-8 that cost exceeds the benefit.
+- **Too many outputs for the width.** At widths 2-8 the extra outputs cost more than they give.
 - **No negatives in the transfer set.** The head learns "rest" only from the inputs it sees (see Recovery data for a specialist).
 - **Losing the other classes.** A specialist cannot answer anything else later.
 - **Tiny widths are seed lotteries.** Use several seeds.
@@ -54,4 +54,4 @@ Superclasses here are weak structure (class centres scatter with std 1.0 around 
 
 ## Going further
 
-In a detector, the classification branch of the head predicts one score per class at every location. pigeon keeps YOLOv8n's 80-class head: its fine-tune set is built "in the model's 80-class space (bird = 14)", and the evaluator reads class 14. README's limitations note that specializing to pigeons would need a labeled dataset "and head collapse to one class". On this toy, collapsing to bird-vs-rest beats keeping outputs for the confusers. A collapsed head is also what makes task-aware pruning meaningful: once the head asks only about birds, channels that served other classes have no output left to serve.
+pigeon keeps YOLOv8n's 80-class head: its fine-tune set is built "in the model's 80-class space (bird = 14)", and the evaluator reads class 14. README's limitations note that specializing to pigeons would need a labeled dataset "and head collapse to one class". On this toy, collapsing to bird-vs-rest beats keeping outputs for the confusers. A collapsed head is also what makes task-aware pruning meaningful: once the head asks only about birds, channels that served other classes have no output left to serve.

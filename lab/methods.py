@@ -530,7 +530,7 @@ def run_weight_sharing(p):
     k = p["k"]
     bits = int(np.ceil(np.log2(k)))
     km = kmeans_share(t, k)
-    rows = [teacher_row(), row(f"uniform {bits + 1}-bit (per tensor)", quantize(t, bits + 1)),
+    rows = [teacher_row(), row(f"uniform {bits}-bit (per tensor)", quantize(t, bits)),
             row(f"k-means, k={k}", km)]
     if p["finetune"]:
         m = km

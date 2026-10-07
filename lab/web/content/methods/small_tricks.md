@@ -1,6 +1,6 @@
 ## The idea
 
-Most training tricks were invented for big networks that *overfit*: they memorise the training set and do worse on new data. A small network usually *underfits*, because it lacks the capacity to fit even the training data. This page tests four standard tricks on a 2-layer MLP and asks which help when capacity, not data, is the bottleneck. *Label smoothing* trains on targets that are 90% the true class and 10% spread over all classes. *Mixup* trains on blends of two examples and their labels. *EMA of weights* keeps an exponential moving average of the weights and ships the average. *Longer training* uses four times the steps.
+Most training tricks were invented for big networks that *overfit*: they memorise the training set and do worse on new data. A small network usually *underfits*, because it lacks the capacity to fit even the training data. This page tests four of them on a 2-layer MLP whose bottleneck is capacity, not data. *Label smoothing* trains on targets that are 90% the true class and 10% spread over all classes. *Mixup* trains on blends of two examples and their labels. *EMA of weights* keeps an exponential moving average of the weights and ships the average. *Longer training* uses four times the steps.
 
 ## How it works
 
@@ -36,7 +36,7 @@ From `small_tricks`, 3,000 steps, mean of 3 seeds, accuracy on 20 classes. The 3
 | KD from teacher + pool | 0.6714 | 0.8318 |
 | KD + pool + online mixup + EMA, 4x long | 0.7100 | 0.8607 |
 
-Training longer is the only one of the four tricks with a clear gain. Label smoothing is within noise (2x16 standard deviations are about 0.008). Mixup and EMA hurt. That fits underfitting: regularizers fight memorisation, and this model has none to fight. Distilling from the teacher (T=1, on the labeled inputs plus 20,000 unlabeled ones) adds only 0.0077 for 2x16 and 0.0148 for 2x32. Combined with more steps and fresh mixup inputs, it matches or beats training longer.
+Training longer is the only one of the four tricks with a clear gain. Label smoothing is within noise (2x16 standard deviations are about 0.008). Mixup and EMA hurt. That fits underfitting: regularizers fight memorisation, and this model has none to fight. Distilling from the teacher (T=1, on the labeled inputs plus 20,000 unlabeled ones) adds only 0.0077 for 2x16 and 0.0148 for 2x32.
 
 Page runs (1,000 steps, width 16): baseline 0.5803, label smoothing 0.5846, mixup 0.5397, EMA 0.5796, 4x longer 0.6909. At width 64, EMA gives 0.8505 against 0.8511. With a decay matched to the run, EMA is neutral.
 
@@ -47,14 +47,13 @@ With 8,000 clean labels the toy cannot show where regularizers usually help: big
 - **EMA decay too slow for the run.** The average spans roughly `1 / (1 - ema)` steps. With 0.999 over 1,000 steps, 37% of the shipped weights would still be the random init. Warm the decay up, or bias-correct it the way Adam corrects its moments.
 - **Mixup on an underfitting model** makes a task it can't fit even harder.
 - **Label smoothing and distillation.** A smoothed model's probabilities carry less class-similarity information. In `teacher_smoothing`, a 2x16 student distilled at T=4 reached 0.6398 from the plain teacher and 0.5738 from one trained with smoothing 0.1, though that teacher was more accurate (0.9216 vs 0.9139). At T=1 the gap nearly vanishes (0.6714 vs 0.6696).
-- **Unequal budgets.** "4x longer" uses 4x the compute. Compare tricks at matched steps.
+- **Unequal budgets.** "4x longer" costs 4x the compute.
 
 ## Try this
 
-- Run **trick** = ema at **width** 16 and 64, and compare with the baseline row.
 - Switch **trick** between label smoothing and mixup at **width** 64, a model closer to fitting the task, and see whether the sign changes.
 - Run **trick** = 4x longer at widths 4, 16 and 64. The gain should shrink as the model gets big enough to converge early.
 
 ## Going further
 
-Big models overfit, so these tricks are standard there. Ultralytics' trainer, which pigeon's `recover_job.py` drives, keeps an EMA of the weights by default and ramps its decay up over early updates, avoiding the init problem above. For pigeon's recovery runs, STATUS.md lists "more train data, more epochs" as the next lever. On this toy, more steps was the one trick that reliably helped a capacity-limited model.
+Big models overfit, so these tricks are standard there. Ultralytics' trainer, which pigeon's `recover_job.py` drives, keeps an EMA of the weights by default and ramps its decay up over early updates, avoiding the init problem above. STATUS.md lists "more train data, more epochs" as pigeon's next lever. On this toy, more steps was the one trick that reliably helped a capacity-limited model.

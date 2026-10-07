@@ -16,7 +16,7 @@ To get a width-16 network you can train width 16, or train something much wider,
 
 The `mult == 1` branch is the baseline. `m = scratch(big, s, steps=STEPS // 2)` continues training the target-width net for the same extra 1,500 steps the pruned nets get for recovery, so every arm sees 4,500 steps in total. There is no self-KD baseline: distilling a net into an exact copy of itself has zero gradient (`T * (ps - pt) / N` with `ps == pt`).
 
-For `mult > 1`, `sc = neuron_importance(big, probe.X, probe.y, "taylor")` scores every hidden neuron on 2,000 training examples. `cut = structured_prune(big, [target, target], sc)` keeps the top `target` per layer. Note that this keeps only `(target / start) ** 2` of the hidden-to-hidden weights: 1.6% at 8x. Two recoveries follow, each from a fresh `cut.copy()`: `scratch(..., steps=STEPS // 2)` on labels, and `distill(cut.copy(), big, s, steps=STEPS // 2)` with the wide net as teacher (KD at `distill`'s default T=1). Both use the same learning rate as training from scratch.
+For `mult > 1`, `sc = neuron_importance(big, probe.X, probe.y, "taylor")` scores every hidden neuron on 2,000 training examples. `cut = structured_prune(big, [target, target], sc)` keeps the top `target` per layer. That keeps only `(target / start) ** 2` of the hidden-to-hidden weights. Two recoveries follow, each from a fresh `cut.copy()`: `scratch(..., steps=STEPS // 2)` on labels, and `distill(cut.copy(), big, s, steps=STEPS // 2)` with the wide net as teacher (KD at `distill`'s default T=1). Both use the same learning rate as training from scratch.
 
 `run_big_then_prune` in `lab/methods.py` is the one-seed version for this page. It runs 1,000 steps for the wide net, 500 for self-KD recovery, and 1,500 for the directly trained baseline.
 
@@ -49,7 +49,6 @@ The toy does not test Li et al.'s regime: big, compute-limited models whose fast
 
 - Keep **final width** 16 and step **trained width** through 32, 64, 128 and 256. Compare the pruned row with "trained directly" each time.
 - Set **final width** to 64 and **trained width** to 128, a mild 2x cut. Compare how close the pruned net comes to the direct one with the 8x default.
-- Compare the "(before pruning)" row with the pruned row at **trained width** 256 to see how much the cut destroys before recovery can act.
 
 ## Going further
 

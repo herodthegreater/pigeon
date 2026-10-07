@@ -16,7 +16,10 @@ trained from scratch, so comparisons differ only in where the weights start.
 **How far to trust it.** This is a toy: MLPs on 12-D synthetic data, not conv
 nets on images or transformers on text. It is good at *relative* questions and
 at isolating one mechanism at a time; it says nothing about absolute numbers
-on COCO. Where a result contradicts a well-known paper, that is more likely a
+on COCO. One more caveat: "recovery" after pruning or quantization is extra
+distillation on 28k inputs, so a few recovered models land a hair above the
+teacher (e.g. 0.919 vs 0.914). Read those as "fully recovered", not
+"improved by compression". Where a result contradicts a well-known paper, that is more likely a
 fact about this regime (tiny students, plenty of clean labels, an
 over-parameterized teacher) than a refutation.
 

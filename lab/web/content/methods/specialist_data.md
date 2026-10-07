@@ -1,17 +1,17 @@
 ## The idea
 
-A generalist cut down to a bird specialist has to be fine-tuned back to health. pigeon does that on 400 COCO images that all contain birds. This page asks whether "only images of the target" is enough. A bird-vs-rest model must learn what is *not* a bird as much as what is, and a set of positives never shows it a negative. Recovery here is knowledge distillation (KD): the student matches the teacher's probabilities on whatever inputs it gets, so the content of the input set is the only thing that varies.
+A generalist cut down to a bird specialist has to be fine-tuned back to health. pigeon does that on 400 COCO images that all contain birds. This page asks whether "only images of the target" is enough. A bird-vs-rest model must learn what is *not* a bird as much as what is, and a set of positives never shows it a negative. Recovery is knowledge distillation (KD) on whatever inputs it gets, so the input set is the only variable.
 
 ## How it works
 
 1. Build recovery sets from the 28,000 available inputs (8,000 labeled plus 20,000 unlabeled), using the true class only to filter: everything; birds only (the 1,403 inputs of class 0); birds plus the 3 sibling classes; birds plus an equal number of random non-birds; birds plus the same number of Gaussian noise vectors; and 2 x 1,403 random inputs with no filter.
 2. Recover a specialist on each set with grouped KD: the teacher's probabilities (T=1) summed into 8 groups (bird, 3 siblings, 4 other superclasses).
 3. Two specialists: the teacher pruned to 3x32 with bird-aware importance and a collapsed head, and a fresh 2x16 net.
-4. Score both by bird average precision (AP) on the 10,000-example test set, which contains every class.
+4. Score both by bird average precision (AP) on the full 10,000-example test set.
 
 ## The code, line by line
 
-`specialist_data` in `lab/experiments/specialist.py` takes `X_all, _ = transfer_X(d)` and `y_all = np.concatenate([d.train.y_clean, d.pool.y_clean])`. Even the "unlabeled" pool has a true class in this toy, so the filters are exact. `bird = X_all[y_all == TARGET]` has 1,403 rows (398 of them from the labeled set). `pick = lambda m, n: X_all[m][rng.permutation(m.sum())[:n]]` draws `n` random rows matching a mask, for the equal-count negatives.
+`specialist_data` in `lab/experiments/specialist.py` takes `X_all, _ = transfer_X(d)` and `y_all = np.concatenate([d.train.y_clean, d.pool.y_clean])`. `bird = X_all[y_all == TARGET]` has 1,403 rows (398 of them from the labeled set). `pick = lambda m, n: X_all[m][rng.permutation(m.sum())[:n]]` draws `n` random rows matching a mask, for the equal-count negatives.
 
 In `sets`, "birds + siblings" uses `np.isin(y_all, sib)` with `sib = d.world.siblings(TARGET)`, classes 1-3. "birds + noise negatives" appends `rng.standard_normal((n_b, d.world.spec.d))`. Inputs are standardized to mean 0 and standard deviation 1, so the noise lands where real data lives (average length 3.38 against 3.40): fake but plausible inputs.
 
@@ -43,7 +43,6 @@ The toy's "birds only" is purer than any real image set: every input is a positi
 - **No negatives, no boundary.** On a bird-only set nothing pins down the outputs away from birds, so what the model says there is an accident.
 - **Inherited boundaries drift too.** The carved model starts with a boundary, but bird-only data drags it: it lost as much AP (0.17) as the fresh one.
 - **Fake negatives work only where they land.** Standardized noise overlaps real inputs here. Random noise images look nothing like real non-bird scenes, so don't expect that result to transfer.
-- **Many epochs on a small set** can overfit the teacher's outputs on those exact points.
 
 ## Try this
 

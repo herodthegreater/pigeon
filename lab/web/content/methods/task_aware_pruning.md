@@ -1,6 +1,6 @@
 ## The idea
 
-Ordinary importance scores ask which neurons matter for everything the network does. A specialist needs only one thing. *Task-aware pruning* scores neurons by how much they matter for the kept task alone, here a bird-vs-rest loss instead of 20-class cross-entropy, so neurons that only separate two kinds of vehicle are cut first. The output layer is then collapsed to a coarser label space, and the network is recovered by distilling only that grouped task. It is the toy version of carving pigeon's bird detector out of an 80-class YOLO.
+Ordinary importance scores ask which neurons matter for everything the network does. *Task-aware pruning* scores neurons by how much they matter for the kept task alone, here a bird-vs-rest loss instead of 20-class cross-entropy, so neurons that only separate two kinds of vehicle are cut first. The output layer is then collapsed to a coarser label space, and the network is recovered by distilling only that grouped task. It is the toy version of carving pigeon's bird detector out of an 80-class YOLO.
 
 ## How it works
 
@@ -12,7 +12,7 @@ Ordinary importance scores ask which neurons matter for everything the network d
 
 ## The code, line by line
 
-`neuron_importance` in `lab/compress.py`, with `method="taylor"` and a `group` matrix, starts like plain Taylor (`z, hid, cache = net.forward(X, cache=True)`, `p = softmax(z)`). It then builds the gradient of the grouped loss with respect to the 20 logits. `yg = group[y].argmax(1)` maps each example's class to its group. `Gy = group[:, yg].T` is an `N x C` matrix with 1 for every class in the example's true group. `qy = (p * Gy).sum(1, keepdims=True)` is the probability of that group, and `dz = (p - p * Gy / qy) / len(z)` is the gradient of `-log qy`. For a non-bird example the true group is all 19 other classes, and for each of them the gradient is `p_c * (1 - 1 / qy)`, proportional to `p_c`. It never reshuffles probability inside the group, so only the bird-vs-rest boundary produces a signal. `net.backward(cache, dz, hidden_grads=hg)` carries it back, and the score is `np.abs(h * g).sum(0)`.
+`neuron_importance` in `lab/compress.py`, with `method="taylor"` and a `group` matrix, starts like plain Taylor. It then builds the gradient of the grouped loss with respect to the 20 logits. `yg = group[y].argmax(1)` maps each example's class to its group. `Gy = group[:, yg].T` is an `N x C` matrix with 1 for every class in the example's true group. `qy = (p * Gy).sum(1, keepdims=True)` is the probability of that group, and `dz = (p - p * Gy / qy) / len(z)` is the gradient of `-log qy`. For a non-bird example the true group is all 19 other classes, and for each of them the gradient is `p_c * (1 - 1 / qy)`, proportional to `p_c`. It never reshuffles probability inside the group, so only the bird-vs-rest boundary produces a signal. The score is then `np.abs(h * g).sum(0)` as usual.
 
 `collapse_head` copies the net. `norm = G / G.sum(0, keepdims=True)` divides each column of `G` by its group size, so `net.W[-1] @ norm` turns the 256x20 output matrix into a 256xK one whose column `k` averages its members' columns. The bias is treated the same way. The bird is a group of one, so its *logit* is copied exactly. Its *probability* still changes, because the softmax now runs over 8 averaged logits. Averaging logits is not summing probabilities, so merged groups need recovery.
 
@@ -42,7 +42,7 @@ The toy's answer: task-aware importance matters when recovery is short or imposs
 - **Scored for a different question.** Neurons were scored for 2 outputs but the head keeps 8, so the sibling outputs start with little support.
 - **Rare target, noisy scores.** Only 101 of the 2,000 probe examples are birds.
 - **Collapsed heads start uncalibrated.** Averaged logits are only an initialization for merged groups.
-- **Fresh specialists can win.** Check that baseline before trusting a carve.
+- **Fresh specialists can win.** Check that baseline.
 
 ## Try this
 
@@ -52,4 +52,4 @@ The toy's answer: task-aware importance matters when recovery is short or imposs
 
 ## Going further
 
-On a detector the recipe means scoring channels with a loss that counts only the target class, for example a Taylor importance on detection loss restricted to class 14, in place of pigeon's `GroupMagnitudeImportance`, which like `l1` ignores the task. pigeon's cockpit already measures task sensitivity directly: its sensitivity scan cuts 25% of each stage, records the drop in bird mAP@50, and ranks stages by FLOPs per unit of sensitivity. That is a measured, per-stage version of task-aware importance. Head collapse is still open: README notes that specializing to pigeons would need "head collapse to one class".
+On a detector the recipe means scoring channels with a loss that counts only the target class, for example a Taylor importance on detection loss restricted to class 14, in place of pigeon's `GroupMagnitudeImportance`, which like `l1` ignores the task. pigeon's cockpit already measures task sensitivity directly: its sensitivity scan cuts 25% of each stage, records the drop in bird mAP@50, and ranks stages by FLOPs per unit of sensitivity. Head collapse is still open: README notes that specializing to pigeons would need "head collapse to one class".

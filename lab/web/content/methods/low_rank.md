@@ -1,6 +1,6 @@
 ## The idea
 
-If most of what a weight matrix `W` of shape `(in, out)` does happens along a few directions, it can be replaced by two thin matrices, `A` of shape `(in, r)` and `B` of shape `(r, out)`, with `W ≈ A B`. That costs `r * (in + out)` numbers instead of `in * out`. The *singular value decomposition* (SVD) writes `W = U diag(S) Vt`, with the *singular values* in `S` sorted largest first. Keeping the top `r` of them gives the best rank-`r` approximation of `W` in squared error (the Eckart-Young theorem). The approximation is best for the weights, not necessarily for the network's outputs, so a recovery step still helps.
+If most of what a weight matrix `W` of shape `(in, out)` does happens along a few directions, it can be replaced by two thin matrices, `A` of shape `(in, r)` and `B` of shape `(r, out)`, with `W ≈ A B`. That costs `r * (in + out)` numbers instead of `in * out`. The *singular value decomposition* (SVD) writes `W = U diag(S) Vt`, with the *singular values* in `S` sorted largest first. Keeping the top `r` of them gives the best rank-`r` approximation of `W` in squared error (the Eckart-Young theorem). It is best for the weights, not the outputs, so recovery still helps.
 
 ## How it works
 
@@ -57,7 +57,6 @@ The toy's matrices are small; in large models many layers are closer to low rank
 
 - Set **recovery** to none and step **rank** through 64, 32, 16 and 8. Find the knee where the unrecovered model falls off.
 - Set **recovery** to kd at rank 16 and rank 8. Compare the recovered accuracy with the Structured pruning page at a similar parameter count (width 32 or 64).
-- Set **rank** to 128 to confirm the break-even guard: the "no recovery" row equals the teacher.
 
 ## Going further
 

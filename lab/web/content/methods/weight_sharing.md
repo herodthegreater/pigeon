@@ -1,12 +1,12 @@
 ## The idea
 
-Uniform quantization spaces its levels evenly between `-max` and `+max`, but most trained weights sit near zero, so most levels go unused. *Weight sharing* lets the data choose the levels: k-means on a layer's weight values finds `k` *centroids*, and each weight is replaced by its nearest one. Storage becomes a `log2(k)`-bit index per weight plus a codebook of `k` floats per layer. This is the "trained quantization" step of Han et al.'s Deep Compression.
+Uniform quantization spaces its levels evenly between `-max` and `+max`, but most trained weights sit near zero, so most levels go unused. *Weight sharing* lets the data choose the levels: k-means on a layer's weight values finds `k` *centroids*, and each weight is replaced by its nearest one. Storage is a `log2(k)`-bit index per weight plus a `k`-float codebook per layer.
 
 ## How it works
 
-1. For each layer, take all its weight values as a 1-D list (skipping pruned zeros if the layer is sparse).
+1. Take each layer's weights as a 1-D list (skipping pruned zeros).
 2. Initialise `k` centroids evenly spaced from the smallest to the largest value (*linear init*).
-3. Repeat: assign every weight to its nearest centroid, then move each centroid to the mean of its weights (Lloyd's algorithm for k-means).
+3. Repeat: assign each weight to its nearest centroid, move each centroid to its weights' mean (Lloyd's algorithm).
 4. Replace each weight by its centroid.
 5. Optionally fine-tune and snap the weights back to a codebook.
 
@@ -26,7 +26,7 @@ w_shared = c[a]
 
 The result is a float matrix with at most `k` distinct values per layer. `params` counts nonzero weights, and centroids are almost never 0, so it stays at 140,052 although storage drops to `log2(k)` bits per weight.
 
-`run_weight_sharing` in `lab/methods.py` compares against `quantize(t, bits + 1)` with `bits = ceil(log2(k))`, per tensor: a uniform grid with one more bit per weight and `2^(b+1) - 1` levels (7 for k = 4), which favours uniform. The `weight_sharing` experiment compares at equal storage instead, `quantize(m0, bits)` against `k = 2^bits` centroids, which is `2^b - 1` uniform levels against `2^b`. Fine-tuning runs `kmeans_share(distill(m, t, r, steps=FT // 2, lr=FT_LR), k)` twice: KD moves the weights off their centroids, then they are re-clustered and snapped. Deep Compression instead trains the centroids themselves, summing the gradients of all weights that share one, so weights never leave the codebook.
+`run_weight_sharing` in `lab/methods.py` and the `weight_sharing` experiment both compare at equal storage: `quantize(t, bits)` per tensor, with `bits = ceil(log2(k))`, against `k` centroids. That is `2^b - 1` uniform levels against `2^b`. Fine-tuning runs `kmeans_share(distill(m, t, r, steps=FT // 2, lr=FT_LR), k)` twice: KD moves the weights off their centroids, then they are re-clustered and snapped. Deep Compression instead trains the centroids themselves, summing the gradients of all weights that share one, so weights never leave the codebook.
 
 ## What the simulations show
 
@@ -42,7 +42,7 @@ From `weight_sharing`, at equal bits per weight (accuracy on 20 classes; the stu
 
 At the same storage, a learned codebook beats the uniform grid at 2, 3 and 4 bits on both models. At 2 bits, uniform symmetric is ternary, `{-s, 0, +s}` with `s` the largest weight, so most weights round to zero (teacher 0.0707), while 4 k-means values keep 0.8487. At 1 bit both have two levels and score alike; at 5 bits both are near lossless. The student, with less spare capacity, loses more at every width: at 3 bits its k-means accuracy is 0.6453 against 0.8281 in fp32, while the teacher keeps 0.9039 against 0.9139. KD fine-tuning with re-snapping helps the teacher at every `k`, ending above fp32 from 8 values up, which is partly just extra training on 28,000 inputs. For the student it adds at most 0.0224.
 
-Page runs use the `b + 1`-bit uniform baseline. At the defaults (k = 4, fine-tune on): uniform 3-bit 0.7766, k-means 0.8487, after KD and re-snap 0.8646. At k = 2: uniform 2-bit 0.0707, k-means 0.3999, after KD and re-snap 0.4165.
+Page runs at the defaults (k = 4, fine-tune on): uniform 2-bit 0.0707, k-means 0.8487, after KD and re-snap 0.8646. At k = 2: uniform 1-bit 0.4013, k-means 0.3999, after KD and re-snap 0.4165. Symmetric 2-bit is ternary {-s, 0, +s}, which is why it scores below 1-bit sign quantization.
 
 ## When it breaks
 
@@ -55,7 +55,7 @@ Page runs use the `b + 1`-bit uniform baseline. At the defaults (k = 4, fine-tun
 ## Try this
 
 - Set **values per layer** to 4 with **fine-tune + re-snap** off, then 8, then 16. The page's uniform row gets an extra bit. Watch k-means lose its lead as `k` grows.
-- At **values per layer** 2 and then 16, turn **fine-tune + re-snap** on and off. Compare how much the KD row adds when the codebook is coarse and when it is fine.
+- At **values per layer** 2 and 16, toggle **fine-tune + re-snap** and compare what the KD row adds.
 - Set **values per layer** to 3. The uniform baseline uses `ceil(log2(3)) + 1` = 3 bits, so you can see how the page rounds a non-power-of-two `k`.
 
 ## Going further

@@ -1,6 +1,6 @@
 ## The idea
 
-Many weights in a trained network are close to zero. Magnitude pruning treats `|w|` as a stand-in for importance and sets the smallest weights to exactly zero. This is *unstructured* pruning: the matrix keeps its shape but becomes *sparse* (mostly zeros). The cut always costs accuracy. A *recovery* phase, meaning more training with the removed weights held at zero, wins most of it back.
+Many weights in a trained network are close to zero. Magnitude pruning treats `|w|` as a stand-in for importance and sets the smallest weights to exactly zero. This is *unstructured* pruning: the matrix keeps its shape but becomes *sparse* (mostly zeros). A *recovery* phase (more training with removed weights held at zero) wins back most of the lost accuracy.
 
 ## How it works
 
@@ -26,7 +26,7 @@ The helper `mask_for(mags, flat)` does the ranking. `k = int(round(sparsity * fl
 
 In the global branch, `flat = np.concatenate([np.abs(net.eff(i)).ravel() for i in layers])` pools every layer's magnitudes, so one threshold applies everywhere. `net.eff(i)` is the weight as the forward pass uses it. The per-layer branch calls `mask_for(w, w.ravel())` once per layer.
 
-`net.apply_masks()` runs `MLP.apply_masks` in `lab/nn.py`, `self.W[i] *= m`, writing the zeros into the weights. Three places keep them at zero: `MLP.eff` multiplies by the mask on every forward pass, `MLP.backward` does `dW[i] *= self.masks[i]`, and `fit` re-applies the masks after every optimizer step.
+`net.apply_masks()` writes the zeros in (`self.W[i] *= m` in `lab/nn.py`). `MLP.eff` multiplies by the mask on every forward pass, `MLP.backward` does `dW[i] *= self.masks[i]`, and `fit` re-applies masks after each optimizer step, so dead weights stay dead.
 
 `run_magnitude` in `lab/methods.py` calls `magnitude_prune(m, 1 - (1 - sp) ** (i / k))` for gradual step `i` of `k`. That is a geometric schedule: each step removes the same share of the survivors. For `sp = 0.9`, `k = 5` the targets are about 0.37, 0.60, 0.75, 0.84 and 0.90. Each step is followed by `scratch` (labels) or `distill` (KD from the unpruned teacher) for `FT // k` steps, so the total recovery budget is fixed.
 
@@ -50,18 +50,18 @@ Page runs (500 recovery steps): the defaults (0.9, KD, global) recover from 0.28
 ## When it breaks
 
 - **Sparse is not small or fast by itself.** Savings need a sparse storage format, sparse kernels, or hardware patterns such as 2:4.
-- **Per-layer ranking** forces the small input and output layers to lose as large a share as the big hidden ones.
+- **Per-layer ranking** cuts the small input and output layers as hard as the big hidden ones.
 - **Fraction of what?** If a pruning function ranks only surviving weights, repeated calls with rising total targets compound. An earlier version of this function did that: its 5-step "0.9" schedule ended at 99.9%. Check the nonzero count.
 - **Past the cliff** whole neurons lose every input or output weight, and one-shot recovery has nothing left to retrain.
 - **Magnitude is a proxy.** A small weight on a large activation can matter more than a large one on a near-zero input.
 
 ## Try this
 
-- Set **fraction removed** to 0.75 and compare **recovery** none and kd, then repeat at 0.95. Watch how much recovery can repair as the cut deepens.
+- Compare **recovery** none and kd at **fraction removed** 0.75, then 0.95.
 - Set **gradual steps** to 5 at 0.9 and at 0.95, and compare with 1 step. The budget is fixed, so more steps means shorter recoveries.
 - Switch **ranking** between global and per-layer at 0.9 and compare the unrecovered rows.
 - Compare **recovery** labels and kd at 0.9.
 
 ## Going further
 
-On large models unstructured sparsity pays off only with a runtime that exploits it, such as sparse formats on CPUs or N:M patterns on recent GPUs. The layer-by-layer versions for language models are the Wanda and SparseGPT pages. pigeon does not prune single weights. Its cockpit zeros whole channels (`harness/mask.py` masks the lowest-L1 output channels of a stage), because a channel can actually be removed from a conv layer. The cliff-then-recover pattern is the lesson pigeon's README draws: the loop must be prune → fine-tune → test, never prune → test.
+On large models unstructured sparsity pays off only with a runtime that exploits it, such as sparse formats on CPUs or N:M patterns on recent GPUs. See also Wanda and SparseGPT. pigeon does not prune single weights. Its cockpit zeros whole channels (`harness/mask.py` masks the lowest-L1 output channels of a stage), because a channel can actually be removed from a conv layer. The cliff-then-recover pattern is the lesson pigeon's README draws: the loop must be prune → fine-tune → test, never prune → test.
