@@ -48,8 +48,11 @@ ev_scan = BirdmAPEvaluator(os.path.join(HERE, "eval_set"), device=DEVICE,
 yolo = YOLO(os.path.join(HERE, "yolov8n.pt"))
 make_prunable(yolo)  # same module names as the planning copy below
 yolo.model.to(DEVICE).eval()
-# Warm/fuse so snapshot + masking act on the exact weights inference uses.
-yolo.predict(source=ev.images[0], device=DEVICE, verbose=False)
+# Fuse explicitly so snapshot + masking act on the exact weights inference
+# uses: depending on the Ultralytics version, predict() fuses yolo.model in
+# place or only a private copy.
+yolo.model.fuse(verbose=False)
+yolo.predict(source=ev.images[0], device=DEVICE, verbose=False)  # warm up
 SNAP = snapshot(yolo.model)
 TABLE = stage_table(yolo.model)
 # Unfused CPU copy that only plans which channels Export would remove.

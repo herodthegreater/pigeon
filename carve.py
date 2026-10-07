@@ -36,7 +36,9 @@ def main() -> None:
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     yolo = YOLO(args.weights)
     yolo.model.to(device).eval()
-    # Warm up so conv+bn fuse before we snapshot/carve.
+    # Fuse explicitly before we snapshot/carve: some Ultralytics versions'
+    # predict() fuses only a private copy, leaving yolo.model unfused.
+    yolo.model.fuse(verbose=False)
     yolo.predict(source=EVAL_ROOT + "/images/val", classes=[14],
                  conf=0.25, device=device, verbose=False, stream=True).__next__()
     snap = snapshot(yolo.model)
