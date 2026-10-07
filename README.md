@@ -182,6 +182,32 @@ reverse-trains both (see *Provenance* below).
 fast subset, the recovery job uses the 125-image val set — both real, different
 sample sizes.)
 
+## The simulation lab (`lab/`)
+
+Real YOLO experiments are slow and come one at a time. [`lab/`](lab/README.md)
+is a CPU-only, numpy-only miniature of the same problem: a 20-class
+"generalist" world with one target class and a known Bayes-optimal answer.
+It runs **28 experiments** across every way we could find to make a small
+model from a big one, or make a small model better: distillation (12 loss and
+data variants, teacher edge cases, data-free), pruning (unstructured,
+structured, lottery tickets), quantization (PTQ, QAT, k-means sharing),
+low-rank, layer deletion, specialization to one class, and their combinations.
+Findings, and what they imply for pigeon's cut-and-regrow loop, are in
+[`lab/REPORT.md`](lab/REPORT.md).
+
+```bash
+python -m lab.web            # the website: every method, runnable, with its source and lessons
+python -m lab.run            # re-run all simulations (~35 min on 4 cores)
+python -m pytest lab/tests   # tests generated from the method registry
+```
+
+The website groups methods by model family (small networks, language models,
+vision/YOLO), lets you run each one, shows the exact code, and has a
+"build it yourself" track of 10 coding lessons with tests. It is also published
+as a static site on GitHub Pages (`.github/workflows/pages.yml`), where the same
+Python runs in the visitor's browser via Pyodide; see
+[`lab/README.md`](lab/README.md#the-same-site-on-github-pages-no-server).
+
 ## Quickstart
 
 ```bash

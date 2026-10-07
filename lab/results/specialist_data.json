@@ -1,0 +1,170 @@
+{
+ "name": "specialist_data",
+ "group": "6 \u00b7 Specialization (the pigeon question)",
+ "title": "Recovery data for a specialist: are bird images enough?",
+ "question": "pigeon's recovery set is 400 images that *all contain birds*. If the recovery data only shows positives, can the model still learn what is NOT a bird?",
+ "quick": false,
+ "seconds": 30.4,
+ "rows": [
+  {
+   "data": "everything (28k)",
+   "model": "pruned teacher 3x32 (recovered)",
+   "target_ap": 0.9679164518346448,
+   "target_ap_std": 0.0017388529762747962,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "everything (28k)",
+   "model": "fresh specialist 2x16",
+   "target_ap": 0.8932847901535705,
+   "target_ap_std": 0.016253577606101965,
+   "params": 616.0,
+   "params_std": 0.0,
+   "macs": 576.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "birds only (1403)",
+   "model": "pruned teacher 3x32 (recovered)",
+   "target_ap": 0.7970942144463653,
+   "target_ap_std": 0.021172467696954245,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "birds only (1403)",
+   "model": "fresh specialist 2x16",
+   "target_ap": 0.7212779723005217,
+   "target_ap_std": 0.0920256947844772,
+   "params": 616.0,
+   "params_std": 0.0,
+   "macs": 576.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "birds + siblings",
+   "model": "pruned teacher 3x32 (recovered)",
+   "target_ap": 0.8856108457780164,
+   "target_ap_std": 0.0061095191883081545,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "birds + siblings",
+   "model": "fresh specialist 2x16",
+   "target_ap": 0.8570562804020353,
+   "target_ap_std": 0.0114594853595692,
+   "params": 616.0,
+   "params_std": 0.0,
+   "macs": 576.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "birds + equal # random others",
+   "model": "pruned teacher 3x32 (recovered)",
+   "target_ap": 0.9620113016295624,
+   "target_ap_std": 0.0013413636699852183,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "birds + equal # random others",
+   "model": "fresh specialist 2x16",
+   "target_ap": 0.924602354278214,
+   "target_ap_std": 0.0060876511373813,
+   "params": 616.0,
+   "params_std": 0.0,
+   "macs": 576.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "birds + noise negatives",
+   "model": "pruned teacher 3x32 (recovered)",
+   "target_ap": 0.9406023068063993,
+   "target_ap_std": 0.005127334295135844,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "birds + noise negatives",
+   "model": "fresh specialist 2x16",
+   "target_ap": 0.8834947140484684,
+   "target_ap_std": 0.013490865816672137,
+   "params": 616.0,
+   "params_std": 0.0,
+   "macs": 576.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "random 2806 (no bird filter)",
+   "model": "pruned teacher 3x32 (recovered)",
+   "target_ap": 0.9270726025551033,
+   "target_ap_std": 0.002969831443462745,
+   "params": 2792.0,
+   "params_std": 0.0,
+   "macs": 2688.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  },
+  {
+   "data": "random 2806 (no bird filter)",
+   "model": "fresh specialist 2x16",
+   "target_ap": 0.8733126933636384,
+   "target_ap_std": 0.0073731210877299724,
+   "params": 616.0,
+   "params_std": 0.0,
+   "macs": 576.0,
+   "macs_std": 0.0,
+   "n_seeds": 2
+  }
+ ],
+ "refs": {
+  "bayes": {
+   "acc": 0.9734,
+   "target_ap": 0.999168038786606,
+   "nll": 0.07882840931415558
+  },
+  "teacher": {
+   "target_ap": 0.9885493012579957,
+   "params": 140052,
+   "macs": 139264,
+   "acc": 0.9139,
+   "nll": 0.3843076229095459,
+   "ece": 0.05536622720360759,
+   "kl_bayes": 0.3093399703502655
+  }
+ },
+ "plots": [
+  {
+   "x": "data",
+   "y": "target_ap",
+   "group": "model",
+   "kind": "bar",
+   "hlines": [
+    "teacher"
+   ],
+   "ref_metric": "target_ap"
+  }
+ ]
+}

@@ -1,0 +1,145 @@
+{
+ "name": "biased_teacher",
+ "group": "2 \u00b7 Teacher edge cases",
+ "title": "A systematically wrong teacher",
+ "question": "The teacher learned a bias: half its 'bird' training labels said 'sibling'. KD copies the bias faithfully -- can mixing in clean labels undo it?",
+ "quick": false,
+ "seconds": 36.5,
+ "rows": [
+  {
+   "alpha": "(biased teacher)",
+   "target_ap": 0.9377114485138739,
+   "params": 140052.0,
+   "macs": 139264.0,
+   "acc": 0.8878,
+   "nll": 0.4988386631011963,
+   "ece": 0.07451513059437279,
+   "kl_bayes": 0.42930424213409424,
+   "n_seeds": 1
+  },
+  {
+   "alpha": "1.0",
+   "target_ap": 0.8947907382010277,
+   "target_ap_std": 0.016417764546900686,
+   "params": 2132.0,
+   "params_std": 0.0,
+   "macs": 2048.0,
+   "macs_std": 0.0,
+   "acc": 0.7940999999999999,
+   "acc_std": 0.0037264818081759665,
+   "nll": 0.6000156402587891,
+   "nll_std": 0.010070297927529656,
+   "ece": 0.012083460772534227,
+   "ece_std": 0.00044900585695040277,
+   "kl_bayes": 0.5207375089327494,
+   "kl_bayes_std": 0.011537204371939256,
+   "n_seeds": 3
+  },
+  {
+   "alpha": "0.9",
+   "target_ap": 0.9020277298162448,
+   "target_ap_std": 0.012931791542863108,
+   "params": 2132.0,
+   "params_std": 0.0,
+   "macs": 2048.0,
+   "macs_std": 0.0,
+   "acc": 0.7965999999999999,
+   "acc_std": 0.0033980386499665957,
+   "nll": 0.5957552194595337,
+   "nll_std": 0.008530717185215442,
+   "ece": 0.012989667146901281,
+   "ece_std": 0.000422879870940455,
+   "kl_bayes": 0.5165098905563354,
+   "kl_bayes_std": 0.0100847428402237,
+   "n_seeds": 3
+  },
+  {
+   "alpha": "0.5",
+   "target_ap": 0.9341631318995671,
+   "target_ap_std": 0.005407535113822334,
+   "params": 2132.0,
+   "params_std": 0.0,
+   "macs": 2048.0,
+   "macs_std": 0.0,
+   "acc": 0.8107666666666665,
+   "acc_std": 0.003987759047663504,
+   "nll": 0.5740876396497091,
+   "nll_std": 0.009949032260578167,
+   "ece": 0.008724615847567728,
+   "ece_std": 0.0010832937814868485,
+   "kl_bayes": 0.4942297637462616,
+   "kl_bayes_std": 0.010943492468326798,
+   "n_seeds": 3
+  },
+  {
+   "alpha": "0.25",
+   "target_ap": 0.9469564170675691,
+   "target_ap_std": 0.006051987452853659,
+   "params": 2132.0,
+   "params_std": 0.0,
+   "macs": 2048.0,
+   "macs_std": 0.0,
+   "acc": 0.8150666666666666,
+   "acc_std": 0.003070649587447079,
+   "nll": 0.5611319343249003,
+   "nll_std": 0.007586642992077598,
+   "ece": 0.009273364834487425,
+   "ece_std": 0.0013769577888421548,
+   "kl_bayes": 0.4810585578282674,
+   "kl_bayes_std": 0.008992741679007186,
+   "n_seeds": 3
+  },
+  {
+   "alpha": "0.0",
+   "target_ap": 0.9523519389487166,
+   "target_ap_std": 0.004994556954426306,
+   "params": 2132.0,
+   "params_std": 0.0,
+   "macs": 2048.0,
+   "macs_std": 0.0,
+   "acc": 0.8170000000000001,
+   "acc_std": 0.0010708252269472876,
+   "nll": 0.5537863373756409,
+   "nll_std": 0.007613544412600026,
+   "ece": 0.009223125945031658,
+   "ece_std": 0.0007269501429256966,
+   "kl_bayes": 0.47584397594134015,
+   "kl_bayes_std": 0.007617486743224063,
+   "n_seeds": 3
+  }
+ ],
+ "refs": {
+  "bayes": {
+   "acc": 0.9734,
+   "target_ap": 0.999168038786606,
+   "nll": 0.07882840931415558
+  },
+  "teacher": {
+   "target_ap": 0.9885493012579957,
+   "params": 140052,
+   "macs": 139264,
+   "acc": 0.9139,
+   "nll": 0.3843076229095459,
+   "ece": 0.05536622720360759,
+   "kl_bayes": 0.3093399703502655
+  }
+ },
+ "plots": [
+  {
+   "x": "alpha",
+   "y": "target_ap",
+   "kind": "bar",
+   "hlines": [
+    "teacher"
+   ]
+  },
+  {
+   "x": "alpha",
+   "y": "acc",
+   "kind": "bar",
+   "hlines": [
+    "teacher"
+   ]
+  }
+ ]
+}
