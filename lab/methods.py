@@ -947,14 +947,15 @@ reference(id="conv_quantization", name="Quantizing a detector", family="vision",
           category="quantize", status="cockpit",
           summary="The same fake-quantization dial applied to YOLOv8's convolutions, with "
                   "per-group scales and an optional spared detection head.",
-          code=["harness/quant.py:fake_quantize", "harness/model.py:apply_uniform"],
+          code=["harness/quant.py:fake_quantize", "harness/model.py:apply_uniform",
+                "harness/model.py:fuse"],
           experiments=["quantization"],
           papers=["Nagel et al. A White Paper on Neural Network Quantization (2021)"])
 reference(id="prune_and_regrow", name="Prune, then fine-tune (cut and regrow)", family="vision",
           category="prune", status="cockpit",
           summary="pigeon's core loop: remove channels, then fine-tune the survivor on bird "
                   "images until mAP climbs back.",
-          code=["recover_job.py:main", "harness/mask.py:mask_stage"],
+          code=["harness/prune.py:removal_plan", "harness/mask.py:apply_plan", "recover_job.py:main"],
           experiments=["prune_structured", "specialist_data"],
           papers=["Han et al. (2015)", "Liu et al. Rethinking the Value of Network Pruning (2019)"])
 reference(id="deepinversion", name="DeepInversion (data-free via batch-norm statistics)",
