@@ -29,7 +29,7 @@ def fold(conv, bn):
 
 `MLP.collapse_linear` in lab/nn.py is the same algebra on the toy network, which writes layers as `h @ W + b`. For each layer flagged `net.lin[i]` (no activation after it), `W2 = net.W[i + 1]`, then `net.b[i + 1] = net.b[i] @ W2 + net.b[i + 1]` and `net.W[i + 1] = net.W[i] @ W2`, and layer `i` is deleted. The docstring states the identity: `(h W1 + b1) W2 + b2 == h (W1 W2) + (b1 W2 + b2)`. BN folding is the case where the second map is diagonal: `W2 = diag(s)`, `b2 = beta - mu * s`. The `assert` refuses residual or masked layers, because folding is exact only when nothing else reads the intermediate value.
 
-The cockpit already folds YOLOv8's BN: server.py, carve.py and sweep.py run one `predict` before `snapshot`, which, as their comments say, fuses conv and BN in place.
+The cockpit already folds YOLOv8's BN: server.py, carve.py and sweep.py call `fuse(yolo)` from harness/model.py before `snapshot`. It calls `yolo.model.fuse()` explicitly, because newer Ultralytics `predict()` fuses a private copy and leaves `yolo.model` unfused.
 
 ## When it breaks
 
