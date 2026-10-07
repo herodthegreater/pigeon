@@ -49,17 +49,17 @@ So: compute `U` once; for `j = 0 .. d-1`, round column `j` of all rows and apply
 
 ## What the simulations show
 
-3x256 teacher, 91.39% accuracy, all four layers quantized:
+3x256 teacher, 91.39% accuracy. The three hidden layers are quantized, including the first one, which reads the 12 raw inputs. The output layer stays at full precision, as papers leave `lm_head` alone. "2-bit" means the ternary levels `{-s, 0, s}` (see the RTN page).
 
 | setting | RTN | GPTQ |
 |---|---|---|
-| 4-bit, per row | 0.9078 | 0.9130 |
-| 3-bit, per row | 0.8669 | 0.9029 |
-| 3-bit, scale per 16 | 0.8947 | 0.9101 |
-| 2-bit, per row | 0.2483 | 0.7702 |
-| 2-bit, scale per 16 | 0.6459 | 0.8109 |
+| 4-bit, per row | 0.9103 | 0.9131 |
+| 3-bit, per row | 0.8922 | 0.9079 |
+| 3-bit, scale per 16 | 0.9010 | 0.9110 |
+| 2-bit, per row | 0.4686 | 0.8207 |
+| 2-bit, scale per 16 | 0.7585 | 0.8389 |
 
-With **largest activations first**, GPTQ reaches 0.9045 at 3 bits and 0.8045 at 2 bits. Calling `lw.rtn` and `lw.gptq` directly at 3 bits on each layer's teacher inputs, GPTQ cut the relative output error of the second layer from 0.0300 to 0.0028, but of the first layer (only 12 inputs, so few columns to push errors onto) just from 0.0333 to 0.0322.
+With **largest activations first**, GPTQ reaches 0.9097 at 3 bits and 0.8367 at 2 bits. Calling `lw.rtn` and `lw.gptq` directly at 3 bits on each layer's teacher inputs, GPTQ cut the relative output error of the second layer from 0.0300 to 0.0028, but of the first layer (only 12 inputs, so few columns to push errors onto) just from 0.0333 to 0.0322.
 
 ## When it breaks
 
@@ -71,7 +71,7 @@ With **largest activations first**, GPTQ reaches 0.9045 at 3 bits and 0.8045 at 
 ## Try this
 
 - **bits** 2, then 3, then 4, **scale per** row: watch the GPTQ-over-RTN gap shrink as rounding gets finer.
-- Turn on **largest activations first** at 2 bits. Look for the jump from 0.7702.
+- Turn on **largest activations first** at 2 bits. Look for the gain over 0.8207.
 
 ## Going further
 

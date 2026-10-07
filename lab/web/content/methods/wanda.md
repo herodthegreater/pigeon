@@ -26,29 +26,34 @@ Paper orientation: `W` is (out, in). `X` holds calibration inputs, one row per t
 - `idx = np.argsort(score, 1)[:, :k]` sorts each row (axis 1) separately and takes its `k` lowest. This is the per-output comparison.
 - `np.put_along_axis(out, idx, 0.0, 1)` zeroes exactly those positions. The surviving weights keep their original values.
 
-The page's "magnitude, per row" baseline is the same function with `X` replaced by `np.ones_like(h)`. Every channel norm is then equal, and the score reduces to `|w|`. That makes it a clean control: same row-wise selection, no activations.
+The page's "magnitude, per row" baseline is the same function with `X` replaced by `np.ones_like(h)`. Every channel norm is then equal, and the score reduces to `|w|`. That makes it a clean control: same row-wise selection, no activations. Both run through `apply_layerwise(..., skip_last=True)`: the hidden layers are pruned, including the first one, which reads the 12 raw inputs, and the output layer is left dense, as papers leave `lm_head` alone.
+
+**outlier channels injected** calls `inject_outliers(t, 1, k, 30.0)` before pruning. It makes `k` of layer 2's 256 input channels 30 times louder and their weights 30 times smaller, without changing the function.
 
 ## What the simulations show
 
-3x256 teacher (0.9139), all four layers pruned, 512 calibration inputs:
+3x256 teacher (0.9139), 512 calibration inputs, no injected outliers:
 
 | fraction removed | magnitude, per row | Wanda |
 |---|---|---|
-| 0.5 | 0.8594 | 0.8555 |
-| 0.7 | 0.6684 | 0.6377 |
-| 0.9 | 0.1085 | 0.0872 |
+| 0.3 | 0.9103 | 0.9075 |
+| 0.5 | 0.8841 | 0.8797 |
+| 0.7 | 0.7772 | 0.7261 |
+| 0.9 | 0.1430 | 0.1106 |
 
-Wanda is *not* better here. The toy network's inputs have no outlier channels, so activation norms add noise more than signal.
+On the plain toy network Wanda is *not* better. Its inputs have no outlier channels, so activation norms add noise more than signal.
 
-One property does show up. `inject_outliers` makes three channels 30 times louder and their weights 30 times smaller, without changing the function. Wanda's score is unchanged by this: `|w/30| · 30·n = |w| · n`. Running it directly on the outlier network gave 0.8555 at 50% and 0.6377 at 70%, identical to the table. Magnitude pruning, which now sees those weights as tiny, moved from 0.8594 to 0.8545 and from 0.6684 to 0.6601. With only 3 of 256 channels affected, the damage is small. In LLMs, emergent outlier features make channel norms differ by orders of magnitude across many layers, which is where the paper's gains come from.
+Injected outliers show what Wanda is for. Wanda's score is unchanged by the rescaling: `|w/30| · 30·n = |w| · n`. Magnitude pruning instead sees the rescaled weights as tiny and removes them. At 60% removed:
 
-```python
-from lab import layerwise as lw
-from lab.common import data, ev, teacher
-X = data().train.X[:512]
-m = lw.inject_outliers(teacher(), 1, 3, 30.0)
-print(ev(lw.apply_layerwise(m, X, lambda W, h: lw.wanda(W, h, 0.5)))["acc"])
-```
+| outlier channels injected | magnitude, per row | Wanda |
+|---|---|---|
+| 0 | 0.8527 | 0.8346 |
+| 3 | 0.8502 | 0.8346 |
+| 16 | 0.8371 | 0.8346 |
+| 64 | 0.7759 | 0.8346 |
+| 128 | 0.6239 | 0.8346 |
+
+Wanda is identical in every row; magnitude crosses below it somewhere between 16 and 64 outlier channels. In LLMs, emergent outlier features make channel norms differ by orders of magnitude in every block, which is where the paper's gains come from.
 
 ## When it breaks
 
@@ -59,7 +64,8 @@ print(ev(lw.apply_layerwise(m, X, lambda W, h: lw.wanda(W, h, 0.5)))["acc"])
 
 ## Try this
 
-- **fraction removed** 0.5, 0.7, 0.9: watch the gap between magnitude and Wanda, then compare with SparseGPT at the same setting.
+- **fraction removed** 0.6, then **outlier channels injected** 0, 16, 64, 128: look for the Wanda row not moving at all while magnitude pruning falls.
+- **fraction removed** 0.5, 0.7, 0.9 with no outliers: watch the gap between magnitude and Wanda, then compare with SparseGPT at the same setting.
 - **fraction removed** 0.3: look for both methods staying near the teacher. Low sparsity is easy for any criterion.
 
 ## Going further

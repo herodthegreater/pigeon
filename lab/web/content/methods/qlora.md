@@ -14,7 +14,7 @@ For each linear layer, with weight stored as (in, out) as in this repo:
 
 Adapter size per layer is `r · (in + out)` instead of `in · out`. For a 4096 x 4096 projection at `r = 16`, that is 131,072 instead of 16.8 million.
 
-Note that `dL/dA = dL/dW · Bᵀ` is zero at the start, because `B = 0`. The first steps move only `B`; once `B` is nonzero, `A` starts learning too.
+At the start `dL/dA = dL/dW · Bᵀ` is zero because `B = 0`, so the first steps move only `B`.
 
 **What QLoRA adds over LoRA** (Dettmers et al. 2023):
 
@@ -40,15 +40,15 @@ The frozen weights are dequantized to bf16 on the fly for each matmul. Gradients
 
 ## What the simulations show
 
-The starting model is the distilled 2x32 student (2,132 parameters, 0.8009 accuracy).
+The starting model is the distilled 2x32 student (2,132 parameters, 0.8281 accuracy). All three of its layers are quantized, the output layer included. "2-bit" is ternary, `{-s, 0, s}`, the same rounding as `harness/quant.py`.
 
 | base bits | quantized | + rank-4 adapters (640 params) |
 |---|---|---|
-| 2 | 0.2173 | 0.6229 |
-| 3 | 0.6283 | 0.7788 |
-| 4 | 0.7670 | 0.7979 |
+| 2 | 0.1683 | 0.6682 |
+| 3 | 0.6397 | 0.7877 |
+| 4 | 0.7944 | 0.8037 |
 
-At 2 bits, rank 1 (160 parameters) reaches 0.3284 and rank 16 (2,560 parameters) reaches 0.7571. Rank 16 has more adapter parameters than the model has weights. In a toy this small, "low-rank" stops being cheap quickly; in a 7B model even rank 64 on every layer is a small fraction of the weights. At 4 bits the adapters recover almost everything. At 2 bits they recover most of the drop but not all.
+At 2 bits, rank 1 (160 parameters) reaches 0.4067 and rank 12 (1,920 parameters, the page's maximum) reaches 0.7749. Rank 12 is almost as many parameters as the model itself, which is why the slider stops there; in a 7B model even rank 64 on every layer is a small fraction of the weights. At 2 and 3 bits, rank-4 adapters win back about three quarters of the drop. At 4 bits the drop is small (3.4 points) and they win back under a third of it, ending at 0.8037. Training is only 500 distillation steps, and this run can't tell whether longer training would close the rest.
 
 The merged model is no longer on the quantization grid: `Wq + A B` is a dense float matrix (the `params` column shows 2,132). To keep the memory savings at inference you keep the adapters separate, or re-quantize the merged weights and accept some loss.
 
@@ -57,13 +57,12 @@ The merged model is no longer on the quantization grid: `Wq + A B` is a dense fl
 - If the base is quantized too coarsely, a low-rank correction can't undo errors that are full-rank. Rounding noise is spread over every direction.
 - Training data that doesn't match the target task gives adapters that fix the wrong thing.
 - Merging and re-quantizing can throw away much of what the adapters learned, because their corrections are often smaller than one quantization step.
-- Learning rate and rank interact: without `α/r` scaling, changing the rank also changes the effective step size.
 
 ## Try this
 
-- **base bits** 2, then **adapter rank** 1, 4, 16: look for diminishing returns, and compare the adapter count with the model's 2,132 parameters.
-- **base bits** 4, **adapter rank** 4: almost full recovery.
-- **base bits** 3 with **adapter rank** 1: see whether a single direction per layer is enough when the damage is milder.
+- **base bits** 2, then **adapter rank** 1, 4, 12: look for diminishing returns, and compare the adapter count with the model's 2,132 parameters.
+- **base bits** 3 with **adapter rank** 1: a single direction per layer reaches 0.7522, most of what rank 4 gets. Milder damage needs less rank.
+- **base bits** 4: look for how little is left to recover, and how little of it the adapters get.
 
 ## Going further
 

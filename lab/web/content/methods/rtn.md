@@ -11,7 +11,7 @@ For a linear layer `y = W x` with `W` shaped (out, in), and a bit width `b`:
 3. Replace each weight with `clip(round(w / scale), -qmax, qmax) * scale`.
 4. Store the integers and one scale per row (or per group).
 
-This is *symmetric* quantization: levels centered on zero, no zero-point offset. At 2 bits, `qmax = 1` leaves three levels, `{-scale, 0, +scale}`, so one of the four codes is unused.
+This is *symmetric* quantization: levels centered on zero, no zero-point offset. At 2 bits, `qmax = 1` leaves three levels, `{-scale, 0, +scale}`: "2-bit" here is really ternary, by design and the same as `harness/quant.py`. One of the four codes is unused; real 2-bit formats add a zero point to use all four.
 
 In a transformer, the same rule is applied to every `nn.Linear` inside every block: the query, key, value and output projections of attention, and the up, gate and down projections of the MLP. The token embedding and the output layer (`lm_head`) usually stay at 16 bits. RTN needs no calibration data.
 
@@ -29,24 +29,24 @@ In a transformer, the same rule is applied to every `nn.Linear` inside every blo
 
 ## What the simulations show
 
-The model is the 3x256 teacher (91.39% test accuracy). All four of its linear layers are quantized, including the first (12 inputs) and the 20-way output layer. The `params` column counts *nonzero* weights, so it shows how many weights rounded to zero.
+The model is the 3x256 teacher (91.39% test accuracy). As in the papers, the output layer (the toy's `lm_head`) is left at full precision: `apply_layerwise(..., skip_last=True)`. The first layer, which reads the 12 raw inputs, *is* quantized, whereas papers usually keep the embedding at 16 bits. The `params` column counts *nonzero* parameters, so it shows how many weights rounded to zero.
 
 | setting | accuracy | nonzero params |
 |---|---|---|
 | teacher, fp32 | 0.9139 | 140,052 |
-| RTN 8-bit, per row | 0.9138 | 138,657 |
-| RTN 4-bit, per row | 0.9078 | 115,504 |
-| RTN 3-bit, per row | 0.8669 | 85,152 |
-| RTN 3-bit, scale per 16 | 0.8947 | 102,263 |
-| RTN 2-bit, per row | 0.2483 | 19,371 |
+| RTN 8-bit, per row | 0.9142 | 138,711 |
+| RTN 4-bit, per row | 0.9103 | 116,440 |
+| RTN 3-bit, per row | 0.8922 | 87,253 |
+| RTN 3-bit, scale per 16 | 0.9010 | 103,671 |
+| RTN 2-bit, per row | 0.4686 | 23,876 |
 
-8 and 4 bits are nearly free. At 3 bits RTN loses almost 5 points; at 2 bits the network collapses and roughly one weight in seven stays nonzero. Smaller groups help because one large weight no longer sets the step size for 256 others. The toy world can't show the main reason RTN fails in real LLMs: a few input channels with activations 100 times larger than the rest (see AWQ and SmoothQuant).
+8 and 4 bits are nearly free. At 3 bits RTN loses about 2 points; at 2 bits (ternary) accuracy halves and only 23,876 of 140,052 parameters stay nonzero. Smaller groups help because one large weight no longer sets the step size for 256 others. The toy world can't show the main reason RTN fails in real LLMs: a few input channels with activations 100 times larger than the rest (see AWQ and SmoothQuant).
 
 ## When it breaks
 
 - One outlier weight per row stretches the scale, so every other weight in that row gets coarser levels. Groups limit the damage, but each group needs its own stored scale: one 16-bit scale per 16 weights adds 1 bit per weight.
 - Rounding errors in a row add up in the output. RTN never checks whether they cancel or pile up on the inputs that matter.
-- Below 4 bits, symmetric rounding with a zero level sends most small weights to exactly zero. That is accidental pruning.
+- Below 4 bits, symmetric rounding with a zero level sends most small weights to exactly zero. That is accidental pruning, and at 2 bits it is the dominant effect.
 
 ## Try this
 

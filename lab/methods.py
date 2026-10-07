@@ -831,8 +831,8 @@ def run_wanda(p):
         t = lw.inject_outliers(t, 1, p["outliers"], 30.0)
     s = p["sparsity"]
     return result([teacher_row(),
-                   row("magnitude, per row", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, np.ones_like(h), s)), skip_last=True),
-                   row("Wanda", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, h, s)), skip_last=True)])
+                   row("magnitude, per row", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, np.ones_like(h), s), skip_last=True)),
+                   row("Wanda", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, h, s), skip_last=True))])
 
 
 @method(id="sparsegpt", name="SparseGPT", family="llm", category="prune",
@@ -847,8 +847,8 @@ def run_sparsegpt(p):
     t, X = teacher(), _calib()
     s = p["sparsity"]
     return result([teacher_row(),
-                   row("magnitude, per row", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, np.ones_like(h), s)), skip_last=True),
-                   row("Wanda", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, h, s)), skip_last=True),
+                   row("magnitude, per row", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, np.ones_like(h), s), skip_last=True)),
+                   row("Wanda", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, h, s), skip_last=True)),
                    row("SparseGPT", lw.apply_layerwise(t, X, lambda W_, h: lw.sparsegpt(W_, h, s, p["block"]), skip_last=True))])
 
 
