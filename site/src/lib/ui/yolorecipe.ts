@@ -24,7 +24,7 @@ function precisionNote(r: DetectorRecipe): string {
   if (r.bits >= 16) return "At 16 bits nothing is rounded: these are the native fp16 weights. Move the slider to 8 or fewer to choose how weights are rounded.";
   if (r.bits === 1) return "At 1 bit each weight becomes plus or minus the mean size of the weights that share its scale, so the grid doesn't apply.";
   const levels = r.levels === "fp" ? fpGrid(r.bits).length * 2 - 1 : 2 ** r.bits - 1;
-  const who = r.granularity === "tensor" ? "one scale for each whole tensor" : r.granularity === "channel" ? "a scale for each output channel" : `a scale for every ${r.group} weights`;
+  const who = r.granularity === "tensor" ? "one scale for each whole tensor" : r.granularity === "channel" ? "a scale for each output channel" : `a scale for each block of up to ${r.group} weights in an output channel`;
   const grid = r.levels === "fp" ? "float levels, packed close together near zero" : "evenly spaced levels";
   return `Each weight rounds to one of ${levels} ${grid}, with ${who}. Every scale is stored too, as 16 bits.`;
 }
@@ -119,7 +119,7 @@ export class YoloRecipeEditor {
       </section>
 
       <section class="step" aria-labelledby="struct-title">
-        <div class="step-head"><h3 id="struct-title">Structure</h3><button type="button" class="remove" data-clear>Clear the cuts</button></div>
+        <div class="step-head"><h3 id="struct-title">Structure</h3><button type="button" class="btn secondary" data-clear>Clear the cuts</button></div>
         <div class="step-body">
           <p class="note">Each slider masks a share of one stage's channels, weakest first (the smallest weights). Masking zeroes them to preview a structural cut. Your copy of the file doesn't shrink, so size and compute count what removing those channels for real would leave.</p>
           <fieldset class="stages"><legend class="sub">Backbone, L0 to L9</legend>${backbone.map((s) => this.stageRow(s)).join("")}</fieldset>

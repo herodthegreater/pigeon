@@ -23,7 +23,8 @@ export interface TensorInfo {
   outChannels: number;
 }
 
-function scaleCount(t: TensorInfo, g: Granularity): number {
+/** Scales a granularity stores, counted the way quant.ts's scaleGroups cuts the tensor: groups never straddle two output channels. */
+export function scaleCount(t: TensorInfo, g: Granularity): number {
   if (g.kind === "tensor") return 1;
   if (g.kind === "channel") return t.outChannels;
   const per = t.numel / t.outChannels;
@@ -47,7 +48,10 @@ export function tensorBits(t: TensorInfo, enc: Encoding, sp: Sparsity = { kind: 
       perWeight = 32; overhead = 0; break;
     case "float":
       perWeight = enc.bits;
-      overhead = (enc.block ? Math.ceil(numel / enc.block) * (enc.scaleBitsPerBlock ?? 8) : 0) + (enc.tensorScaleBits ?? 0);
+      // MX and NV blocks are cut inside each output channel's row, as quantizeFloat does (scaleGroups), so a
+      // row shorter than a block, or one that doesn't divide evenly, still pays for a whole scale.
+      overhead =
+        (enc.block ? scaleCount(info, { kind: "group", size: enc.block }) * (enc.scaleBitsPerBlock ?? 8) : 0) + (enc.tensorScaleBits ?? 0);
       break;
     case "int":
       perWeight = enc.bits;

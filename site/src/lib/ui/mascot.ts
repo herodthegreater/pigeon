@@ -32,7 +32,8 @@ export interface Species {
 export const SPECIES: Species[] = [
   {
     id: "pigeon", name: "Rock Pigeon", latin: "Columba livia", grams: 350, minRatio: 0,
-    note: "Full-precision Pigeon. Well fed. Waddles.",
+    // Every model under the dove's 1.8x is a rock pigeon, so the note must hold for 1.0x and 1.7x alike (speciesNote has the 1.0x one).
+    note: "Barely lighter, if at all: it stays a rock pigeon until it is 1.8 times smaller.",
     scale: 1, body: { l: 58, h: 40 }, head: 14.5, beak: { l: 11, h: 5 },
     wing: { reach: 20, shape: "round" }, tail: { kind: "fan", l: 30 }, leg: 20,
     c: { body: "#8f99a6", belly: "#a7b0bb", head: "#737d8b", wing: "#9aa4b0", mark: "#2f3540", tail: "#6d7582",
@@ -72,7 +73,13 @@ export const SPECIES: Species[] = [
   },
 ];
 
-export const DODO = { name: "Dodo", latin: "Raphus cucullatus", note: "You broke the uncompressed model. Impressive." };
+/** Drawn for any model broken before it got much lighter (under 1.3x), so the note can't say "uncompressed". */
+export const DODO = { name: "Dodo", latin: "Raphus cucullatus", note: "You broke it before it got much lighter. Impressive." };
+
+/** A species' note, true at the ratio it is shown for: only a model that lost nothing is called full weight. */
+export function speciesNote(sp: Species, ratio: number): string {
+  return sp.id === SPECIES[0].id && ratio <= 1 ? "Full weight: nothing has come off yet. Waddles." : sp.note;
+}
 
 export function speciesFor(ratio: number): Species {
   let s = SPECIES[0];
@@ -98,6 +105,9 @@ export function starvation(accuracy: number, pointing: number): number {
 export function conditionOf(starve: number): Condition {
   return starve <= 0 ? "healthy" : starve >= 1 ? "skeleton" : "emaciated";
 }
+
+/** What a reader sees for each condition: the same three words on the bird card, the chart and the run tables. */
+export const CONDITION_WORD: Record<Condition, string> = { healthy: "Healthy", emaciated: "Starving", skeleton: "Skeleton" };
 
 /* ------------------------------------------------------------ drawing */
 
@@ -307,7 +317,7 @@ export function mascotSVG(state: MascotState | StarveState): { svg: string; spec
   const inner = condition === "skeleton" ? drawSkeleton(species, dodo) : drawLiving(species, starve);
   const k = dodo ? 1 : species.scale;
   const halo = `halo-${++halos}`;
-  const svg = `<svg viewBox="22 38 ${W - 30} ${H - 30}" role="img" aria-label="${dodo ? "Dodo" : species.name}, ${condition}">
+  const svg = `<svg viewBox="22 38 ${W - 30} ${H - 30}" role="img" aria-label="${dodo ? "Dodo" : species.name}, ${CONDITION_WORD[condition].toLowerCase()}">
     <defs>${haloFilter(halo, k)}</defs>
     <ellipse cx="135" cy="${GROUND + 2}" rx="${70 * k}" ry="5" fill="var(--bird-shadow)"/>
     <line x1="30" x2="230" y1="${GROUND + 2}" y2="${GROUND + 2}" stroke="var(--rule)" stroke-width="1"/>
