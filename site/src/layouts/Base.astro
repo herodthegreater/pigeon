@@ -5,7 +5,8 @@ interface Props { title: string; description?: string; active?: Section }
 const { title, description = "Learn model compression by shrinking a real bird-spotting model.", active } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 // [section, the word dropped on narrow phones, the word always shown, href]. The dropped word stays in
-// the link's accessible name, so "Coop" still reads as "The Coop".
+// the link's accessible name, so "Coop" still reads as "The Coop". Both words sit in one inner span:
+// the link is a flex box, and a flex item's trailing space would be dropped ("FlightSchool").
 const nav: [Section, string, string, string][] = [
   ["school", "Flight ", "School", "school/"],
   ["coop", "The ", "Coop", "coop/"],
@@ -40,7 +41,7 @@ const nav: [Section, string, string, string][] = [
       <a class="brand" href={base}><span class="wordmark">Pigeon</span><span class="latin">Columba compressa</span></a>
       <nav aria-label="Sections">
         {nav.map(([key, drop, word, href]) => (
-          <a href={`${base}${href}`} aria-current={active === key ? "page" : undefined}>{drop && <span class="drop">{drop}</span>}{word}</a>
+          <a href={`${base}${href}`} aria-current={active === key ? "page" : undefined}><span>{drop && <span class="drop">{drop}</span>}{word}</span></a>
         ))}
       </nav>
       <label class="theme">
