@@ -102,6 +102,11 @@ h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.15; m
 p { margin: 0; }
 a { color: var(--teal); text-underline-offset: 2px; }
 button, input, select, textarea { font: inherit; color: inherit; }
+/* iOS Safari zooms the page into any focused field under 16px and leaves it zoomed, so on touch
+   screens and phones every typed or picked field is at least 16px, wherever its parent sets 14px. */
+@media (pointer: coarse), (max-width: 640px) {
+  select, textarea, input:not([type="checkbox"], [type="radio"], [type="range"]) { font-size: max(16px, 1em); }
+}
 :focus-visible { outline: 2px solid var(--magenta); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; }
 .visually-hidden {

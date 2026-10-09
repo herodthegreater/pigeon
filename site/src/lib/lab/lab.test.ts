@@ -77,11 +77,17 @@ describe("results", () => {
 
   it("renders a result table with escaped labels and what ran", () => {
     const h = resultView(run);
-    expect(h).toContain('<th scope="col" class="num">accuracy</th>');
+    // The same column names as the Results tables (labels.ts).
+    expect(h).toContain('<th scope="col" class="num">Test accuracy (20-way)</th>');
+    expect(h).toContain('<th scope="col" class="num">Parameters (nonzero)</th>');
     expect(h).toContain("student &lt;b&gt;");
     expect(h).toContain("137,000");
     expect(h).toContain("Ran in 3.2 s with bits 4.");
     expect(h).toContain('<p class="run-note">a note</p>');
+    // Settings in the words their fields use, and the reference row named.
+    expect(resultView({ ...run, params: { bits: 4, act_order: false } }, { bits: "bits", act_order: "largest activations first" }))
+      .toContain("Ran in 3.2 s with bits 4, largest activations first: no.");
+    expect(resultView({ ...run, rows: [{ label: "fp32", acc: 0.9, kbits: 10, ref: true } as never] })).toContain('fp32 <span class="ref-note">(reference)</span>');
   });
 
   it("gives every series its own dash and marker, and the data as a table", () => {
