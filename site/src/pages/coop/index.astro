@@ -2,6 +2,7 @@
 import Base from "../../layouts/Base.astro";
 import CoopPicker from "../../components/CoopPicker.astro";
 import { WORKS_LINE } from "../../lib/ui/mascot";
+import { BROKEN_LINE, SPECIES_LADDER } from "../../lib/ui/coopbirds";
 import "../../styles/coop.css";
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
@@ -40,7 +41,13 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
           <div class="metric"><dt>Size</dt><dd class="value num"><span id="m-size">…</span><small id="m-ratio"></small></dd><dd class="desc">real bytes, scales and indices included</dd></div>
         </dl>
         <p class="basis" id="basis"></p>
-        <p class="record" id="best" data-works={WORKS_LINE}>No healthy compressed Pigeon yet. The line to beat: {WORKS_LINE}.</p>
+        <div class="record" id="record">
+          <p id="best">No healthy compressed Pigeon yet.</p>
+          <p class="rule-line">
+            The bird's species follows how many times smaller Pigeon is than at full precision ({SPECIES_LADDER}).
+            Its health follows Pigeon's own line: healthy at {WORKS_LINE}, a skeleton at {BROKEN_LINE}, starving in between.
+          </p>
+        </div>
       </div>
     </section>
     <p class="visually-hidden" id="announce" role="status" aria-live="polite" aria-atomic="true"></p>
@@ -63,7 +70,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
             <summary>Show every run as a table</summary>
             <div class="runs-scroll" id="pareto-table" tabindex="0" role="region" aria-label="Every run, as a table"><p class="waiting">No runs yet: the first one is the original Pigeon, scored as the page loads.</p></div>
           </details>
-          <p class="caption">Each mark is one full {photos}-photo scoring run, kept in this browser, and named the way the bird is: a filled dot is healthy ({WORKS_LINE}), a hollow dot is starving, a cross is a skeleton. The magenta line joins the best tradeoffs: nothing else you tried is both smaller <em>and</em> more accurate.</p>
+          <p class="caption">Each mark is one full {photos}-photo scoring run, kept in this browser, and marked by the bird's condition: a filled dot is healthy ({WORKS_LINE}), a hollow dot is starving, a cross is a skeleton ({BROKEN_LINE}). The magenta line joins the best tradeoffs: nothing else you tried is both smaller <em>and</em> more accurate.</p>
           <p class="caption" id="store-note" hidden>This browser won't let the page save anything, so these runs will be gone when you leave or reload.</p>
         </section>
 
@@ -119,16 +126,15 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
   <script>
     import { Engine, QUICK, Unsupported, type Ready } from "../../lib/engine/client";
     import type { Result } from "../../lib/engine/worker";
-    import { RecipeEditor, presetOf } from "../../lib/ui/recipe";
+    import { RecipeEditor, linkQuery, recipeFromLink } from "../../lib/ui/recipe";
     import { mascotSVG, speciesNote, CONDITION_WORD, DODO } from "../../lib/ui/mascot";
     import { paretoSVG, paretoTable, smallestWorking, formatSize, type Attempt } from "../../lib/ui/pareto";
     import { Specimens, esc } from "../../lib/ui/specimens";
-    import { bindLifeListCount, cageHref, sight } from "../../lib/ui/coopbirds";
+    import { bindLifeListCount, birdDrawer, cageHref, hatches, sight } from "../../lib/ui/coopbirds";
 
     const $ = (id: string) => document.getElementById(id)!;
     const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
     const CAGE = `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}coop/`;
-    const WORKS = $("best").dataset.works!;
 
     // Every full run is kept in this browser. Runs saved before October 2026 under the old key used a size that
     // counted too few MX and NV block scales, so those are dropped rather than shown with a size that was too small.
@@ -195,7 +201,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         ? "This browser can't run the Coop: it needs Web Workers and WebAssembly. Open it in a current Chrome, Firefox, Safari or Edge."
         : `The engine stopped: ${errText(err)}. Check your connection and reload. If it keeps failing, try a current Chrome, Firefox, Safari or Edge.`;
       $("retry").hidden = unsupported;
-      for (const id of ["metrics", "basis", "best", "work"]) $(id).hidden = true;
+      for (const id of ["metrics", "basis", "record", "work"]) $(id).hidden = true;
       bar.style.width = "0";
       status(unsupported ? "Can't start in this browser" : "Engine stopped", "error");
       announce(unsupported ? "The Coop can't run in this browser: it needs Web Workers and WebAssembly." : `The Coop couldn't load: ${errText(err)}`);
@@ -214,7 +220,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
       const specimens = new Specimens($("specimens"), images, sheet, 10);
       let current: Attempt = { label: "Full precision", bytes: base.totalBytes, accuracy: base.score.accuracy, pointing: base.score.pointing };
       let lastFinal: Result = base; // what the board falls back to when a run fails
-      let shownSpecies = "";
+      const drawBird = birdDrawer($("bird"));
       const warned = { blocked: false };
 
       function delta(el: HTMLElement, v: number, ref: number) {
@@ -238,13 +244,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         $("m-ratio").textContent = `${ratio.toFixed(2)}× smaller`;
         $("m-ratio").className = "flat";
         const m = mascotSVG({ ratio, accuracy: s.accuracy, pointing: s.pointing });
-        const bird = $("bird");
-        const key = m.dodo ? "dodo" : m.species.id;
-        if (key !== shownSpecies && shownSpecies) {
-          bird.classList.add("swap");
-          setTimeout(() => { bird.innerHTML = m.svg; bird.classList.remove("swap"); }, 180);
-        } else bird.innerHTML = m.svg;
-        shownSpecies = key;
+        drawBird(m.dodo ? "dodo" : m.species.id, m.svg);
         const cond = $("bird-condition");
         cond.dataset.c = m.condition;
         const word = CONDITION_WORD[m.condition];
@@ -277,12 +277,11 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         $("pareto-table").innerHTML = paretoTable(attempts, current);
         const best = smallestWorking(attempts, base.totalBytes);
         $("best").innerHTML = best
-          ? `Smallest healthy Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${(base.totalBytes / best.bytes).toFixed(1)}× smaller, ${pct(best.accuracy)} accurate): <em>${esc(best.label)}</em>`
-          : `No healthy compressed Pigeon yet. The line to beat: ${WORKS}.`;
+          ? `Smallest healthy Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${(base.totalBytes / best.bytes).toFixed(2)}× smaller, ${pct(best.accuracy)} accurate): <em>${esc(best.label)}</em>`
+          : "No healthy compressed Pigeon yet.";
       }
 
       const editor = new RecipeEditor($("recipe"), tensors, (recipe, label) => {
-        const preset = presetOf(recipe);
         let estimated = false;
         bar.style.width = "0";
         status(`Scoring on ${QUICK} photos…`);
@@ -301,13 +300,12 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
             attempts.push(current);
             save();
             redrawChart();
-            // The full-precision Pigeon is the reference, not a bird anyone hatched, so it never goes on the life list;
-            // nor does a recipe whose steps apply to no layers, which leaves the reference untouched.
+            // Only a Pigeon that came out smaller goes on the life list: never the full-precision reference, nor a recipe
+            // that leaves it as big as it was. Its bird is graded by Pigeon's own line, so the sighting carries the pointing too.
             const { m } = shown;
-            const untouched = preset === "fp32" || recipe.steps.every((step) => step.parts.length === 0);
-            const life = untouched ? { said: "", announce: false } : sight({
+            const life = !hatches(shown.ratio) ? { said: "", announce: false } : sight({
               bird: { ratio: shown.ratio, kept: r.score.accuracy / base.score.accuracy, condition: m.condition, starve: m.starve, species: m.dodo ? "dodo" : m.species.id, name: shown.name },
-              model: "pigeon", modelName: "Pigeon", recipe: label, href: cageHref(CAGE, preset),
+              model: "pigeon", modelName: "Pigeon", recipe: label, href: cageHref(CAGE, linkQuery(recipe)), rule: "pigeon", pointing: r.score.pointing,
             }, warned);
             status(`Scored on all ${r.score.n} photos · ${Math.round(r.ms.infer)} ms${life.said ? ` · ${life.said}` : ""}`, "ok");
             announce(life.announce ? `${shown.summary}. ${life.said}` : shown.summary);
@@ -336,10 +334,14 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
       clear.addEventListener("click", () => { attempts = [current]; save(); redrawChart(); });
       heat.disabled = clear.disabled = false;
 
-      // ?preset=<id> (Flight School and the Field Guide link here): load it as if its button were clicked.
-      // Unknown ids are ignored, and focus stays where the visitor is.
-      const wanted = new URLSearchParams(location.search).get("preset");
-      if (!(wanted && editor.loadPreset(wanted, false))) announce(`Ready. ${summary}`);
+      // A link can carry a recipe: ?preset=<id> (Flight School and the Field Guide) or ?steps=… (a life-list sighting).
+      // It loads as if it had been built by hand, and focus stays where the visitor is.
+      const link = recipeFromLink(new URLSearchParams(location.search));
+      if (link && "recipe" in link) editor.load(link.recipe, link.preset, false);
+      else if (link) {
+        status(`This link's recipe couldn't be read (${link.error}), so the board shows the full-precision Pigeon. Pick a preset or add steps below.`, "error");
+        announce("This link's recipe couldn't be read, so the Coop shows the full-precision Pigeon.");
+      } else announce(`Ready. ${summary}`);
     }
   </script>
 </Base>

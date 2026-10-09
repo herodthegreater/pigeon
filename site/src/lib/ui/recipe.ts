@@ -3,7 +3,7 @@
  * Vanilla DOM; calls `onChange(recipe)` after every edit.
  */
 
-import type { Granularity } from "../compress/quant";
+import type { FloatQuantOptions, Granularity } from "../compress/quant";
 import type { Kind, TensorMeta } from "../engine/model";
 import { ALL_KINDS, type Recipe, type Step } from "../engine/pipeline";
 
@@ -61,6 +61,118 @@ export function describeRecipe(r: Recipe): string {
 export function presetOf(r: Recipe): string | null {
   const label = describeRecipe(r);
   return PRESETS.find((p) => describeRecipe(p.recipe) === label)?.id ?? null;
+}
+
+/* ------------------------------------------------------------ the recipe in a link */
+
+const FORMATS = ["fp16", "bf16", "fp8_e4m3", "fp8_e5m2", "fp4_e2m1"] as const;
+const GROUP_SIZES = [16, 32, 64, 128];
+const MAX_PRUNE = { magnitude: 95, channels: 60 } as const; // the Remove slider's ends
+/** The most steps a link may stack: more than anyone builds by hand, few enough to score in reasonable time. */
+export const MAX_LINK_STEPS = 12;
+
+const partsText = (parts: Kind[]) => (parts.length === ALL.length ? "all" : parts.length ? ALL.filter((k) => parts.includes(k)).join("-") : "none");
+
+/** One step as link text: "int.8.channel.all", "int.4.g32.asym.conv-head", "float.fp4_e2m1.mx.all", "prune.magnitude.30.all", "cluster.16.all". */
+function stepText(s: Step): string {
+  switch (s.op) {
+    case "int": {
+      const g = s.granularity.kind === "group" ? `g${s.granularity.size}` : s.granularity.kind;
+      return ["int", s.bits >= 16 ? "off" : String(s.bits), g, ...(s.symmetric ? [] : ["asym"]), ...(s.ternary ? ["ternary"] : []), partsText(s.parts)].join(".");
+    }
+    case "float":
+      return ["float", s.format, s.scaling.kind, partsText(s.parts)].join(".");
+    case "prune":
+      return ["prune", s.method, ...(s.method === "nm" ? [] : [String(Math.round(s.amount * 100))]), partsText(s.parts)].join(".");
+    case "cluster":
+      return ["cluster", String(s.k), partsText(s.parts)].join(".");
+  }
+}
+
+/** The query that reopens a recipe in the Coop: "" for full precision, "preset=<id>" for a preset, otherwise "steps=" and every step. */
+export function linkQuery(r: Recipe): string {
+  const preset = presetOf(r);
+  if (preset) return preset === "fp32" ? "" : `preset=${preset}`;
+  return `steps=${r.steps.map(stepText).join(",")}`;
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const nearest = (v: number, options: number[]) => options.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
+const number = (s: string | undefined) => (s && s.trim() ? Number(s) : NaN);
+
+function partsFrom(s: string | undefined): Kind[] | null {
+  if (s === "all") return [...ALL];
+  if (s === "none") return [];
+  const named = (s ?? "").split("-");
+  if (!named.every((k) => (ALL as string[]).includes(k))) return null;
+  return ALL.filter((k) => named.includes(k));
+}
+
+/** One step back from its link text, every number clamped to what its controls can set; null if it can't be read. */
+function stepFrom(text: string): Step | null {
+  const [op, ...rest] = text.split(".");
+  const parts = partsFrom(rest.pop());
+  if (!parts) return null;
+  if (op === "int") {
+    const [b, g, ...flags] = rest;
+    const n = b === "off" ? 16 : number(b);
+    const size = /^g(\d+)$/.exec(g ?? "");
+    const granularity: Granularity | null = g === "tensor" || g === "channel" ? { kind: g } : size ? { kind: "group", size: nearest(Number(size[1]), GROUP_SIZES) } : null;
+    if (!Number.isFinite(n) || !granularity || !flags.every((f) => f === "asym" || f === "ternary")) return null;
+    const bits = n >= 16 ? 16 : clamp(Math.round(n), 1, 8);
+    const step: Step = { op, parts, bits, granularity, symmetric: !flags.includes("asym") };
+    if (bits === 2 && flags.includes("ternary")) step.ternary = true; // the ternary box only exists at 2 bits
+    return step;
+  }
+  if (op === "float") {
+    const [format, sc] = rest;
+    const f = FORMATS.find((x) => x === format);
+    // The editor's blocks: MX shares a scale per 32 weights, NVFP4 per 16.
+    const scaling: FloatQuantOptions["scaling"] | null =
+      sc === "none" || sc === "tensor" ? { kind: sc } : sc === "mx" ? { kind: "mx", block: 32 } : sc === "nv" ? { kind: "nv", block: 16 } : null;
+    if (!f || !scaling || rest.length !== 2) return null;
+    return { op, parts, format: f, scaling };
+  }
+  if (op === "prune") {
+    const [method, amount] = rest;
+    if (method === "nm") return rest.length === 1 ? { op, parts, method, amount: 0.5 } : null;
+    if ((method !== "magnitude" && method !== "channels") || rest.length !== 2) return null;
+    const pct = number(amount);
+    if (!Number.isFinite(pct)) return null;
+    return { op, parts, method, amount: clamp(Math.round(pct / 5) * 5, 0, MAX_PRUNE[method]) / 100 };
+  }
+  if (op === "cluster") {
+    const k = number(rest[0]);
+    if (!Number.isFinite(k) || k <= 0 || rest.length !== 1) return null;
+    return { op, parts, k: 2 ** clamp(Math.round(Math.log2(k)), 1, 8) };
+  }
+  return null;
+}
+
+export type FromLink = { recipe: Recipe; preset: string | null } | { error: string } | null;
+
+/**
+ * The recipe a Coop link carries: ?steps=<linkQuery's steps>, or ?preset=<id>. Returns null when
+ * the link carries no recipe, and the reason in words when it can't be read.
+ */
+export function recipeFromLink(params: URLSearchParams): FromLink {
+  const text = params.get("steps");
+  if (text === null) {
+    const id = params.get("preset");
+    if (id === null) return null;
+    const p = PRESETS.find((x) => x.id === id);
+    return p ? { recipe: clone(p.recipe), preset: p.id } : { error: `there is no preset called "${id}"` };
+  }
+  const parts = text.split(",").filter((t) => t.trim());
+  if (parts.length > MAX_LINK_STEPS) return { error: `it stacks ${parts.length} steps, and the Coop takes at most ${MAX_LINK_STEPS}` };
+  const steps: Step[] = [];
+  for (const [i, t] of parts.entries()) {
+    const step = stepFrom(t.trim());
+    if (!step) return { error: `step ${i + 1}, "${t}", isn't a step the Coop can build` };
+    steps.push(step);
+  }
+  const recipe = { steps };
+  return { recipe, preset: presetOf(recipe) };
 }
 
 const STEP_TITLES = { int: "Quantize to integers", float: "Change number format", prune: "Prune", cluster: "Palettize (k-means)" } as const;
@@ -193,7 +305,7 @@ export class RecipeEditor {
           ["magnitude", "Smallest weights (unstructured)"], ["nm", "2:4 pattern (semi-structured)"], ["channels", "Whole channels (structured)"],
         ].map(([v, n]) => `<option value="${v}" ${s.method === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         ${s.method === "nm" ? "" : `<label for="${id("amt")}" class="field"><span>Remove</span><output class="num">${Math.round(s.amount * 100)}%</output></label>
-        <input id="${id("amt")}" type="range" min="0" max="${s.method === "channels" ? 60 : 95}" step="5" value="${Math.round(s.amount * 100)}" data-i="${i}" data-f="amount"/>`}`;
+        <input id="${id("amt")}" type="range" min="0" max="${MAX_PRUNE[s.method === "channels" ? "channels" : "magnitude"]}" step="5" value="${Math.round(s.amount * 100)}" data-i="${i}" data-f="amount"/>`}`;
     } else {
       body = `
         <label for="${id("k")}" class="field"><span>Palette size</span><output class="num">${s.k} values (${Math.log2(s.k)} bits)</output></label>
@@ -259,7 +371,7 @@ export class RecipeEditor {
         if (note) note.textContent = SCALING_NOTE[s.scaling.kind];
       }
     } else if (s.op === "prune") {
-      if (f === "method") { s.method = el.value as typeof s.method; if (s.method === "channels") s.amount = Math.min(s.amount, 0.6); rerender = true; }
+      if (f === "method") { s.method = el.value as typeof s.method; if (s.method === "channels") s.amount = Math.min(s.amount, MAX_PRUNE.channels / 100); rerender = true; }
       if (f === "amount") { s.amount = Number(el.value) / 100; el.closest(".step")!.querySelector("output")!.textContent = `${el.value}%`; }
     } else if (s.op === "cluster" && f === "k") {
       s.k = 2 ** Number(el.value);

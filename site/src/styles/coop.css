@@ -58,9 +58,11 @@
 .coop .desc { font-size: var(--step--2); color: var(--muted); line-height: 1.35; }
 .coop .basis { font-size: var(--step--1); color: var(--muted); }
 .coop .basis:empty { display: none; }
-/* The score to beat, or the rule the bird follows: a ruled record line, like an entry in a field notebook. */
+/* The score to beat and the rule the bird follows: a ruled record, like an entry in a field notebook. */
 .coop .record { border-block: 1px solid var(--rule); padding-block: var(--space-3); }
 .coop .record strong { font-family: var(--display); font-size: var(--step-1); }
+.coop .record > p + p { margin-top: var(--space-2); }
+.coop .rule-line { font-size: var(--step--1); }
 
 /* ------------------------------------------------------------ recipe and results */
 
@@ -122,9 +124,9 @@
 #recipe .step-head h3 { font-size: var(--step-1); flex: 1; }
 #recipe .step-n { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
 #recipe .step-body { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
-/* Field labels read like the Field Guide's run box: semibold ink, the value in mono teal. */
+/* Field labels read like the Field Guide's run box: semibold ink, the value in mono ink. Teal is kept for what can be pressed. */
 #recipe .field { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: var(--step--1); font-weight: 600; }
-#recipe .field output { font-family: var(--mono); font-weight: 500; color: var(--teal); }
+#recipe .field output { font-family: var(--mono); font-weight: 500; }
 /* A short note under a control, saying what the chosen setting stores. */
 #recipe .note { font-size: var(--step--1); color: var(--muted); }
 #recipe select {

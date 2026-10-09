@@ -44,4 +44,13 @@ const models = [
   @media (pointer: coarse), (max-width: 640px) {
     a { min-height: var(--tap); align-items: center; }
   }
+  /* Under 480px the label and both entries no longer fit one line. The label goes (the nav is named "Model"
+     already), and the two cages split the width, each name over its role, both standing on the rule. */
+  @media (max-width: 480px) {
+    .picker { display: block; }
+    .label { display: none; }
+    ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-3); }
+    li { display: flex; }
+    a { flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; }
+  }
 </style>

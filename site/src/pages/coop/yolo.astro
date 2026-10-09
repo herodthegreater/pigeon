@@ -1,9 +1,9 @@
 ---
 import Base from "../../layouts/Base.astro";
 import CoopPicker from "../../components/CoopPicker.astro";
-import { SPECIES } from "../../lib/ui/mascot";
 import { HEALTHY_KEEP, SKELETON_KEEP } from "../../lib/detector/score";
 import { QUICK } from "../../lib/detector/recipe";
+import { SPECIES_LADDER } from "../../lib/ui/coopbirds";
 import "../../styles/coop.css";
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
@@ -16,7 +16,6 @@ const models = import.meta.glob<{ imgsz: number; params: number; recorded: { ap:
 const model = Object.values(models)[0];
 if (!model) throw new Error("public/coop/yolov8n/model.json is missing: run cockpit/build_coop.py");
 const rec = model.recorded;
-const ladder = SPECIES.filter((s) => s.minRatio > 0).map((s) => `${s.name.split(" ").pop()!.toLowerCase()} from ${s.minRatio}×`).join(", ");
 const keepPct = (v: number) => `${Math.round(v * 100)}%`;
 // The life list is its own page; the cage links to it only when that page is in the build, so no build ships a dead link.
 const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/src/pages/life-list/index.astro"], { query: "?raw", import: "default" })).length > 0;
@@ -51,7 +50,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         </dl>
         <p class="basis" id="basis"></p>
         <p class="record rule-line" id="rule">
-          The bird's species follows how many times smaller the weights are than native ({ladder}).
+          The bird's species follows how many times smaller the weights are than native ({SPECIES_LADDER}).
           Its health follows AP kept: healthy at {keepPct(HEALTHY_KEEP)} of native or more, a skeleton at {keepPct(SKELETON_KEEP)} or less, starving in between.
         </p>
       </div>
@@ -104,7 +103,6 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
     .coop .about { border-top: 1px solid var(--rule); padding-top: var(--space-4); }
     .coop .about p { max-width: var(--measure); font-size: var(--step--1); }
     .coop .about .credits { color: var(--muted); }
-    .coop .rule-line { font-size: var(--step--1); }
 
     #recipe .seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #recipe fieldset:disabled { opacity: 0.6; }
@@ -119,7 +117,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
     #recipe .stage .st { font-weight: 600; }
     #recipe .stage .kind { color: var(--muted); }
     #recipe .stage .share { flex-basis: 100%; font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
-    #recipe .stage output { font-family: var(--mono); color: var(--teal); text-align: right; }
+    #recipe .stage output { font-family: var(--mono); font-weight: 500; text-align: right; }
 
     /* Detections: dashed magenta over the same dark keyline the teal truth boxes get. */
     #tiles .boxes .found-boxes rect { stroke: var(--detect-box); stroke-width: 2; stroke-dasharray: 5 3; }
@@ -142,11 +140,11 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
     import { YoloRecipeEditor } from "../../lib/ui/yolorecipe";
     import { Detections } from "../../lib/ui/detections";
     import { detectorCondition } from "../../lib/detector/score";
-    import { describe, isNative, nativeRecipe, sameRecipe, PRESETS, QUICK, type DetectorRecipe } from "../../lib/detector/recipe";
+    import { describe, keyOf, linkQuery, nativeRecipe, recipeFromLink, QUICK } from "../../lib/detector/recipe";
     import { sheetUrl } from "../../lib/detector/files";
     import { mascotSVG, speciesNote, CONDITION_WORD, DODO, type Condition } from "../../lib/ui/mascot";
     import { birdFor } from "../../lib/ui/birds";
-    import { bindLifeListCount, cageHref, sight } from "../../lib/ui/coopbirds";
+    import { bindLifeListCount, birdDrawer, cageHref, hatches, sight } from "../../lib/ui/coopbirds";
 
     const $ = (id: string) => document.getElementById(id)!;
     const STORE = "pigeon.coop.yolo.runs";
@@ -158,13 +156,16 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
     const secs = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
     const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
-    interface Run { label: string; ap: number; kept: number; bytes: number; macs: number; condition: Condition }
+    // A run is identified by its recipe's key (keyOf); runs saved before keys were kept have only their label.
+    interface Run { key?: string; label: string; ap: number; kept: number; bytes: number; macs: number; condition: Condition }
     let runs: Run[] = [];
     let canStore = true;
     try {
       try {
         const saved = JSON.parse(localStorage.getItem(STORE) ?? "[]");
-        runs = Array.isArray(saved) ? saved.filter((a) => a && typeof a.label === "string" && a.condition in CONDITION_WORD) : [];
+        runs = Array.isArray(saved)
+          ? saved.filter((a) => a && typeof a.label === "string" && (a.key === undefined || typeof a.key === "string") && a.condition in CONDITION_WORD)
+          : [];
       } catch (err) {
         if (!(err instanceof SyntaxError)) throw err; // a damaged list starts over
       }
@@ -247,7 +248,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
       const native = ready.native;
       const tiles = new Detections($("tiles"), ready.previews, sheetUrl, ready.grid, 224);
       tiles.update(native.previews, native.previews);
-      let shownSpecies = "";
+      const drawBird = birdDrawer($("bird"));
       let current: Run | null = null;
       const warned = { blocked: false };
 
@@ -281,12 +282,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         $("m-macs-d").className = "flat";
 
         const m = mascotSVG({ ratio, starve });
-        const bird = $("bird"), key = m.dodo ? "dodo" : m.species.id;
-        if (key !== shownSpecies && shownSpecies) {
-          bird.classList.add("swap");
-          setTimeout(() => { bird.innerHTML = m.svg; bird.classList.remove("swap"); }, 180);
-        } else bird.innerHTML = m.svg;
-        shownSpecies = key;
+        drawBird(m.dodo ? "dodo" : m.species.id, m.svg);
         const cond = $("bird-condition");
         cond.dataset.c = condition;
         const word = CONDITION_WORD[condition];
@@ -308,16 +304,18 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
           $("runs").innerHTML = `<p class="waiting">No runs kept. Change the recipe to add one.</p>`;
           return;
         }
-        const rows = [...runs].reverse().map((a) => `<tr${current && a.label === current.label ? ' aria-current="true"' : ""}>
+        const rows = [...runs].reverse().map((a) => `<tr${current && a.key === current.key ? ' aria-current="true"' : ""}>
           <td>${esc(a.label)}</td><td class="num">${a.ap.toFixed(3)}</td><td class="num">${(a.kept * 100).toFixed(1)}%</td>
           <td class="num">${size(a.bytes)}</td><td class="num">${gmacs(a.macs)}</td><td class="c-${a.condition}">${CONDITION_WORD[a.condition]}</td></tr>`).join("");
         $("runs").innerHTML = `<table><thead><tr><th scope="col">Recipe</th><th scope="col" class="num">Bird AP@50</th><th scope="col" class="num">AP kept</th><th scope="col" class="num">Size</th><th scope="col" class="num">Compute</th><th scope="col">Condition</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
-      function record(r: Shown, label: string) {
+      // The same recipe run again replaces its row. A row saved without a key is matched by its label,
+      // which named every setting whenever it had three cuts or fewer.
+      function record(r: Shown, label: string, key: string) {
         const { condition, kept } = detectorCondition(r.ap, r.nativeAp);
-        current = { label, ap: r.ap, kept, bytes: r.cost.bytes, macs: r.cost.macs, condition };
-        runs = runs.filter((a) => a.label !== label);
+        current = { key, label, ap: r.ap, kept, bytes: r.cost.bytes, macs: r.cost.macs, condition };
+        runs = runs.filter((a) => (a.key === undefined ? a.label !== label : a.key !== key));
         runs.push(current);
         save();
         drawRuns();
@@ -325,11 +323,10 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
 
       const nativeShown: Shown = { ap: native.ap, nativeAp: native.ap, cost: native.cost, n: ready.n, final: true };
       let lastFinal: Shown = nativeShown; // what the board falls back to when a run fails
-      const presetOf = (r: DetectorRecipe) => PRESETS.find((p) => sameRecipe(p.recipe, r))?.id ?? null;
 
       const reset = $("reset") as HTMLButtonElement, clear = $("clear") as HTMLButtonElement;
       const editor = new YoloRecipeEditor($("recipe"), ready.stages, (recipe, label) => {
-        reset.disabled = label === describe(nativeRecipe());
+        reset.disabled = keyOf(recipe) === keyOf(nativeRecipe());
         let estimated = false;
         bar.style.width = "0";
         status(`Applying the recipe, then scoring on ${QUICK} photos…`);
@@ -343,10 +340,13 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
             const shown = show(r);
             lastFinal = r;
             if (r.previews) tiles.update(r.previews, native.previews);
-            record(r, label);
-            // Native YOLOv8n is the reference, not a bird anyone hatched, so it never goes on the life list.
-            const life = isNative(recipe) ? { said: "", announce: false } : sight({
-              bird: birdFor(shown.ratio, shown.kept), model: "yolov8n", modelName: "YOLOv8n", recipe: label, href: cageHref(CAGE, presetOf(recipe)),
+            const key = keyOf(recipe);
+            record(r, label, key);
+            // Only a YOLOv8n that came out smaller goes on the life list: never native, the reference, nor a recipe
+            // that leaves it as big as it was.
+            const life = !hatches(shown.ratio) ? { said: "", announce: false } : sight({
+              bird: birdFor(shown.ratio, shown.kept), model: "yolov8n", modelName: "YOLOv8n", recipe: label, recipeKey: key,
+              href: cageHref(CAGE, linkQuery(recipe)), rule: "keep",
             }, warned);
             const ran = r.ran === 0
               ? `Scored on all ${r.n} photos · this recipe's detections were kept from earlier in this visit`
@@ -367,16 +367,21 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
       });
 
       const summary = show(nativeShown).summary;
-      record(nativeShown, describe(nativeRecipe()));
+      record(nativeShown, describe(nativeRecipe()), keyOf(nativeRecipe()));
       status(`Scored native YOLOv8n on all ${ready.n} photos in ${(ready.ms / 1000).toFixed(1)} s · ready`, "ok");
 
       reset.addEventListener("click", () => { editor.load(nativeRecipe()); reset.disabled = true; editor.focusFirst(); });
       clear.addEventListener("click", () => { runs = current ? [current] : []; save(); drawRuns(); });
       clear.disabled = false;
 
-      // ?preset=<id> loads a preset as if its button were pressed; unknown ids are ignored.
-      const wanted = new URLSearchParams(location.search).get("preset");
-      if (!(wanted && editor.loadPreset(wanted))) announce(`Ready. ${summary}`);
+      // A link can carry a recipe: ?preset=<id>, or every setting (a life-list sighting's link, see linkQuery).
+      // It loads as if each control had been set by hand, clamped to what the controls can set.
+      const link = recipeFromLink(new URLSearchParams(location.search), ready.stages.map((s) => s.stage));
+      if (link && "recipe" in link) editor.load(link.recipe);
+      else if (link) {
+        status(`This link's recipe couldn't be read (${link.error}), so the board shows native YOLOv8n. Pick a preset or set the controls below.`, "error");
+        announce("This link's recipe couldn't be read, so the cage shows native YOLOv8n.");
+      } else announce(`Ready. ${summary}`);
     }
   </script>
 </Base>

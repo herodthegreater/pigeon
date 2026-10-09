@@ -94,9 +94,12 @@ export function paretoTable(all: Attempt[], current: Attempt | null): string {
   return `<table><thead><tr><th scope="col">Recipe</th><th scope="col" class="num">Size</th><th scope="col" class="num">Accuracy</th><th scope="col" class="num">Pointing</th><th scope="col">Condition</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-/** Smallest attempt that is healthy and actually compressed (under `baselineBytes`). */
+/**
+ * Smallest attempt that is healthy and actually compressed: under `baselineBytes`, the same line
+ * a run must cross to hatch a bird (coopbirds.ts hatches), so the record and the life list agree.
+ */
 export function smallestWorking(all: Attempt[], baselineBytes: number): Attempt | null {
-  return all.filter((a) => works(a) && a.bytes < baselineBytes * 0.99).sort((a, b) => a.bytes - b.bytes)[0] ?? null;
+  return all.filter((a) => works(a) && a.bytes < baselineBytes).sort((a, b) => a.bytes - b.bytes)[0] ?? null;
 }
 
 export { kb as formatSize };
