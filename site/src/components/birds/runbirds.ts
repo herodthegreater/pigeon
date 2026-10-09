@@ -21,13 +21,29 @@ export interface RunInfo {
   lifeListHref: string;
 }
 
-/** What happened when the run's birds were saved: null when there was nothing to save. */
-export type Saved = { ok: true; firstHealthy: string[] } | { ok: false } | null;
+/**
+ * What happened when the run's birds were saved: null when there was nothing to
+ * save; `saved` counts the birds stored before storage refused one.
+ */
+export type Saved = { ok: true; firstHealthy: string[] } | { ok: false; saved: number } | null;
 
 const latin = (b: LabBird) => (b.species === "dodo" ? DODO.latin : SPECIES.find((s) => s.id === b.species)?.latin ?? "");
 
-/** The recipe a sighting records: the row, and the settings that produced it. */
-export const recipeOf = (label: string, settings: string) => `${label} (${settings || "default settings"})`;
+/**
+ * The method page with a run's settings in its address ("/pigeon/guide/ptq/?bits=3#run"),
+ * which the run box loads, so a life list's "try this recipe again" means this recipe.
+ */
+export function runHref(page: string, params: Record<string, unknown>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (typeof v === "number" || typeof v === "boolean" || typeof v === "string") q.set(k, String(v));
+  }
+  const qs = q.toString();
+  return `${page}${qs ? `?${qs}` : ""}#run`;
+}
+
+/** The recipe a sighting records: the row, and the settings of the run that produced it. */
+export const recipeOf = (label: string, settings: string) => `${label} (run with ${settings || "default settings"})`;
 
 export function runBirds(run: LabRun, info: RunInfo) {
   const scored = labBirds(run);
@@ -39,7 +55,8 @@ export function runBirds(run: LabRun, info: RunInfo) {
     : [];
 
   function render(saved: Saved): string {
-    const head = `<h3 id="run-birds-title">Birds from this run</h3>`;
+    const none = !scored.bird || !scored.best;
+    const head = `<h3 id="run-birds-title">${none ? "No birds from this run" : "Birds from this run"}</h3>`;
     if (!scored.bird) {
       return `<section class="run-birds" aria-labelledby="run-birds-title">${head}<p class="no-bird">${esc(scored.reason)}</p></section>`;
     }
@@ -51,7 +68,7 @@ export function runBirds(run: LabRun, info: RunInfo) {
     const metric = run.metric;
     let h = `<section class="run-birds" aria-labelledby="run-birds-title">${head}`;
     h += `<figure class="best-bird">
-      <div class="best-plate">${drawBird(best.ratio, best.starve, { prefix: "run" })}</div>
+      <div class="best-plate">${drawBird(best.ratio, best.starve, { decorative: true, prefix: "run" })}</div>
       <figcaption>
         <p class="bird-title"><span class="bird-species">${esc(best.name)}</span> <span class="bird-cond c-${best.condition}">${CONDITION_WORD[best.condition]}</span></p>
         ${latin(best) ? `<p class="bird-latin">${esc(latin(best))}</p>` : ""}
@@ -77,7 +94,9 @@ export function runBirds(run: LabRun, info: RunInfo) {
     if (saved && saved.ok) {
       h += `<p class="bird-saved">${sightings.length === 1 ? "This bird is" : `All ${sightings.length} birds are`} saved to your <a href="${esc(info.lifeListHref)}">life list</a> in this browser.</p>`;
     } else if (saved && !saved.ok) {
-      h += `<p class="bird-saved">This browser blocks site storage, so this run can't be saved to your life list here.</p>`;
+      h += saved.saved > 0
+        ? `<p class="bird-saved">Only ${saved.saved} of ${sightings.length} birds were saved to your <a href="${esc(info.lifeListHref)}">life list</a>: this browser's storage refused the rest.</p>`
+        : `<p class="bird-saved">This browser won't let the site store anything (private windows often block it), so this run can't be saved to your life list.</p>`;
     }
     return h + `</section>`;
   }

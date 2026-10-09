@@ -21,7 +21,7 @@ const name = method(id).name;
 ---
 <section
   class="panel runbox" id="run" aria-labelledby="run-title" data-runbox data-method={id} data-params={kinds}
-  data-name={name} data-href={`${base}guide/${id}/#run`} data-lifelist={`${base}life-list/`}
+  data-name={name} data-page={`${base}guide/${id}/`} data-lifelist={`${base}life-list/`}
 >
   <h2 id="run-title">Run it in your browser</h2>
   <!-- autocomplete="off": a reload starts from the defaults, so a restored slider never disagrees with its label. -->
@@ -84,7 +84,7 @@ const name = method(id).name;
   import { resultView, settingsText } from "../lib/lab/results";
   import { esc } from "../lib/lab/markdown";
   import { recordSighting } from "../lib/ui/birds";
-  import { firstHealthyLine, runBirds, type Saved } from "./birds/runbirds";
+  import { firstHealthyLine, runBirds, runHref, type Saved } from "./birds/runbirds";
 
   type Kind = "int" | "float" | "choice" | "bool";
 
@@ -108,7 +108,34 @@ const name = method(id).name;
     };
     const syncAll = () => form.querySelectorAll<HTMLInputElement>('input[type="range"]').forEach(syncOutput);
 
+    /**
+     * A life list's "try this recipe again" link carries the run's settings in the
+     * address (?bits=3#run). Load the ones this form has, within its own limits; the
+     * browser clamps a slider to its range and step. Returns the settings loaded.
+     */
+    function loadFromAddress(): Record<string, unknown> {
+      const q = new URLSearchParams(location.search);
+      const loaded: Record<string, unknown> = {};
+      for (const { name, kind } of fields) {
+        const v = q.get(name);
+        const el = form.elements.namedItem(name);
+        if (v === null || !el) continue;
+        if (kind === "bool" && el instanceof HTMLInputElement && (v === "true" || v === "false")) {
+          el.checked = v === "true";
+          loaded[name] = el.checked;
+        } else if (kind === "choice" && el instanceof HTMLSelectElement && [...el.options].some((o) => o.value === v)) {
+          el.value = v;
+          loaded[name] = v;
+        } else if ((kind === "int" || kind === "float") && el instanceof HTMLInputElement && v.trim() !== "" && Number.isFinite(Number(v))) {
+          el.value = String(Number(v));
+          loaded[name] = Number(el.value);
+        }
+      }
+      return loaded;
+    }
+
     // Start consistent whatever the browser restored: labels match their sliders, and Run is live.
+    const loaded = loadFromAddress();
     syncAll();
     btn.disabled = false;
     btn.removeAttribute("aria-disabled");
@@ -119,6 +146,8 @@ const name = method(id).name;
       out.innerHTML = `<p class="run-idle">Running needs Web Workers and WebAssembly, which this browser doesn't have. A current Firefox, Chrome, Edge or Safari has both.</p>`;
       return;
     }
+
+    if (Object.keys(loaded).length) say(`Settings loaded from the link: ${settingsText(loaded, labels)}. Run to try them.`);
 
     form.addEventListener("input", (e) => {
       const t = e.target as HTMLInputElement;
@@ -139,13 +168,15 @@ const name = method(id).name;
       stopPython();
     });
 
-    /** Save each bird to the life list; the names of species whose first healthy bird this is. */
+    /** Save each bird to the life list, and name the species whose first healthy bird this is. */
     function save(sightings: ReturnType<typeof runBirds>["sightings"]): Saved {
       if (!sightings.length) return null;
       const firstHealthy: string[] = [];
+      let saved = 0;
       for (const s of sightings) {
         const r = recordSighting(s);
-        if (!r.ok) return { ok: false };
+        if (!r.ok) return { ok: false, saved };
+        saved++;
         if (r.firstHealthy) firstHealthy.push(s.name);
       }
       return { ok: true, firstHealthy };
@@ -193,15 +224,16 @@ const name = method(id).name;
         const birds = runBirds(res as Parameters<typeof runBirds>[0], {
           methodId: mid,
           methodName: box.dataset.name || mid,
-          href: box.dataset.href || "",
+          href: runHref(box.dataset.page || "", res.params),
           settings: settingsText(res.params, labels),
           lifeListHref: box.dataset.lifelist || "",
         });
         const saved = save(birds.sightings);
         out.innerHTML = resultView(res, labels) + birds.render(saved);
         tick.textContent = "";
-        const first = saved && saved.ok ? firstHealthyLine(saved.firstHealthy) : "";
-        say(`Done in ${res.seconds.toFixed(1)} s.${first ? ` ${first}` : ""}`);
+        const after = !saved ? "" : saved.ok ? firstHealthyLine(saved.firstHealthy)
+          : saved.saved ? `Only ${saved.saved} of its ${birds.sightings.length} birds were saved to your life list.` : "Its birds couldn't be saved to your life list.";
+        say(`Done in ${res.seconds.toFixed(1)} s.${after ? ` ${after}` : ""}`);
       } catch (err) {
         if (stopped) {
           tick.textContent = "";
@@ -219,10 +251,11 @@ const name = method(id).name;
         running = false;
         btn.removeAttribute("aria-disabled");
         btn.textContent = "Run";
-        // The Stop button is about to disappear; if it had focus (or focus was lost), hand it to Run.
+        // The Stop button is about to disappear; if it had focus (or focus was lost), hand it to Run,
+        // without scrolling a reader away from wherever they are on the page.
         const lost = document.activeElement === stopBtn || document.activeElement === document.body || !document.activeElement;
         stopBtn.hidden = true;
-        if (lost || stopped) btn.focus();
+        if (lost || stopped) btn.focus({ preventScroll: true });
         out.removeAttribute("aria-busy");
       }
     });

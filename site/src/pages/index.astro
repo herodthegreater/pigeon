@@ -26,20 +26,24 @@ const UNFINISHED = chapters.filter((c) => c.gap).length;
 
 const and = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
-// The key to the birds: each drawn at the compression ratio where a model becomes it.
+const presets = PRESETS.filter((p) => p.id !== "fp32");
+const mixed = PRESETS.find((p) => p.id === "mixed");
+if (!mixed) throw new Error("index: the Coop's mixed-precision preset is missing");
+// Recorded, not measured on this page: the Mixed precision preset's row in docs/findings-pigeon.md
+// ("In the browser"), the smallest healthy Pigeon on record.
+const RECORDED = { kb: 737, ratio: 5.0, accuracy: "94.4", pointing: "98.0" };
+
+// The key to the birds: each drawn at the compression ratio where a model becomes it. A species
+// smaller than the recorded best is marked: the size exists, but no healthy Pigeon has reached it.
 const ladder = SPECIES.map((sp) => ({
   sp,
   svg: mascotSVG({ ratio: Math.max(1, sp.minRatio), accuracy: 0.95, pointing: 0.98 }).svg,
   size: sp.minRatio > 0 ? `≥ ${sp.minRatio}× smaller` : "uncompressed",
-  // The best healthy Pigeon on record is a swift (below); from the swallow down, the Coop's tools starve it.
-  reached: sp.minRatio < 7,
+  reached: sp.minRatio <= RECORDED.ratio,
 }));
 const bones = mascotSVG({ ratio: 4, accuracy: 0.5, pointing: 0.2 }).svg;
-const presets = PRESETS.filter((p) => p.id !== "fp32");
-const mixed = PRESETS.find((p) => p.id === "mixed");
-if (!mixed) throw new Error("index: the Coop's mixed-precision preset is missing");
-// Recorded, not measured on this page: the Coop's mixed-precision run in docs/findings-pigeon.md ("In the browser").
-const BEST_RECORDED = { kb: 737, ratio: "5.00", accuracy: "94.4" };
+const reachedName = [...ladder].reverse().find((b) => b.reached)!.sp.name;
+const unreached = ladder.filter((b) => !b.reached).map((b) => b.sp);
 const guideName = (id: string) => {
   const m = allMethods.find((x) => x.id === id);
   if (!m) throw new Error(`index: no Field Guide method "${id}"`);
@@ -56,7 +60,7 @@ const redirect = labRedirectScript(
   <main id="main" class="page home">
     <header class="lead">
       <h1>Shrink a real model with your own hands, and watch what it costs.</h1>
-      <p class="lede">Pigeon is a small image model with one job: <em>is there a bird, and where?</em> Quantize it, prune it, palettize it, right here in your browser, on {photos} real photos. Keep it accurate and it slims from a rock pigeon to a common swift. Push further with tools that don't retrain it and it starves.</p>
+      <p class="lede">Pigeon is a small image model with one job: <em>is there a bird, and where?</em> Quantize it, prune it, palettize it, right here in your browser, on {photos} real photos. Keep it accurate and it slims from a rock pigeon to a common swift. Push further with these tools, which never retrain it, and it starves.</p>
       <div class="cta">
         <a class="btn" href={`${base}coop/`}>Open the Coop</a>
         <a class="btn secondary" href={`${base}school/`}>Start Flight School</a>
@@ -85,11 +89,11 @@ const redirect = labRedirectScript(
           </li>
         </ol>
         <figcaption>
-          <p>A key to sizes, not a promise. How much smaller a model gets decides which bird it becomes. Pigeon stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and a broken model is bones.</p>
+          <p>The key to sizes: how much smaller a model gets decides which bird it becomes. Pigeon stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and a broken model is bones.</p>
           <p>
-            In the Coop, the best healthy Pigeon on record is a Common Swift: the {mixed.name} preset, {BEST_RECORDED.kb} KB, {BEST_RECORDED.ratio} times smaller, {BEST_RECORDED.accuracy}% accuracy (recorded, not measured on this page).
-            No recipe on record keeps it healthy as a Barn Swallow or a hummingbird. Sizes like those need retraining, which the Coop's tools don't do;
-            the Field Guide's <a href={`${base}guide/qat/`}>{guideName("qat")}</a> and <a href={`${base}guide/kd/`}>{guideName("kd")}</a> show how, on the lab's small models.
+            The smallest healthy Pigeon on record is a {reachedName}: the {mixed.name} preset, {RECORDED.kb} KB, {RECORDED.ratio.toFixed(2)} times smaller, with {RECORDED.accuracy}% accuracy and {RECORDED.pointing}% pointing (recorded in the lab's notes, not measured on this page).
+            No recipe on record keeps it healthy at {unreached[0].minRatio} times smaller or more, where the {unreached[0].name} starts. That probably takes retraining, which the Coop's tools never do;
+            the Field Guide's <a href={`${base}guide/qat/`}>{guideName("qat")}</a> and <a href={`${base}guide/kd/`}>{guideName("kd")}</a> show how it works on the lab's small models.
           </p>
           <p>Every bird you hatch, in either cage or in a Field Guide run, is kept on your <a href={`${base}life-list/`}>life list</a>.</p>
         </figcaption>

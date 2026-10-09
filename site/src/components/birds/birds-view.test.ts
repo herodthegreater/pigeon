@@ -3,7 +3,7 @@ import { birdFor, type Sighting } from "../../lib/ui/birds";
 import { drawBird, uniqueIds } from "./draw";
 import { keptPhrase, ratioPhrase, ratioShort } from "./format";
 import { KEY, countLine, entryHTML, newestFirst, rowHTML, safeHref, summarize } from "./lifelist";
-import { firstHealthyLine, recipeOf, runBirds } from "./runbirds";
+import { firstHealthyLine, recipeOf, runBirds, runHref } from "./runbirds";
 
 describe("bird words", () => {
   it("says size and health in plain numbers", () => {
@@ -51,7 +51,7 @@ const info = { methodId: "ptq", methodName: "Post-training quantization", href: 
 describe("a run's birds", () => {
   it("draws the best bird large, the rest one line each, and records a sighting per model", () => {
     const r = runBirds(ptq, info);
-    expect(r.sightings.map((s) => s.recipe)).toEqual(["4-bit (bits 4)", "3-bit (bits 4)", "1-bit (bits 4)"]);
+    expect(r.sightings.map((s) => s.recipe)).toEqual(["4-bit (run with bits 4)", "3-bit (run with bits 4)", "1-bit (run with bits 4)"]);
     expect(r.sightings[1]).toMatchObject({ model: "lab:ptq", modelName: "Post-training quantization", name: "Barn Swallow", condition: "healthy", href: "/pigeon/guide/ptq/#run" });
     const h = r.render({ ok: true, firstHealthy: ["Barn Swallow"] });
     expect(h.match(/<svg/g)).toHaveLength(3); // one drawing per model row, the reference has none
@@ -64,14 +64,23 @@ describe("a run's birds", () => {
     const none = runBirds({ rows: [{ label: "a", acc: 0.7, kbits: 68 }], bird: false, bird_reason: "Same size, so no bird." }, info);
     expect(none.sightings).toEqual([]);
     expect(none.render(null)).toContain("Same size, so no bird.");
+    expect(none.render(null)).toContain("No birds from this run");
+    expect(runBirds(ptq, info).render(null)).toContain(">Birds from this run<");
     expect(none.render(null)).not.toContain("<svg");
-    expect(runBirds(ptq, info).render({ ok: false })).toContain("can't be saved to your life list here");
+    expect(runBirds(ptq, info).render({ ok: false, saved: 0 })).toContain("so this run can't be saved to your life list");
+    expect(runBirds(ptq, info).render({ ok: false, saved: 1 })).toContain("Only 1 of 3 birds were saved");
   });
 
   it("names a species' first healthy bird once", () => {
     expect(firstHealthyLine([])).toBe("");
     expect(firstHealthyLine(["Barn Swallow", "Common Swift", "Barn Swallow"])).toBe("First healthy Barn Swallow and Common Swift on your life list.");
-    expect(recipeOf("4-bit", "")).toBe("4-bit (default settings)");
+    expect(recipeOf("4-bit", "")).toBe("4-bit (run with default settings)");
+  });
+
+  it("links back to the method with the run's settings in the address", () => {
+    expect(runHref("/pigeon/guide/gptq/", { bits: 3, act_order: true, scheme: "per row" })).toBe("/pigeon/guide/gptq/?bits=3&act_order=true&scheme=per+row#run");
+    expect(runHref("/pigeon/guide/ptq/", {})).toBe("/pigeon/guide/ptq/#run");
+    expect(safeHref(runHref("/pigeon/guide/gptq/", { bits: 3 }))).toBe("/pigeon/guide/gptq/?bits=3#run");
   });
 });
 
@@ -93,11 +102,13 @@ describe("the life list page", () => {
     expect(countLine(summarize([]))).toBe("0 of 5 species seen healthy: no sightings yet.");
   });
 
-  it("shows an outline for a bird not seen yet, and the best sighting for one that is", () => {
+  it("draws only birds that were seen, and gives the best sighting of each", () => {
     const sum = summarize([s({})]);
     const swift = KEY.find((k) => k.id === "swift")!, dove = KEY.find((k) => k.id === "dove")!;
-    expect(entryHTML(dove, sum)).toContain('class="sp-draw outline"');
+    expect(entryHTML(dove, sum)).not.toContain("<svg");
     expect(entryHTML(dove, sum)).toContain("Not seen yet");
+    expect(entryHTML(swift, sum).match(/<svg/g)).toHaveLength(1);
+    expect(entryHTML(swift, null)).not.toContain("<svg");
     expect(entryHTML(swift, sum)).toContain("Seen healthy, 1 sighting");
     expect(entryHTML(swift, sum)).toContain("Try this recipe again");
     // Before the list is read, the key claims nothing about what was seen.
@@ -113,8 +124,11 @@ describe("the life list page", () => {
     expect(row).not.toContain("<a ");
   });
 
-  it("lists sightings newest first", () => {
+  it("lists sightings newest first, the last saved first when one run saved several at once", () => {
     const list = newestFirst([s({ when: "2026-10-01T00:00:00Z" }), s({ when: "2026-10-09T00:00:00Z" })]);
     expect(list[0].when).toBe("2026-10-09T00:00:00Z");
+    const same = "2026-10-09T10:00:00.000Z";
+    const run = newestFirst([s({ recipe: "old", when: "2026-10-08T00:00:00Z" }), s({ recipe: "a", when: same }), s({ recipe: "b", when: same })]);
+    expect(run.map((x) => x.recipe)).toEqual(["b", "a", "old"]);
   });
 });

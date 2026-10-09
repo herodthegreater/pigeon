@@ -44,8 +44,8 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
     <section class="key" aria-labelledby="species-title">
       <h2 id="species-title">The six birds</h2>
       <p class="key-note">
-        A bird's species follows how many times smaller its model is than the model it was measured against. {KEEP_RULE}
-        A bird you haven't seen yet is drawn in outline.
+        A bird's species follows how many times smaller its model is than the model it was measured against. {KEEP_RULE}{" "}
+        A bird is drawn once you have seen it, in the best condition you have seen it in.
       </p>
       <ol class="species" data-species>
         {KEY.map((k) => <li class="sp" data-id={k.id} set:html={entryHTML(k, null, "srv")} />)}
@@ -89,7 +89,7 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
 
     <section class="empty" aria-labelledby="empty-title" data-empty hidden>
       <h2 id="empty-title">No birds yet</h2>
-      <p>Every model you shrink here hatches a bird, and each one is saved to this list. Three places to start:</p>
+      <p>Every model you make smaller here hatches a bird, and each one is saved to this list. Three places to start:</p>
       <ul class="starts">
         <li>
           <span class="start-what">Load a preset in the Coop, where you shrink Pigeon itself:</span>
@@ -228,20 +228,20 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
       gap: 0 var(--space-5); border-top: 1px solid var(--rule);
     }
     .sp { display: flex; flex-direction: column; gap: var(--space-2); padding-block: var(--space-4); border-bottom: 1px solid var(--rule); min-width: 0; }
+    .sp :global(.sp-head) { display: flex; flex-direction: column; gap: var(--space-2); }
     .sp :global(.sp-draw) { background: var(--card); border: 1px solid var(--rule); padding: var(--space-2); }
     .sp :global(.sp-draw svg) { display: block; width: 100%; height: auto; }
-    /* Not seen yet: the same drawing as an outline in muted ink, with no color, shadow or rim. */
-    .sp :global(.outline svg > ellipse) { display: none; }
-    .sp :global(.outline svg g) { filter: none; }
-    .sp :global(.outline svg g :is(path, circle, ellipse)) {
-      fill: none; stroke: var(--muted); stroke-width: 1px; vector-effect: non-scaling-stroke; opacity: 1;
-    }
-    .sp :global(.sp-text) { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+    /* An empty plate, the drawing's own shape (its viewBox is 230 by 160), for a bird not seen yet. */
+    .sp :global(.sp-blank) { background: none; }
+    .sp :global(.sp-blank-in) { aspect-ratio: 230 / 160; display: grid; place-items: center; text-align: center; }
+    .sp :global(:is(.sp-id, .sp-detail)) { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
     .sp :global(.sp-name) { font-size: var(--step-1); }
     .sp :global(.sp-latin) { font-family: var(--display); font-style: italic; color: var(--magenta); font-size: var(--step--1); }
     .sp :global(.sp-size) { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
-    .sp :global(.sp-state) { font-size: var(--step--1); font-weight: 600; color: var(--muted); margin-top: var(--space-2); }
-    .sp :global(.sp-best) { font-size: var(--step--1); }
+    .sp :global(.sp-state) { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+    .sp :global(.sp-best) { display: flex; flex-direction: column; font-size: var(--step--1); }
+    .sp :global(.sp-recipe) { color: var(--muted); }
+    .sp :global(.sp-nums) { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
     .sp :global(.sp-again) { font-size: var(--step--1); }
 
     :global(.lifelist .c-healthy) { color: var(--good); }
@@ -277,10 +277,10 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
     @media (max-width: 860px) {
       .species { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-    /* Phones: one bird a line, its drawing beside its words. */
+    /* Phones: one bird a line, its plate beside its name and the best sighting below both. */
     @media (max-width: 540px) {
       .species { grid-template-columns: minmax(0, 1fr); }
-      .sp { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+      .sp :global(.sp-head) { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--space-3); align-items: center; }
     }
     @media (pointer: coarse), (max-width: 640px) {
       .filter select { min-height: var(--tap); }

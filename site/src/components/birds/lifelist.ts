@@ -16,8 +16,6 @@ export interface KeyEntry {
   name: string;
   latin: string;
   size: string; // the sizes this bird stands for
-  drawRatio: number; // where to draw its outline
-  drawStarve: number;
 }
 
 /** The five species in SPECIES order, then the dodo. */
@@ -25,9 +23,9 @@ export const KEY: KeyEntry[] = [
   ...SPECIES.map((sp, i) => {
     const next = SPECIES[i + 1];
     const size = sp.minRatio === 0 ? `Uncompressed, or less than ${next.minRatio} times smaller` : next ? `${sp.minRatio} to ${next.minRatio} times smaller` : `${sp.minRatio} times smaller or more`;
-    return { id: sp.id, name: sp.name, latin: sp.latin, size, drawRatio: Math.max(1, sp.minRatio), drawStarve: 0 };
+    return { id: sp.id, name: sp.name, latin: sp.latin, size };
   }),
-  { id: "dodo", name: DODO.name, latin: DODO.latin, size: "A broken model less than 1.3 times smaller", drawRatio: 1, drawStarve: 1 },
+  { id: "dodo", name: DODO.name, latin: DODO.latin, size: "A broken model less than 1.3 times smaller" },
 ];
 
 const SPECIES_COUNT = SPECIES.length;
@@ -61,36 +59,45 @@ export function countLine(s: Summary): string {
 }
 
 /**
- * One species on the list. `summary` null means the list hasn't been read (no
- * script yet, or storage blocked): the entry is then only the key, an outline.
+ * One species on the list. A bird is drawn only once it has been seen, in the
+ * best condition seen. `summary` null means the list hasn't been read (no script
+ * yet, or storage blocked): the entry is then only the key's words.
  */
 export function entryHTML(k: KeyEntry, summary: Summary | null, prefix = "ll"): string {
   const best = summary?.best.get(k.id) ?? null;
   const count = summary?.counts.get(k.id) ?? 0;
-  const draw = best
-    ? `<div class="sp-draw">${drawBird(num(best.ratio) || k.drawRatio, num(best.starve) || 0, { decorative: true, prefix })}</div>`
-    : `<div class="sp-draw outline">${drawBird(k.drawRatio, k.drawStarve, { decorative: true, prefix })}</div>`;
-  let h = `${draw}<div class="sp-text">
+  const ratio = best ? num(best.ratio) : NaN;
+  // The drawing sits next to the bird's name and state, so screen readers skip it. A bird not
+  // seen yet gets an empty plate of the same size, so the key's names line up.
+  const draw = best && ratio > 0
+    ? `<div class="sp-draw">${drawBird(ratio, num(best.starve) || 0, { decorative: true, prefix })}</div>`
+    : `<div class="sp-draw sp-blank"><div class="sp-blank-in">${summary ? `<p class="sp-state">Not seen yet</p>` : ""}</div></div>`;
+  let h = `<div class="sp-head">${draw}<div class="sp-id">
     <h3 class="sp-name">${esc(k.name)}</h3>
     <p class="sp-latin">${esc(k.latin)}</p>
-    <p class="sp-size">${esc(k.size)}</p>`;
-  if (summary) {
-    if (!best) {
-      h += `<p class="sp-state">Not seen yet</p>`;
-    } else {
-      const state = k.id === "dodo" ? "Seen" : best.condition === "healthy" ? "Seen healthy" : `Best seen ${condWord(best.condition)}`;
-      h += `<p class="sp-state ${condClass(best.condition)}">${state}, ${count} ${count === 1 ? "sighting" : "sightings"}</p>`;
-      h += `<p class="sp-best">Best: ${esc(best.modelName)}, ${esc(best.recipe)}: ${esc(ratioShort(num(best.ratio)))}, keeps ${Number.isFinite(num(best.kept)) ? pct(num(best.kept)) : "an unknown share"} of its reference's score, <time datetime="${esc(best.when)}">${esc(dateText(best.when))}</time>.</p>`;
-      const href = safeHref(best.href);
-      if (href) h += `<p class="sp-again"><a href="${esc(href)}">Try this recipe again<span class="visually-hidden">: ${esc(k.name)} from ${esc(best.modelName)}</span></a></p>`;
-    }
-  }
+    <p class="sp-size">${esc(k.size)}</p>
+  </div></div>`;
+  if (!summary || !best) return h;
+  const state = k.id === "dodo" ? "Seen" : best.condition === "healthy" ? "Seen healthy" : `Best seen ${condWord(best.condition)}`;
+  const kept = Number.isFinite(num(best.kept)) ? `keeps ${pct(num(best.kept))}` : "share kept unknown";
+  h += `<div class="sp-detail">
+    <p class="sp-state ${condClass(best.condition)}">${state}, ${count} ${count === 1 ? "sighting" : "sightings"}</p>
+    <p class="sp-best">
+      <span class="sp-model">Best sighting: ${esc(best.modelName)}</span>
+      <span class="sp-recipe">${esc(best.recipe)}</span>
+      <span class="sp-nums">${esc(ratioShort(num(best.ratio)))}, ${kept}, <time datetime="${esc(best.when)}">${esc(dateText(best.when))}</time></span>
+    </p>`;
+  const href = safeHref(best.href);
+  if (href) h += `<p class="sp-again"><a href="${esc(href)}">Try this recipe again<span class="visually-hidden">: ${esc(k.name)} from ${esc(best.modelName)}</span></a></p>`;
   return h + `</div>`;
 }
 
-/** Every sighting, newest first. */
+/**
+ * Every sighting, newest first. The list is stored oldest first, and one run can
+ * save several birds within the same millisecond, so ties keep the stored order reversed.
+ */
 export const newestFirst = (sightings: Sighting[]) =>
-  [...sightings].sort((a, b) => String(b.when).localeCompare(String(a.when)));
+  [...sightings].reverse().sort((a, b) => String(b.when).localeCompare(String(a.when)));
 
 export function rowHTML(s: Sighting): string {
   const href = safeHref(s.href);

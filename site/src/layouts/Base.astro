@@ -27,6 +27,8 @@ const nav: [Section, string, string, string][] = [
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" />
+    <!-- Without JavaScript the theme control can't do anything, so it isn't shown; the page follows the system. -->
+    <noscript><style>.theme { display: none !important; }</style></noscript>
     <!-- Apply a remembered theme before first paint, so a dark choice never flashes light. -->
     <script is:inline>
       try { const t = localStorage.getItem("pigeon.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
