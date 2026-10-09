@@ -223,3 +223,10 @@ const sourceIntro = {
     details.src > summary { padding-block: var(--space-3); }
   }
 </style>
+
+<style is:global>
+  /* One bird per view: when a run result draws its own bird in the run box (mascotSVG's
+     drawing, recognised by its viewBox), Pigeon's warning keeps its words and drops its drawing. */
+  .method .side:has(.runbox svg[viewBox="22 38 230 160"]) > .breaks { grid-template-columns: minmax(0, 1fr); }
+  .method .side:has(.runbox svg[viewBox="22 38 230 160"]) > .breaks > .pigeon-bird { display: none; }
+</style>

@@ -16,7 +16,12 @@ const reading = chapters.filter((c) => c.links.some((l) => l.kind === "read")).l
 const coded = chapters.filter((c) => c.links.some((l) => l.kind === "code")).length;
 const tried = chapters.filter((c) => c.links.some((l) => l.kind === "try")).length;
 const gaps = chapters.filter((c) => c.gap).length;
-const each = (k: number, many: string, every: string) => (k === chapters.length ? every : `${k} ${many}`);
+const total = chapters.length;
+const of = (k: number) => (k === total ? `All ${total}` : `${k} of the ${total}`);
+// The lede's second sentence after "...point to the Field Guide sections that teach them".
+const rest =
+  (coded === total ? " and every one has a coding lesson" : coded === 0 ? "; none has a coding lesson yet" : ` and ${coded} have a coding lesson`) +
+  (gaps === 0 ? "." : `; the ${gaps === 1 ? "one" : gaps} that ${gaps === 1 ? "isn't" : "aren't"} fully written yet ${gaps === 1 ? "says" : "say"} what's missing.`);
 ---
 <Base
   title="Flight School · Pigeon"
@@ -28,10 +33,8 @@ const each = (k: number, many: string, every: string) => (k === chapters.length 
       <h1>Flight School</h1>
       <p class="lede">
         Today Flight School is a reading map: {chapters.length} chapters in order, plus {all.length} coding lessons
-        where you build the algorithms yourself. {each(reading, "of the chapters point", "Every chapter points")} to
-        the <a href={`${base}guide/`}>Field Guide</a> sections that teach them{gaps > 0 ? ", " : " and "}
-        {each(coded, "have", "all have")} a coding lesson{gaps > 0 && <>, and the {gaps} that aren't fully written yet say
-        what's missing</>}.
+        where you build the algorithms yourself, checked against tests in your browser. {of(reading)} chapters point to
+        the <a href={`${base}guide/`}>Field Guide</a> sections that teach them{rest}
       </p>
     </header>
 
@@ -80,8 +83,8 @@ const each = (k: number, many: string, every: string) => (k === chapters.length 
       <PigeonSays mood="warn" data-storage-blocked hidden>
         <p>
           This browser blocks site storage, so passed lessons and drafts aren't remembered here. The lessons still
-          check your code; copy it somewhere before you leave a page. Allowing site storage for this site, or leaving
-          a private window, brings both back.
+          check your code; copy it somewhere before you leave a page. Allowing site storage for this site, or opening it
+          outside a private window, brings both back.
         </p>
       </PigeonSays>
       <ul class="entries">
