@@ -18,7 +18,7 @@ const preset = (id: string) => {
   if (!p) throw new Error(`life-list: no Coop preset "${id}"`);
   return p;
 };
-const presets = [preset("int8-channel"), preset("mixed")];
+const presets = [preset("fp16"), preset("mixed")];
 const runnable = new Map(methods().filter((m) => m.status === "runnable").map((m) => [m.id, m.name]));
 const guide = ["ptq", "magnitude_pruning"].map((id) => {
   const name = runnable.get(id);

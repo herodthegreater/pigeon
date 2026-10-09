@@ -96,6 +96,7 @@ describe("results", () => {
     expect(c).toContain('stroke-dasharray="6 4"'); // second series is dashed
     expect(c).toContain("<rect"); // second series uses square markers
     expect(c).toContain("<summary>Chart data</summary>");
+    expect(c).toContain('<th scope="col">Bits / weight</th>'); // the axis in the Results figures' words
     expect(c).toContain('<th scope="row" class="num">4</th><td class="num">0.900</td><td class="num">0.700</td>');
     expect(lineChart({ x: "bits", series: {} }, "accuracy")).toBe("");
   });

@@ -60,6 +60,21 @@ describe("a run's birds", () => {
     expect(h).toContain('href="/pigeon/life-list/"');
   });
 
+  it("names the reference once, and counts the saved birds in words", () => {
+    const kd = {
+      metric: "acc" as const,
+      rows: [
+        { label: "teacher 3x256 (reference)", acc: 0.9, kbits: 7000, ref: true },
+        { label: "pruned", acc: 0.89, kbits: 950 },
+        { label: "one-shot", acc: 0.3, kbits: 950 },
+      ],
+    };
+    const h = runBirds(kd, info).render({ ok: true, firstHealthy: [] });
+    expect(h).toContain("7.4 times smaller than teacher 3x256, keeps 98.9% of its accuracy.");
+    expect(h).toContain("Measured against teacher 3x256, this run's reference.");
+    expect(h).toContain("Both birds are saved");
+  });
+
   it("says why there's no bird, and when the list can't be saved", () => {
     const none = runBirds({ rows: [{ label: "a", acc: 0.7, kbits: 68 }], bird: false, bird_reason: "Same size, so no bird." }, info);
     expect(none.sightings).toEqual([]);

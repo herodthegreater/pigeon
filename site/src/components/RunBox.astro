@@ -340,7 +340,8 @@ const name = method(id).name;
   .runbox .c-emaciated { color: var(--warn); }
   .runbox .c-skeleton { color: var(--bad); }
   .runbox .bird-rule, .runbox .bird-saved { font-size: var(--step--1); color: var(--muted); }
+  /* The link sits inside a sentence: padding grows its tap area to 44px without spreading the lines apart. */
   @media (pointer: coarse), (max-width: 640px) {
-    .runbox .bird-saved a { display: inline-flex; align-items: center; min-height: var(--tap); }
+    .runbox .bird-saved a { padding-block: calc((var(--tap) - 1em) / 2); }
   }
 </style>

@@ -60,7 +60,9 @@ export function runBirds(run: LabRun, info: RunInfo) {
     if (!scored.bird) {
       return `<section class="run-birds" aria-labelledby="run-birds-title">${head}<p class="no-bird">${esc(scored.reason)}</p></section>`;
     }
-    const { reference, birds, best } = scored;
+    const { birds, best } = scored;
+    // The lab often labels the row "teacher 3x256 (reference)"; a sentence already says it's the reference.
+    const reference = scored.reference.replace(/\s*\(reference\)\s*$/i, "") || scored.reference;
     if (!best) {
       return `<section class="run-birds" aria-labelledby="run-birds-title">${head}<p class="no-bird">This run has no smaller model to score against ${esc(reference)}, so there's no bird.</p></section>`;
     }
@@ -92,7 +94,8 @@ export function runBirds(run: LabRun, info: RunInfo) {
     }
     h += `<p class="bird-rule">Measured against ${esc(reference)}, this run's reference. Species follows how many times smaller a model is. ${esc(KEEP_RULE)}</p>`;
     if (saved && saved.ok) {
-      h += `<p class="bird-saved">${sightings.length === 1 ? "This bird is" : `All ${sightings.length} birds are`} saved to your <a href="${esc(info.lifeListHref)}">life list</a> in this browser.</p>`;
+      const which = sightings.length === 1 ? "This bird is" : sightings.length === 2 ? "Both birds are" : `All ${sightings.length} birds are`;
+      h += `<p class="bird-saved">${which} saved to your <a href="${esc(info.lifeListHref)}">life list</a> in this browser.</p>`;
     } else if (saved && !saved.ok) {
       h += saved.saved > 0
         ? `<p class="bird-saved">Only ${saved.saved} of ${sightings.length} birds were saved to your <a href="${esc(info.lifeListHref)}">life list</a>: this browser's storage refused the rest.</p>`
