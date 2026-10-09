@@ -32,9 +32,10 @@ time it appears on the page. Prefer one concrete example over an abstraction.
     Numbers quoted from a page's Run must be measured in Pyodide, the browser's
     runtime, with the shipped models in lab/models
     (`node lab/web/run_in_pyodide.cjs site/public/lab runs.json`): a training
-    run can end a few test examples apart on another BLAS. Quote them to the
-    digit the page shows. lab/tests/test_quotes.py re-runs a sample of the
-    quotes that train nothing; add a case when you quote a new one.
+    run can end a few test examples apart on another BLAS. Quote the four
+    decimals the run returns (the page's result table rounds them to three).
+    lab/tests/test_quotes.py re-runs a sample of the quotes that train
+    nothing; add a case when you quote a new one.
     Never invent or round a number into something it isn't. Say what the toy
     world can't tell us.
 

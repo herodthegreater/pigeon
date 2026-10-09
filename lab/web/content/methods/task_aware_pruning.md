@@ -48,7 +48,7 @@ The toy's answer: task-aware importance matters when recovery is short or imposs
 
 - Set **keep width** 64 and compare **importance for** bird and all classes, first in the "no recovery" rows, then after recovery.
 - Repeat at **keep width** 16, a 16x cut per layer.
-- Step **keep width** from 128 down to 4 with **importance for** bird and find where recovery stops reaching the teacher's 0.9885.
+- Step **keep width** from 128 down to 4 with **importance for** bird and find where recovery stops reaching the teacher row's 0.9888.
 
 ## Going further
 

@@ -55,7 +55,7 @@ The toy cannot test large vision models, where Frankle et al. found that rewindi
 
 - **Compounding schedules.** If a pruning function ranks only survivors, a schedule of total sparsities overshoots. An earlier version of this experiment did that: its "75%" round was really 87.5%. Check the nonzero count.
 - **Tickets are expensive to find.** You need a full training run per round. It is a probe, not a shortcut.
-- **Small or briefly trained nets** show little ticket effect, as the page runs do.
+- **Small or briefly trained nets** show little ticket effect where it should matter most, at high sparsity: in the page runs, rewound and randomly reinitialized tickets sit within 0.035 of each other from 87.5% on.
 - **Masks are unstructured**, so there is no speedup without sparse kernels.
 
 ## Try this
