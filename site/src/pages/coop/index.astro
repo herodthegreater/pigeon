@@ -1,5 +1,6 @@
 ---
 import Base from "../../layouts/Base.astro";
+import CoopPicker from "../../components/CoopPicker.astro";
 import { WORKS_LINE } from "../../lib/ui/mascot";
 
 const testsets = import.meta.glob<{ images: unknown[] }>("/public/testset/testset.json", { eager: true, import: "default" });
@@ -8,6 +9,7 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
 ---
 <Base title="The Coop · Pigeon" active="coop" description="A sandbox for compressing a real bird-spotting model in your browser.">
   <main id="main" class="coop">
+    <CoopPicker active="pigeon" />
     <section class="hero" aria-labelledby="bird-title">
       <div class="bird-card">
         <div class="bird" id="bird"></div>

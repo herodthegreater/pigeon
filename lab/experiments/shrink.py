@@ -9,26 +9,13 @@ import numpy as np
 from ..common import (SEEDS, STEPS, STUDENT, agg, cached, data, distill, ev,
                       experiment, net, refs, scratch, teacher)
 from ..compress import (drop_layers, kmeans_share, low_rank, magnitude_prune, neuron_importance,
-                        quantize, structured_prune)
+                        quantize, storage_bits, structured_prune)
 from ..nn import MLP
 
 G = "4 · Shrinking a trained model"
 FT = STEPS // 2          # recovery budget after a cut
 FT_LR = 3e-3             # same optimizer settings as training from scratch, so
                          # "pruned + recover" vs "fresh" differs only in the init
-
-
-def storage_bits(m: MLP, bits: int = 32, group: int | None = None, sparse: bool = False) -> int:
-    """Bytes-on-disk proxy: nonzero weights x bits, + fp16 scales, + fp32 biases,
-    + a 1-bit/position occupancy bitmap if stored sparse."""
-    nnz = sum(int((m.eff(i) != 0).sum()) for i in range(m.n_layers))
-    dense = sum(w.size for w in m.W)
-    total = (nnz if sparse else dense) * bits + sum(b.size for b in m.b) * 32
-    if bits < 32:
-        total += (int(np.ceil(dense / group)) if group else m.n_layers) * 16
-    if sparse:
-        total += dense
-    return int(total)
 
 
 def kd_ft(m, t, s, steps=None, **kw):

@@ -37,6 +37,7 @@
   --series-3: light-dark(#98591a, #e0a15c);
   --series-4: light-dark(#1c2a33, #e2e8e2);
   --truth-box: #3fd1b4;      /* where the birds really are, drawn over photos */
+  --detect-box: #ff6fc2;     /* where a detector says the birds are, drawn over photos (dashed) */
   --heat: 214 66 150;        /* rgb triplet for the evidence heatmap's alpha ramp */
 
   /* Code */

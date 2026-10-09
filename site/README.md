@@ -36,7 +36,7 @@ Without that data the build stops and prints the command above.
 | Path | What it is |
 |---|---|
 | `src/pages/index.astro` | Home |
-| `src/pages/coop/` | The Coop: the compression sandbox |
+| `src/pages/coop/` | The Coop: the compression sandbox (Pigeon at `/coop/`, YOLOv8n at `/coop/yolo/`) |
 | `src/pages/school/` | Flight School: the course and the coding lessons |
 | `src/pages/guide/` | Field Guide: one page per method |
 | `src/pages/results/` | Results: the lab's experiments and report |
@@ -46,6 +46,8 @@ Without that data the build stops and prints the command above.
 | `src/styles/` | `tokens.css` (colors, type and spacing scales), `page.css` (the page kit), `prose.css` (long-form text) |
 | `src/lib/engine/` | The in-browser model: ONNX Runtime in a worker, scoring on the test photos |
 | `src/lib/compress/` | Quantization, pruning and palettes applied to the weights |
+| `src/lib/detector/` | The Coop's YOLOv8n: TF.js on WebGL in a worker, ported from the cockpit (forward pass, NMS, bird AP@50, masking, precision lab) |
 | `src/lib/ui/` | The Coop's mascot, recipe editor, chart and specimen drawer |
 | `src/lib/lab/` | Build-time loaders for the lab data, its markdown, and the in-browser Python client |
 | `public/model/`, `public/testset/` | Pigeon's weights and the test photos the Coop scores on |
+| `public/coop/yolov8n/` | YOLOv8n's fp16 weights and manifest, written by `cockpit/build_coop.py` (needs the project venv with torch and ultralytics, so the files are committed) |

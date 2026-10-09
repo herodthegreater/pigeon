@@ -281,6 +281,12 @@ export interface MascotState {
   pointing: number;
 }
 
+/** A model scored some other way (the Coop's detector, by AP kept) brings its own starvation in [0, 1]. */
+export interface StarveState {
+  ratio: number;
+  starve: number;
+}
+
 let halos = 0;
 
 /** A light rim around the bird's silhouette (only visible where --bird-halo is set, i.e. dark mode). */
@@ -293,9 +299,9 @@ function haloFilter(id: string, k: number): string {
   </filter>`;
 }
 
-export function mascotSVG(state: MascotState): { svg: string; species: Species; condition: Condition; starve: number; dodo: boolean } {
+export function mascotSVG(state: MascotState | StarveState): { svg: string; species: Species; condition: Condition; starve: number; dodo: boolean } {
   const species = speciesFor(state.ratio);
-  const starve = starvation(state.accuracy, state.pointing);
+  const starve = "starve" in state ? Math.max(0, Math.min(1, state.starve)) : starvation(state.accuracy, state.pointing);
   const condition = conditionOf(starve);
   const dodo = condition === "skeleton" && state.ratio < 1.3;
   const inner = condition === "skeleton" ? drawSkeleton(species, dodo) : drawLiving(species, starve);

@@ -1,6 +1,7 @@
 """Every method in the registry: metadata is complete, its code pointers resolve
 to real source, its page exists, and (if runnable) it runs with default and
-extreme parameters and returns finite metrics."""
+extreme parameters and returns finite metrics and a bird-ready result
+(``test_birds.check_birds``)."""
 
 from __future__ import annotations
 
@@ -10,13 +11,14 @@ import os
 import pytest
 
 from lab.methods import CATEGORIES, FAMILIES, REGISTRY
+from lab.tests.test_birds import check_birds
 from lab.web.source import get_source
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RUNNABLE = [m for m in REGISTRY.values() if m.status == "runnable"]
 
 
-def _check_result(res):
+def _check_result(res, mid):
     assert set(res) >= {"rows", "note", "chart", "metric"}
     assert res["rows"], "no rows"
     for r in res["rows"]:
@@ -28,6 +30,7 @@ def _check_result(res):
     if res["chart"]:
         for pts in res["chart"]["series"].values():
             assert all(len(p) == 2 and all(math.isfinite(float(x)) for x in p) for p in pts)
+    check_birds(mid, res)
 
 
 @pytest.mark.parametrize("m", REGISTRY.values(), ids=lambda m: m.id)
@@ -60,7 +63,7 @@ def test_page_exists(m):
 
 @pytest.mark.parametrize("m", RUNNABLE, ids=lambda m: m.id)
 def test_runs_with_defaults(m):
-    _check_result(m.execute({}))
+    _check_result(m.execute({}), m.id)
 
 
 @pytest.mark.parametrize("m", RUNNABLE, ids=lambda m: m.id)
@@ -75,7 +78,7 @@ def test_runs_at_parameter_extremes(m):
         else:
             variants += [{p.name: p.lo}, {p.name: p.hi}]
     for v in variants:
-        _check_result(m.execute(v))
+        _check_result(m.execute(v), m.id)
 
 
 def test_bad_params_rejected():
