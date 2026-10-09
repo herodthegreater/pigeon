@@ -9,8 +9,12 @@
 .prose h2 + *, .prose h3 + *, .prose h4 + * { margin-top: var(--space-2); }
 .prose ul, .prose ol { padding-left: 1.3em; }
 .prose li + li { margin-top: var(--space-1); }
+/* Corners. Plates, panels, code blocks and error boxes are pieces of the printed page,
+   so they are square (DESIGN.md: Composition). Only the things you press or type
+   into (buttons, inputs, selects, the lesson editor) take the one small radius,
+   --radius, so a rounded corner on this site always means "a control". */
 .prose code {
-  font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 4px; border-radius: 3px;
+  font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 4px;
   overflow-wrap: anywhere;
 }
 .prose a { overflow-wrap: anywhere; }
@@ -18,7 +22,7 @@
 pre, .code {
   font-family: var(--mono); font-size: var(--step--1); line-height: 1.5;
   background: var(--code-bg); color: var(--ink); padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius); overflow-x: auto; tab-size: 4; margin: 0;
+  overflow-x: auto; tab-size: 4; margin: 0;
 }
 pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
 .tok-kw { color: var(--tok-kw); }
@@ -36,7 +40,7 @@ pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: norm
 /* Figure plates: matplotlib figures are drawn on white, so they sit on a light
    plate in both themes, the way a printed plate does (DESIGN.md: Composition). */
 .plate {
-  margin: 0; background: var(--plate); border: 1px solid var(--rule); padding: var(--space-3); border-radius: var(--radius);
+  margin: 0; background: var(--plate); border: 1px solid var(--rule); padding: var(--space-3);
   color-scheme: light; color: var(--ink); /* tokens inside a plate resolve to their light values in both themes */
 }
 .plate img { display: block; width: 100%; height: auto; }

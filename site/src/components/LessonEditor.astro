@@ -1,11 +1,15 @@
 ---
 /**
- * A lesson's code editor: a plain textarea with the starting code, hints revealed
- * one at a time, the reference solution (embedded at build time, so showing it
- * never fetches), and "Check my code", which runs the lesson's hidden tests in
- * the visitor's browser through Pyodide.
+ * A lesson's code editor: a plain textarea with the starting code, Pigeon's hints
+ * revealed one at a time, the reference solution (embedded at build time, so
+ * showing it never fetches), and "Check my code", which runs the lesson's hidden
+ * tests in the visitor's browser through Pyodide.
+ *
+ * Without JavaScript nothing can be checked or saved, so the buttons stay hidden
+ * and the hints and the solution are readable as plain disclosures instead.
  */
 import { inline } from "../lib/lab/markdown";
+import PigeonSays from "./PigeonSays.astro";
 
 interface Props {
   id: string;
@@ -17,6 +21,7 @@ interface Props {
 const { id, skeleton, hints, solution, next } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
+const hintLabel = (i: number) => `Pigeon's hint, ${i + 1} of ${hints.length}`;
 ---
 <section
   class="lesson-editor"
@@ -31,7 +36,6 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
   <textarea
     class="code-input"
     aria-labelledby="your-code"
-    aria-describedby={`keys-${id}`}
     spellcheck="false"
     autocapitalize="off"
     autocomplete="off"
@@ -39,10 +43,10 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
     wrap="off"
     rows={rows}
   >{skeleton}</textarea>
-  <p class="keys" id={`keys-${id}`}>Tab indents. Press Esc, then Tab, to leave the editor. Ctrl or Cmd + Enter checks your code.</p>
+  <p class="keys" id={`keys-${id}`} data-needs-js hidden>Tab indents. Press Esc, then Tab, to leave the editor. Ctrl or Cmd + Enter checks your code.</p>
   <p class="state" data-saved></p>
 
-  <div class="actions">
+  <div class="actions" data-needs-js hidden>
     <button type="button" class="btn" data-check>Check my code</button>
     {hints.length > 0 && (
       <button type="button" class="btn secondary" data-hint>Show a hint (1 of {hints.length})</button>
@@ -50,11 +54,42 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
     <button type="button" class="btn secondary" data-solution>Show the solution</button>
     <button type="button" class="btn secondary" data-reset>Reset to the starting code</button>
   </div>
-  <noscript><p class="state error">Checking your code needs JavaScript, which is turned off in this browser.</p></noscript>
+  <noscript>
+    <p class="state error">
+      Checking your code and saving a draft need JavaScript, which is turned off in this browser. Turn it on and
+      reload the page to check your code. You can still edit it here, and the hints and the reference solution are
+      below.
+    </p>
+    <div class="nojs">
+      {hints.length > 0 && (
+        <PigeonSays mood="tip" label={hints.length === 1 ? "Pigeon's hint" : `Pigeon's hints (${hints.length})`}>
+          {hints.map((h, i) => (
+            <details class="nojs-hint">
+              <summary>{hintLabel(i)}</summary>
+              <p set:html={inline(h)} />
+            </details>
+          ))}
+        </PigeonSays>
+      )}
+      <details class="nojs-solution">
+        <summary>The reference solution</summary>
+        <pre tabindex="0">{solution}</pre>
+      </details>
+    </div>
+  </noscript>
 
+  {/* Each revealed hint is its own note from Pigeon; only the first is drawn, so one Pigeon shows at a time. */}
   <div class="hints" aria-live="polite" aria-relevant="additions" data-hints-out></div>
-  <template data-hints>{hints.map((h) => <li set:html={inline(h)} />)}</template>
+  <template data-hints>
+    {hints.map((h, i) => (
+      <PigeonSays mood="tip" label={hintLabel(i)} bird={i === 0}><p set:html={inline(h)} /></PigeonSays>
+    ))}
+  </template>
   <template data-solution-text><pre>{solution}</pre></template>
+  {/* Pigeon's notes for a check's outcome, filled in by the script below. */}
+  <template data-note="tip"><PigeonSays mood="tip"><p></p></PigeonSays></template>
+  <template data-note="warn"><PigeonSays mood="warn"><p></p></PigeonSays></template>
+  <template data-note="fail"><PigeonSays mood="fail"><p></p></PigeonSays></template>
 
   <div class="results">
     <p class="state" data-status hidden></p>
@@ -73,24 +108,28 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
     border: 1px solid var(--rule-strong); border-radius: var(--radius);
     white-space: pre; overflow-wrap: normal; overflow-x: auto;
   }
-  /* 16px on touch screens, so iOS doesn't zoom the page when the editor gets focus. */
-  @media (pointer: coarse) { .code-input { font-size: var(--step-0); } }
+  /* 16px on touch screens and phones, so iOS doesn't zoom the page when the editor gets focus. */
+  @media (pointer: coarse), (max-width: 640px) { .code-input { font-size: var(--step-0); } }
   .keys { font-size: var(--step--1); color: var(--muted); }
   .state:empty { display: none; }
   .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .btn[aria-disabled="true"] { opacity: 0.6; filter: none; cursor: default; }
   .btn[data-check][aria-disabled="true"] { cursor: progress; }
   .btn.secondary[aria-disabled="true"]:hover { border-color: var(--rule-strong); }
+  .hints { display: flex; flex-direction: column; gap: var(--space-3); }
   .hints:empty { display: none; }
   .results { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-2); }
   .summary { font-family: var(--display); font-size: var(--step-1); font-weight: 600; }
   .summary:empty, [data-detail]:empty { display: none; }
+  .nojs { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-3); }
+  .nojs details > summary { cursor: pointer; font-weight: 600; padding-block: var(--space-2); }
+  .nojs details[open] > summary { margin-bottom: var(--space-1); }
+  @media (pointer: coarse), (max-width: 640px) { .nojs details > summary { padding-block: var(--space-3); } }
 </style>
 
 <style is:global>
-  /* Hints and test results are inserted by the script below, so their styles can't be scoped. */
-  .lesson-editor .hint-list { margin: 0; padding-left: 1.3em; max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-2); }
-  .lesson-editor .hint-list code { font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+  /* Test results and Pigeon's notes are inserted by the script below, so their styles can't be scoped. */
+  .lesson-editor .pigeon-body code { overflow-wrap: anywhere; }
   .lesson-editor .tests { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
   .lesson-editor .tests > li {
     display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: var(--space-2) var(--space-3);
@@ -101,13 +140,16 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
   .lesson-editor .tests .no .verdict { color: var(--bad); }
   .lesson-editor .tests pre { grid-column: 2; white-space: pre; }
   .lesson-editor .tests code { font-family: var(--mono); font-size: 0.9em; }
-  .lesson-editor .error-box { display: flex; flex-direction: column; gap: var(--space-2); }
-  .lesson-editor .error-box pre { background: var(--card); }
-  .lesson-editor .done { margin-top: var(--space-4); }
+  .lesson-editor .trace { border-left: 2px solid var(--bad); }
+  .lesson-editor [data-detail] { display: flex; flex-direction: column; gap: var(--space-3); }
+  .lesson-editor .done { margin-top: var(--space-2); }
   .lesson-editor .done a { font-weight: 600; }
   @media (pointer: coarse), (max-width: 640px) {
     .lesson-editor .done a { display: inline-flex; align-items: center; min-height: var(--tap); }
   }
+  /* One Pigeon at a time: when a check's outcome brings its own note, the hints' drawing
+     steps aside (its column stays, so the hint text doesn't jump). */
+  .lesson-editor:has([data-detail] .pigeon-says) [data-hints-out] .pigeon-bird { visibility: hidden; }
 </style>
 
 <script>
@@ -127,6 +169,9 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
     },
   };
   const BLOCKED = "This browser isn't saving drafts (site storage is blocked), so copy your code before you leave.";
+  const PASS_NOT_SAVED = "This browser can't remember that you passed (site storage is blocked), so Flight School won't mark it.";
+
+  type Mood = "tip" | "warn" | "fail";
 
   function setup(root: HTMLElement) {
     const id = root.dataset.id!;
@@ -139,15 +184,32 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
     const status = $<HTMLElement>("[data-status]")!;
     const summary = $<HTMLElement>("[data-summary]")!;
     const detail = $<HTMLElement>("[data-detail]")!;
+    const keys = $<HTMLElement>(".keys")!;
     const skeleton = ta.defaultValue;
     const solution = $<HTMLTemplateElement>("template[data-solution-text]")!.content.querySelector("pre")!.textContent ?? "";
     const hints = [...($<HTMLTemplateElement>("template[data-hints]")?.content.children ?? [])];
 
-    // Restore the draft from an earlier visit.
+    // The controls and the keyboard line only make sense with this script running.
+    root.querySelectorAll<HTMLElement>("[data-needs-js]").forEach((el) => { el.hidden = false; });
+    ta.setAttribute("aria-describedby", keys.id);
+
+    /** A note from Pigeon, cloned from the server-drawn templates so the bird is mascotSVG's. Paragraphs are HTML. */
+    const note = (mood: Mood, label: string, paragraphs: string[]): HTMLElement => {
+      const el = $<HTMLTemplateElement>(`template[data-note="${mood}"]`)!.content.firstElementChild!.cloneNode(true) as HTMLElement;
+      el.querySelector(".pigeon-label")!.textContent = label;
+      el.querySelector(".pigeon-body")!.innerHTML = paragraphs.map((p) => `<p>${p}</p>`).join("");
+      return el;
+    };
+
+    // Restore the draft from an earlier visit; say so at once if nothing can be saved here.
     const draft = store.get(key);
     if (draft !== null && draft !== skeleton) {
       ta.value = draft;
       saved.textContent = "Restored your draft from this browser.";
+    } else if (!store.set("pigeon.probe", "1")) {
+      saved.textContent = BLOCKED;
+    } else {
+      store.remove("pigeon.probe");
     }
 
     const save = () => {
@@ -181,19 +243,12 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
       }
     });
 
-    // Hints, one at a time.
+    // Pigeon's hints, one at a time.
     let shown = 0;
     const hintsOut = $<HTMLElement>("[data-hints-out]")!;
     if (hintBtn) hintBtn.addEventListener("click", () => {
       if (shown >= hints.length) return;
-      let list = hintsOut.querySelector("ol");
-      if (!list) {
-        list = document.createElement("ol");
-        list.className = "hint-list";
-        list.setAttribute("aria-label", "Hints");
-        hintsOut.append(list);
-      }
-      list.append(hints[shown].cloneNode(true));
+      hintsOut.append(hints[shown].cloneNode(true));
       shown++;
       if (shown < hints.length) {
         hintBtn.textContent = `Show a hint (${shown + 1} of ${hints.length})`;
@@ -262,13 +317,18 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
       if (r.error) {
         summary.textContent = "Your code didn't import, so no tests ran.";
         const trace = r.error.replace(/^Your code failed to import:\n/, "");
-        detail.innerHTML = `<div class="error-box"><p><strong>Python couldn't import your code.</strong> Fix the error below, then check again.</p><pre tabindex="0">${esc(trace)}</pre></div>`;
+        const pre = document.createElement("pre");
+        pre.className = "trace";
+        pre.tabIndex = 0;
+        pre.setAttribute("aria-label", "Python's error");
+        pre.textContent = trace;
+        detail.replaceChildren(note("fail", "Pigeon's note", ["Python couldn't import your code. Fix the error below, then check again."]), pre);
         return;
       }
       const n = r.tests.length;
       if (!n) {
         summary.textContent = "No tests ran.";
-        detail.innerHTML = `<div class="error-box"><p><strong>The lesson's tests didn't run.</strong> Reload the page, then check again.</p></div>`;
+        detail.replaceChildren(note("fail", "Pigeon's note", ["The lesson's tests didn't run. Reload the page, then check again."]));
         return;
       }
       const k = r.tests.filter((t) => t.ok).length;
@@ -279,37 +339,38 @@ const rows = Math.min(32, Math.max(14, skeleton.split("\n").length + 6));
         const why = t.ok ? "" : `<pre tabindex="0">${esc(t.message ?? "failed")}${t.trace ? `\n\n${esc(t.trace)}` : ""}</pre>`;
         return `<li class="${t.ok ? "ok" : "no"}"><span class="verdict">${t.ok ? "Pass" : "Fail"}</span><span class="what">${what}</span>${why}</li>`;
       });
-      let html = `<ul class="tests" role="list">${items.join("")}</ul>`;
+      detail.innerHTML = `<ul class="tests" role="list">${items.join("")}</ul>`;
       if (r.passed) {
-        store.set(`passed:${id}`, "1");
+        const kept = store.set(`passed:${id}`, "1");
         const { nextHref, nextTitle, allHref } = root.dataset;
-        html += `<p class="done"><strong>All tests pass.</strong> ${
-          nextHref
-            ? `<a href="${esc(nextHref)}">Next lesson: ${esc(nextTitle)}</a>`
-            : `That was the last lesson. <a href="${esc(allHref)}">See all lessons</a>`
-        }</p>`;
+        const onward = nextHref
+          ? `<a href="${esc(nextHref)}">Next lesson: ${esc(nextTitle)}</a>`
+          : `That was the last lesson. <a href="${esc(allHref)}">See all lessons</a>`;
+        detail.append(note("tip", "Lesson passed", [`<span class="done">${onward}</span>`, ...(kept ? [] : [esc(PASS_NOT_SAVED)])]));
       }
-      detail.innerHTML = html;
     }
 
     function showFailure(raw: string) {
       const msg = raw.replace(/[.\s]+$/, "");
-      let short: string, lead: string, next: string;
+      let short: string, lead: string, next: string, mood: Mood;
       if (/timed out after/.test(msg)) {
+        mood = "warn";
         short = `The check stopped after ${CHECK_LIMIT_S} seconds.`;
         lead = `Your code ran for more than ${CHECK_LIMIT_S} seconds, so Python was restarted.`;
         next = "Look for a loop that never ends, or work that grows faster than it should, then check again.";
       } else if (/can't run Python here/.test(msg)) {
+        mood = "fail";
         short = "This browser can't run Python.";
         lead = `This browser can't run the checks: ${msg.replace(/^.*can't run Python here:\s*/, "")}.`;
         next = "Open the lesson in a current version of Firefox, Chrome, Safari or Edge.";
       } else {
+        mood = "fail";
         short = "The check didn't run.";
         lead = `Python couldn't run the check: ${msg}.`;
         next = "Check your connection, then press Check my code again. If it fails the same way, reload the page.";
       }
       summary.textContent = short;
-      detail.innerHTML = `<div class="error-box"><p><strong>${esc(lead)}</strong> ${esc(next)}</p></div>`;
+      detail.replaceChildren(note(mood, mood === "warn" ? "Pigeon's warning" : "Pigeon's note", [`${esc(lead)} ${esc(next)}`]));
     }
   }
 

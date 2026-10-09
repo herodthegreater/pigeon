@@ -1,10 +1,12 @@
 ---
 import Base from "../../layouts/Base.astro";
 import RunBox from "../../components/RunBox.astro";
+import PigeonSays from "../../components/PigeonSays.astro";
 import "../../styles/page.css";
 import "../../styles/prose.css";
 import { meta, methods, method, STATUS_LABEL } from "../../lib/lab/data";
-import { md, highlight, inline, type Heading } from "../../lib/lab/markdown";
+import { md, highlight, inline, slug, type Heading } from "../../lib/lab/markdown";
+import { BREAKS_HEADING, whenItBreaks } from "../../components/guide/breaks";
 import Figures from "../../components/Figures.astro";
 
 export function getStaticPaths() {
@@ -30,6 +32,18 @@ const experiments = m.experiments;
 const runnable = m.status === "runnable";
 const codeNotes = toc.some((t) => t.id === "the-code-line-by-line");
 const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
+
+// Pigeon's warning quotes the write-up's own "When it breaks": its first sentence or two.
+const breaks = whenItBreaks(m.page);
+const breaksId = slug(BREAKS_HEADING);
+const breaksHref = breaks && toc.some((t) => t.id === breaksId) ? `#${breaksId}` : undefined;
+
+// What the source code below is: this method's own code, or (for a reference page) the closest code that runs.
+const sourceIntro = {
+  runnable: "The exact code that runs, read from the repository when this page was built.",
+  cockpit: "The exact code the cockpit runs, read from the repository when this page was built.",
+  reference: "This method doesn't run here. Below is the closest code the lab does run, read from the repository when this page was built.",
+}[m.status];
 ---
 <Base title={`${m.name} · Field Guide · Pigeon`} active="guide" description={m.summary}>
   <main id="main" class="page method">
@@ -49,6 +63,15 @@ const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
       </p>
     </header>
 
+    {contents.length > 0 && (
+      <details class="toc-narrow">
+        <summary>On this page <span class="count">({contents.length} sections)</span></summary>
+        <nav aria-label="On this page">
+          <ol>{contents.map((t) => <li><a href={`#${t.id}`}>{t.text}</a></li>)}</ol>
+        </nav>
+      </details>
+    )}
+
     <div class="cols">
       <article class="prose">
         {body ? <Fragment set:html={body} /> : <p class="gap">No write-up yet. The source code below is the reference.</p>}
@@ -56,7 +79,7 @@ const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
         <h2 id="source">Source code</h2>
         {m.code.length ? (
           <>
-            <p>The exact code that runs, read from the repository when this page was built.</p>
+            <p>{sourceIntro}</p>
             {m.code.map((c, k) => (
               <details class="src" open={k === 0}>
                 <summary><code>{c.name}</code> <span class="where-in">{c.file}:{c.line}</span></summary>
@@ -118,6 +141,16 @@ const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
             </p>
           </section>
         )}
+        {breaks && (
+          <PigeonSays
+            mood="warn"
+            class="breaks"
+            href={breaksHref}
+            link={breaks.points > 1 ? `When it breaks: all ${breaks.points} points` : "When it breaks, in the write-up"}
+          >
+            <p set:html={inline(breaks.text)} />
+          </PigeonSays>
+        )}
         {contents.length > 0 && (
           <nav class="panel toc" aria-labelledby="toc-title">
             <h2 id="toc-title">On this page</h2>
@@ -147,9 +180,6 @@ const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
   .where { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
   .jump-run { display: inline-flex; align-items: center; min-height: 32px; font-size: var(--step--1); font-weight: 600; }
 
-  /* page.css drops .cols to a plain 1fr track below 960px, which lets a long code block
-     widen the whole page; min-width: 0 keeps code scrolling inside its own box. */
-  .cols > .prose, .cols > .side { min-width: 0; }
   .prose > :global(h2:first-child) { margin-top: 0; padding-top: 0; border-top: 0; }
   .prose :global(h2), .prose h3, :global(#run) { scroll-margin-top: var(--space-4); }
   details.src + details.src { margin-top: var(--space-2); }
@@ -171,16 +201,24 @@ const COCKPIT = "https://github.com/herodthegreater/pigeon/tree/main/cockpit";
   .lessons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
   .lessons a { display: flex; align-items: center; min-height: 32px; font-size: var(--step--1); }
 
-  /* The side panel stays beside the write-up while you read, and scrolls on its own
-     once a run result makes it taller than the window, so nothing in it is out of reach. */
-  @media (min-width: 961px) {
-    .side {
-      max-height: calc(100vh - 2 * var(--space-3)); overflow-y: auto; overscroll-behavior: contain;
-      padding: var(--space-1); margin: calc(-1 * var(--space-1)); /* room for the focus ring inside the scroll area */
-    }
-  }
+  /* Contents. On narrow screens the side panel falls below the whole write-up, so the
+     contents come first instead, folded so they don't push the write-up down. Wide
+     screens keep them in the side panel, beside the reading. */
+  .toc-narrow { border-block: 1px solid var(--rule); max-width: var(--measure); }
+  .toc-narrow > summary { cursor: pointer; padding-block: var(--space-2); font-size: var(--step--1); font-weight: 600; }
+  .toc-narrow .count { font-weight: 400; color: var(--muted); }
+  .toc-narrow ol { list-style: none; margin: 0; padding: 0 0 var(--space-2); }
+  .toc-narrow a { display: flex; align-items: center; min-height: 32px; font-size: var(--step--1); }
+  @media (min-width: 961px) { .toc-narrow { display: none; } }
+  @media (max-width: 960px) { .side > .toc { display: none; } }
+
+  /* Pigeon's warning sits between the run box and the contents, with a hairline above it
+     so it reads as a note on the panel above, not as a panel of its own. */
+  .side > :global(.breaks) { border-top: 1px solid var(--rule); padding-top: var(--space-3); }
+
   @media (pointer: coarse), (max-width: 640px) {
-    .jump-run, .lessons a, .crumbs a, a.solo { min-height: var(--tap); }
+    .jump-run, .lessons a, .crumbs a, a.solo, .toc-narrow a { min-height: var(--tap); }
+    .toc-narrow > summary { padding-block: var(--space-3); }
     .crumbs a, a.solo { display: inline-flex; align-items: center; }
     details.src > summary { padding-block: var(--space-3); }
   }

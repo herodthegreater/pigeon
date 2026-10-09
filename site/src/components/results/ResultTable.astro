@@ -3,21 +3,24 @@ import { cap } from "../../lib/lab/labels";
 import { cellText, columnLabel, columns, isNumeric, refPoints, spread } from "./table";
 
 interface Props {
+  /** The experiment's title: names the table's scroll region, so it isn't a second landmark called "Table". */
+  title: string;
   rows: Record<string, number | string>[];
   refs?: Record<string, Record<string, number>>;
   seconds: number;
 }
-const { rows, refs, seconds } = Astro.props;
+const { title, rows, refs, seconds } = Astro.props;
 const cols = columns(rows);
 const numeric = new Set(cols.filter((k) => isNumeric(rows, k)));
 const points = refPoints(refs, cols);
 const took = Number.isFinite(seconds) ? ` The experiment took ${Math.round(seconds).toLocaleString("en-US")} s.` : "";
 ---
-<section class="table" aria-labelledby="table">
+{/* A plain section: the table's scroll region below is the one landmark, with its own name. */}
+<section class="table">
   <h2 id="table">Table</h2>
   <p class="note" id="table-note">Mean over the seeds; ± is the standard deviation where more than one seed ran.{took}</p>
   {rows.length && cols.length ? (
-    <div class="tablewrap" tabindex="0" role="region" aria-labelledby="table" aria-describedby="table-note">
+    <div class="tablewrap" tabindex="0" role="region" aria-label={`${title}: full results table`} aria-describedby="table-note">
       <table>
         <thead>
           <tr>{cols.map((k) => <th scope="col" class={numeric.has(k) ? "num" : undefined}>{columnLabel(k)}</th>)}</tr>
