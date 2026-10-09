@@ -125,6 +125,8 @@
 /* Field labels read like the Field Guide's run box: semibold ink, the value in mono teal. */
 #recipe .field { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: var(--step--1); font-weight: 600; }
 #recipe .field output { font-family: var(--mono); font-weight: 500; color: var(--teal); }
+/* A short note under a control, saying what the chosen setting stores. */
+#recipe .note { font-size: var(--step--1); color: var(--muted); }
 #recipe select {
   flex: 1 1 12em; max-width: 100%; min-height: 36px; padding: 0 var(--space-2);
   border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--card); color: var(--ink); font-weight: 400;
