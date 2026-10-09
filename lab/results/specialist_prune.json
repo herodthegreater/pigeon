@@ -1,6 +1,6 @@
 {
  "name": "specialist_prune",
- "group": "6 \u00b7 Specialization (the pigeon question)",
+ "group": "6 \u00b7 Specialization (the bird-detector question)",
  "title": "Carving a specialist out of the generalist",
  "question": "Prune the teacher's neurons for one class. Does a task-aware importance score (bird-vs-rest) keep a better bird detector than an all-class score, and does collapsing the head help recovery?",
  "quick": false,

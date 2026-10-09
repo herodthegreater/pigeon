@@ -46,7 +46,7 @@ From `quantization`. QAT rows are 1,500 steps, mean of 2 seeds. Everything uses 
 
 The big teacher can be trained down to 1 bit per weight (plus one fp16 scale per 16 weights) and ends *above* its fp32 accuracy. That is not because the rounding helps: the QAT run is also 1,500 more training steps, which the fp32 model never got. The 2,132-parameter student cannot do the same. QAT roughly triples its 2-bit accuracy over PTQ but still ends far below fp32. Labels and KD come out almost even for the student. The bird AP at 2 bits even favours labels (0.7592 against 0.7024).
 
-Page runs (500 steps): the default student at 2 bits goes from 0.1683 with PTQ to 0.4576 with KD (0.476 with labels). The teacher at 1 bit goes from 0.4356 to 0.9165 with KD.
+Page runs (500 steps): the default student at 2 bits goes from 0.1897 with PTQ to 0.4602 with KD (0.4260 with labels). A 2-bit student this small is chaotic: the same run in native numpy instead of the browser lands about 0.04 away, so read the KD lead as noise. The 2-seed means above have labels and KD within 0.01. The teacher at 1 bit goes from 0.4256 to 0.9118 with KD.
 
 ## When it breaks
 
@@ -64,4 +64,4 @@ Page runs (500 steps): the default student at 2 bits goes from 0.1683 with PTQ t
 
 ## Going further
 
-On large networks QAT is standard for int4 and below, usually with learned scales (LSQ), per-channel weight scales and simulated activation quantization, and often with distillation from the full-precision model, as in the KD arm here. pigeon has no QAT path yet. Its cockpit's Precision module is PTQ, and `carve.py` found PTQ collapsing at 4 bits on YOLOv8n. The way below that floor is the move pigeon already makes after pruning: fine-tune with the cut in place. For a detector, that means running the Ultralytics trainer with `harness/quant.py:fake_quantize` applied in the forward pass and an STE in the backward pass. (see Quantizing a detector).
+On large networks QAT is standard for int4 and below, usually with learned scales (LSQ), per-channel weight scales and simulated activation quantization, and often with distillation from the full-precision model, as in the KD arm here. The YOLOv8n cockpit's Precision module is PTQ, and `carve.py` found PTQ collapsing at 4 bits on YOLOv8n. Below that floor the cockpit uses QAT: when a recipe quantizes, Regrow fine-tunes with the quantizer in the loop. `harness/precision.py:enable_qat` swaps each quantized conv for a `QATConv2d`, whose forward pass uses the rounded weights and whose backward pass is a straight-through estimator (see Prune, then fine-tune). That took a 3.16-bit recipe from 0.003 to 0.584 bird mAP@50, 70% of native, in 3 CPU epochs (cockpit/STATUS.md, on a VOC-2007 bird stand-in set). See also Quantizing a detector.

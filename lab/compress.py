@@ -123,7 +123,7 @@ def neuron_importance(net: MLP, X: np.ndarray, y: np.ndarray | None = None,
     """One score per hidden neuron, per hidden layer (higher = keep).
 
     l1        -- L1 norm of the neuron's incoming weights (torch-pruning's
-                 GroupMagnitudeImportance, the criterion pigeon's cockpit uses)
+                 GroupMagnitudeImportance, the criterion the YOLOv8n cockpit uses)
     act       -- mean |activation| on data
     taylor    -- |a * dL/da| summed over data: first-order estimate of the loss
                  change if the neuron is removed (data- and task-aware)

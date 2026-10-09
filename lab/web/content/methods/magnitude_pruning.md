@@ -32,7 +32,7 @@ In the global branch, `flat = np.concatenate([np.abs(net.eff(i)).ravel() for i i
 
 ## What the simulations show
 
-The teacher is a 3x256 MLP: 140,052 parameters, 0.9139 accuracy on 20 classes, 0.9885 average precision (AP) on class 0, the "bird". AP is the same kind of single-class ranking score as pigeon's bird mAP@50. From `prune_unstructured` (accuracy; 1,500 recovery steps; mean of 2 seeds):
+The teacher is a 3x256 MLP: 140,052 parameters, 0.9139 accuracy on 20 classes, 0.9885 average precision (AP) on class 0, the "bird". AP is the same kind of single-class ranking score as the YOLOv8n cockpit's bird mAP@50. From `prune_unstructured` (accuracy; 1,500 recovery steps; mean of 2 seeds):
 
 | sparsity | no recovery | + labels | + KD from unpruned self | gradual (5 steps) + KD | dense net, same weight count, KD |
 |---|---|---|---|---|---|
@@ -43,9 +43,9 @@ The teacher is a 3x256 MLP: 140,052 parameters, 0.9139 accuracy on 20 classes, 0
 | 0.98 | 0.0597 | 0.6215 | 0.6289 | 0.6179 | 0.8531 |
 | 0.99 | 0.0540 | 0.0804 | 0.0883 | 0.4007 | 0.7792 |
 
-Without recovery there is a cliff between 75% and 90%, the shape pigeon saw for channel cuts on YOLOv8n. KD recovery brings 90% sparsity back to 0.9125. At 50-75% it ends slightly *above* the teacher, because recovery is also extra training on 28,000 inputs. KD beats labels at every sparsity. Gradual pruning is a little worse than one-shot up to 98%, but at 99% it is the only sparse arm that survives (0.4007 against 0.0883). From 95% up, a small *dense* net with the same weight count beats every sparse one.
+Without recovery there is a cliff between 75% and 90%, the shape the cockpit saw for channel cuts on YOLOv8n. KD recovery brings 90% sparsity back to 0.9125. At 50-75% it ends slightly *above* the teacher, because recovery is also extra training on 28,000 inputs. KD beats labels at every sparsity. Gradual pruning is a little worse than one-shot up to 98%, but at 99% it is the only sparse arm that survives (0.4007 against 0.0883). From 95% up, a small *dense* net with the same weight count beats every sparse one.
 
-Page runs (500 recovery steps): the defaults (0.9, KD, global) recover from 0.286 to 0.8945, and labels reach 0.8901. Per-layer ranking starts at 0.1367 and recovers to 0.8573. Five gradual steps reach 0.8641 at 0.9 and 0.7097 at 0.95, below one-shot (0.8945, 0.8213), because each recovery gets only 100 steps.
+Page runs (500 recovery steps): the defaults (0.9, KD, global) recover from 0.2785 to 0.8965, and labels reach 0.8898. Per-layer ranking starts at 0.1326 and recovers to 0.8603. Five gradual steps reach 0.8613 at 0.9 and 0.7256 at 0.95, below one-shot (0.8965, 0.8212), because each recovery gets only 100 steps.
 
 ## When it breaks
 
@@ -64,4 +64,4 @@ Page runs (500 recovery steps): the defaults (0.9, KD, global) recover from 0.28
 
 ## Going further
 
-On large models unstructured sparsity pays off only with a runtime that exploits it, such as sparse formats on CPUs or N:M patterns on recent GPUs. See also Wanda and SparseGPT. pigeon does not prune single weights. Its cockpit zeros whole channels (`harness/mask.py` masks the lowest-L1 output channels of a stage), because a channel can actually be removed from a conv layer. The cliff-then-recover pattern is the lesson pigeon's README draws: the loop must be prune → fine-tune → test, never prune → test.
+On large models unstructured sparsity pays off only with a runtime that exploits it, such as sparse formats on CPUs or N:M patterns on recent GPUs. See also Wanda and SparseGPT. The YOLOv8n cockpit does not prune single weights. It zeros whole channels (`harness/mask.py` masks the lowest-L1 output channels of a stage), because a channel can actually be removed from a conv layer. The cliff-then-recover pattern is the lesson the cockpit's README draws: the loop must be prune → fine-tune → test, never prune → test.

@@ -7,7 +7,7 @@ A generalist spends capacity telling 20 classes apart. If you only need "bird or
 1. Group the 20 classes into `K` outputs, written as a `20 x K` 0/1 matrix `G` with one 1 per row. Output 0 is always the bird alone. `binary` (K=2) is bird | rest. `siblings` (K=5) is bird | each of its 3 siblings | rest. `supers` (K=8) is bird | each sibling | each of the 4 other superclasses.
 2. Build a student with a `K`-wide output layer.
 3. Distill: compute the teacher's probabilities `p_t = softmax(z_t / T)` over 20 classes (here `T = 1`), sum them into groups `q_t = p_t @ G`, and train the student's `K` outputs to match `q_t` with the usual `T^2 * KL(q_t || p_s)` loss.
-4. Score by average precision (AP) of output 0 on the test set, the same single-class ranking measure pigeon uses for birds.
+4. Score by average precision (AP) of output 0 on the test set, the same single-class ranking measure the YOLOv8n cockpit uses for birds.
 
 ## The code, line by line
 
@@ -35,7 +35,7 @@ From `specialist_size` (bird AP, mean of 3 seeds; all KD at T=1; the teacher get
 
 Specializing the head is a large win: a width-8 binary specialist (194 parameters) beats a width-16 generalist (820 parameters). But the richer heads lose to the plain binary head at every width, and the more outputs, the worse. At these sizes the extra outputs cost more capacity than their dark knowledge returns. The gap closes as width grows: at 32 the siblings head is within 0.005 of binary. Distillation adds a little over labels for the binary head (0.9346 vs 0.9243 at width 8, 0.9689 vs 0.9530 at 16). Width 2 is unstable: the standard deviation of the binary arms is about 0.33.
 
-Page runs at width 4, one seed: generalist 0.6148, binary with labels 0.8073, binary with KD 0.8134, siblings 0.6516, supers 0.3029. The supers run is far below its 3-seed mean of 0.5998: one seed varies a lot at this size.
+Page runs at width 4, one seed: generalist 0.6132, binary with labels 0.8073, binary with KD 0.8118, siblings 0.6425, supers 0.2974. The supers run is far below its 3-seed mean of 0.5998: one seed varies a lot at this size.
 
 Superclasses here are weak structure (class centres scatter with std 1.0 around superclass centres, and each class's modes with std 2.5), so sibling knowledge may matter less than it would for real birds.
 
@@ -54,4 +54,4 @@ Superclasses here are weak structure (class centres scatter with std 1.0 around 
 
 ## Going further
 
-pigeon keeps YOLOv8n's 80-class head: its fine-tune set is built "in the model's 80-class space (bird = 14)", and the evaluator reads class 14. README's limitations note that specializing to pigeons would need a labeled dataset "and head collapse to one class". On this toy, collapsing to bird-vs-rest beats keeping outputs for the confusers. A collapsed head is also what makes task-aware pruning meaningful: once the head asks only about birds, channels that served other classes have no output left to serve.
+The cockpit keeps YOLOv8n's 80-class head: its fine-tune set is built "in the model's 80-class space (bird = 14)", and the evaluator reads class 14. The cockpit README's limitations note that specializing to pigeons specifically, rather than all birds, would need a labeled dataset "and head collapse to one class". On this toy, collapsing to bird-vs-rest beats keeping outputs for the confusers. A collapsed head is also what makes task-aware pruning meaningful: once the head asks only about birds, channels that served other classes have no output left to serve.

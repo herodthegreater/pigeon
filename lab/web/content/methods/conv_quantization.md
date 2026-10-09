@@ -1,6 +1,6 @@
 ## The idea
 
-Quantization stores each weight in fewer bits, for example as an 8-bit integer instead of a 16-bit float. pigeon measures the cost with *fake quantization*: round every weight to the nearest value an N-bit format could hold, but keep it as a float. The normal forward pass then gives the accuracy a real N-bit export with the same scheme would have. What keeps low bit-widths alive is the shared *scale*: each group of weights gets one float multiplier, and smaller groups fit their weights more tightly. For a CNN, round the weights inference actually uses, which means folding batch norm into each conv first.
+Quantization stores each weight in fewer bits, for example as an 8-bit integer instead of a 16-bit float. The YOLOv8n cockpit measures the cost with *fake quantization*: round every weight to the nearest value an N-bit format could hold, but keep it as a float. The normal forward pass then gives the accuracy a real N-bit export with the same scheme would have. What keeps low bit-widths alive is the shared *scale*: each group of weights gets one float multiplier, and smaller groups fit their weights more tightly. For a CNN, round the weights inference actually uses, which means folding batch norm into each conv first.
 
 ## How it works
 

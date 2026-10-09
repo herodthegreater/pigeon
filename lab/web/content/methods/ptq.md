@@ -18,7 +18,7 @@ w_hat = clip(round(group / scale), -qmax, qmax) * scale
 
 ## The code, line by line
 
-`fake_quantize` in `lab/nn.py` is a line-for-line numpy twin of `harness/quant.py:fake_quantize`, the function pigeon runs on YOLOv8n. Both return floats ("fake" quantization) holding exactly the values a `b`-bit format could store, so measured accuracy matches a real export.
+`fake_quantize` in `lab/nn.py` is a line-for-line numpy twin of `harness/quant.py:fake_quantize`, the function the YOLOv8n cockpit runs on its detector. Both return floats ("fake" quantization) holding exactly the values a `b`-bit format could store, so measured accuracy matches a real export.
 
 `if bits >= 16: return w` is the native setting. `flat = w.reshape(-1)` flattens row by row. `lab/nn.py` stores `W` as (inputs, outputs), so a group of 16 is 16 weights leaving one input towards 16 consecutive neurons. With no `group_size`, `g = flat[None, :]` is one group. Otherwise `pad = (-n) % group_size` zeros are appended and `reshape(-1, group_size)` makes one row per group.
 
@@ -46,9 +46,9 @@ From `quantization`, accuracy on 20 classes. The "teacher" is the 3x256 net (140
 
 Scales cost storage. Counting an fp16 scale per group, the teacher at 4 bits takes 582.3 kbit per-tensor and 721.5 kbit with group-16, against 4,481.7 kbit in fp32. A group of 16 adds one bit per weight, and a group of 4 adds four.
 
-Page runs: the default (teacher, 4-bit, group 16) gives 0.9128. Group 4 at 2 bits gives 0.8057, but with four extra bits of scale per weight.
+Page runs: the default (teacher, 4-bit, group 16) gives 0.9135. Group 4 at 2 bits gives 0.8278, but with four extra bits of scale per weight.
 
-pigeon's `carve.py` on YOLOv8n found the same shape with a lower floor: 8-bit about free, 6-bit alive only with group scales (group size 128), 4-bit collapsed. The small student, with little spare capacity, is the closer analogue.
+The cockpit's `carve.py` on YOLOv8n found the same shape with a lower floor: 8-bit about free, 6-bit alive only with group scales (group size 128), 4-bit collapsed. The small student, with little spare capacity, is the closer analogue.
 
 ## When it breaks
 
@@ -61,8 +61,8 @@ pigeon's `carve.py` on YOLOv8n found the same shape with a lower floor: 8-bit ab
 
 - Set **scale shared by** to tensor and read the bits chart. Then switch to 16. Find the lowest **bits** that stays within 0.01 of fp32 in each case.
 - Set **bits** to 2 and compare the `params` column for tensor and 4. The nonzero count shows how many weights rounded to zero.
-- Switch **model** to student and repeat the first experiment. The cliff moves up by about two bits.
+- Switch **model** to student and repeat the first experiment. With group 16 the lowest safe width moves up two bits, from 4 to 6; per tensor it is 6 for both models.
 
 ## Going further
 
-Real deployments store integers (int8, int4) with per-channel or per-group fp16 scales, and quantize activations too, using a calibration set to pick their ranges. At 4 bits and below, calibration-based methods (GPTQ, AWQ) beat round-to-nearest, and QAT beats both when you can afford training. In pigeon, the cockpit's Precision module applies `harness/quant.py:fake_quantize` to every `Conv2d` (via `harness/model.py`), so accuracy measured in the cockpit is what an export with the same scheme would give.
+Real deployments store integers (int8, int4) with per-channel or per-group fp16 scales, and quantize activations too, using a calibration set to pick their ranges. At 4 bits and below, calibration-based methods (GPTQ, AWQ) beat round-to-nearest, and QAT beats both when you can afford training. In the YOLOv8n cockpit, the Precision module applies `harness/quant.py:fake_quantize` to every `Conv2d` (via `harness/model.py`), so accuracy measured in the cockpit is what an export with the same scheme would give.

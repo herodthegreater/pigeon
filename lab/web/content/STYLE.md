@@ -28,7 +28,13 @@ time it appears on the page. Prefer one concrete example over an abstraction.
     Only real numbers: from lab/results/<experiment>.json for the experiments
     listed in the method's `experiments` field, or from running the method
     yourself: python3 -c "from lab.methods import REGISTRY as R; print(R['<id>'].execute({}))"
-    (pass params as a dict to try settings; each run takes seconds).
+    (pass params as a dict to try settings; most runs take seconds).
+    Numbers quoted from a page's Run must be measured in Pyodide, the browser's
+    runtime, with the shipped models in lab/models
+    (`node lab/web/run_in_pyodide.cjs site/public/lab runs.json`): a training
+    run can end a few test examples apart on another BLAS. Quote them to the
+    digit the page shows. lab/tests/test_quotes.py re-runs a sample of the
+    quotes that train nothing; add a case when you quote a new one.
     Never invent or round a number into something it isn't. Say what the toy
     world can't tell us.
 

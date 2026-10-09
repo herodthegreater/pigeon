@@ -1,6 +1,6 @@
 ## The idea
 
-A generalist cut down to a bird specialist has to be fine-tuned back to health. pigeon does that on 400 COCO images that all contain birds. This page asks whether "only images of the target" is enough. A bird-vs-rest model must learn what is *not* a bird as much as what is, and a set of positives never shows it a negative. Recovery is knowledge distillation (KD) on whatever inputs it gets, so the input set is the only variable.
+A generalist cut down to a bird specialist has to be fine-tuned back to health. The YOLOv8n cockpit does that on 400 COCO images that all contain birds. This page asks whether "only images of the target" is enough. A bird-vs-rest model must learn what is *not* a bird as much as what is, and a set of positives never shows it a negative. Recovery is knowledge distillation (KD) on whatever inputs it gets, so the input set is the only variable.
 
 ## How it works
 
@@ -34,7 +34,7 @@ From `specialist_data` (bird AP, mean of 2 seeds; the teacher gets 0.9885):
 
 Bird-only recovery is the worst set for both models. The carved model drops from 0.9679 to 0.7971, and the fresh one from 0.8933 to 0.7213 (seed spread 0.092). Negatives are what pin down where "bird" ends. The 3 sibling classes, the closest confusers, recover about half of the carved model's loss (0.8856). Birds plus an equal number of random non-birds nearly matches all 28,000 inputs for the carved model (0.9620) and beats it for the fresh one (0.9246), with a tenth of the data. A random sample of the same size (about 5% birds) does worse, so the ratio of positives matters too. Even Gaussian noise negatives get the carved model to 0.9406, because standardized noise overlaps the real inputs.
 
-Page runs (fresh 2x16, 1,000 steps, one seed): everything 0.8406, birds only 0.665, birds + random others 0.9055, birds + noise 0.7968.
+Page runs (fresh 2x16, 1,000 steps, one seed): everything 0.8372, birds only 0.6439, birds + random others 0.9054, birds + noise 0.8094.
 
 The toy's "birds only" is purer than any real image set: every input is a positive with nothing else in it.
 
@@ -52,4 +52,4 @@ The toy's "birds only" is purer than any real image set: every input is a positi
 
 ## Going further
 
-pigeon's recovery set (`build_finetune_set.py`) is 400 COCO images containing birds, labelled in the model's 80-class space with bird = class 14. A detection image is not a toy "bird input": it also contains background, and a detector learns from the locations where no bird is, so pigeon's set is not purely positive. The toy does say that the non-bird content matters, and that a balanced mix of positives and negatives from everything else worked better than near-confusers alone. For pigeon, adding a similar number of COCO images without birds is the analogue of "birds + random others". STATUS.md lists more training data (2k+ bird images) as the first lever for stronger recovery. The toy suggests checking what those images contain besides birds.
+The cockpit's recovery set (`build_finetune_set.py`) is 400 COCO images containing birds, labelled in the model's 80-class space with bird = class 14. A detection image is not a toy "bird input": it also contains background, and a detector learns from the locations where no bird is, so the cockpit's set is not purely positive. The toy does say that the non-bird content matters, and that a balanced mix of positives and negatives from everything else worked better than near-confusers alone. For the cockpit, adding a similar number of COCO images without birds is the analogue of "birds + random others". STATUS.md lists more training data (2k+ bird images) as the first lever for stronger recovery. The toy suggests checking what those images contain besides birds.

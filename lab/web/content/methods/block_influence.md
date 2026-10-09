@@ -29,23 +29,23 @@ In `run_block_influence`, `sorted(bi, key=bi.get)[:k]` picks the `k` lowest. `dr
 
 ## What the simulations show
 
-Residual 8x128 teacher, 0.9113 accuracy. Block influence by layer (512 calibration inputs):
+Residual 8x128 teacher, 0.9100 accuracy. Block influence by layer (512 calibration inputs):
 
 | layer | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 |---|---|---|---|---|---|---|---|
-| BI | 0.0981 | 0.0778 | 0.0674 | 0.0644 | 0.0743 | 0.0813 | 0.0882 |
+| BI | 0.0986 | 0.0790 | 0.0673 | 0.0645 | 0.0745 | 0.0808 | 0.0866 |
 
 The middle layers change the stream least. This network has no "lazy deep layers" pattern; that is an LLM finding the toy doesn't reproduce.
 
 | layers deleted | lowest BI | random | trial and error |
 |---|---|---|---|
-| 1 | 0.8603 (layer 4) | 0.8517 (layer 6) | 0.8666 |
-| 2 | 0.7638 (3, 4) | 0.7626 (5, 6) | 0.8044 |
-| 4 | 0.5122 (2-5) | 0.5249 (2, 4, 5, 6) | 0.5320 |
+| 1 | 0.8560 (layer 4) | 0.8530 (layer 6) | 0.8675 |
+| 2 | 0.7557 (3, 4) | 0.7632 (5, 6) | 0.8051 |
+| 4 | 0.5060 (2-5) | 0.5227 (2, 4, 5, 6) | 0.5453 |
 
-BI picks reasonable single layers. At 2 it deletes two *adjacent* layers and does no better than random. At 4, random beats it. A greedy search that actually measures accuracy beats both.
+BI picks reasonable single layers. At 2 it deletes two *adjacent* layers and does slightly worse than random. At 4, random beats it. A greedy search that actually measures accuracy beats both.
 
-The `layer_drop` experiment shows why residual connections matter. Deleting one layer of the *plain* 8x128 network drops accuracy to 0.0622, while the residual one keeps 0.8666 (greedy choice). With knowledge-distillation recovery, the residual net with 4 layers deleted returns to 0.9123 (mean of 2 seeds).
+The `layer_drop` experiment (`lab/results/layer_drop.json`, recorded with an earlier training of the same teacher, which scored 0.9113) shows why residual connections matter. Deleting one layer of the *plain* 8x128 network drops accuracy to 0.0622, while the residual one keeps 0.8666 (greedy choice). With knowledge-distillation recovery, the residual net with 4 layers deleted returns to 0.9168 (mean of 2 seeds).
 
 ## When it breaks
 

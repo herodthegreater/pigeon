@@ -12,7 +12,7 @@ def main():
     ap = argparse.ArgumentParser(description="pigeon lab website")
     ap.add_argument("--port", type=int, default=8100)
     args = ap.parse_args()
-    print(f"pigeon lab on http://127.0.0.1:{args.port}  (first run trains the teacher, ~15 s)")
+    print(f"pigeon lab on http://127.0.0.1:{args.port}")
     uvicorn.run("lab.web.app:app", host="127.0.0.1", port=args.port)
 
 

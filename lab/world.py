@@ -1,6 +1,6 @@
 """A synthetic 'generalist world' with a known right answer.
 
-The real pigeon problem is: a detector trained on 80 COCO classes, of which we
+The YOLOv8n cockpit's real problem is: a detector trained on 80 COCO classes, of which we
 keep one (bird). This module builds a miniature, fully-controlled version of
 that setup so distillation and compression can be simulated thousands of times
 on a CPU:
@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-TARGET = 0  # the "bird": the one class pigeon wants to keep
+TARGET = 0  # the "bird": the one class the cockpit wants to keep
 
 
 @dataclass

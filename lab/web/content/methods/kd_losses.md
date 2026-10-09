@@ -42,7 +42,7 @@ Let `pt = softmax(zt / T)` and `ps = softmax(zs / T)` be the teacher's and stude
 
 NLL is the mean negative log-probability of the true class. Hard pseudo-labels and `T = 1` KD nearly coincide: this teacher's `T = 1` outputs are close to one-hot (mean top probability 0.9684 on unlabeled inputs). MSE is far worst: the teacher's logits span a median of 47.2 units, a scale a 2x16 network wastes capacity chasing. At `T = 1`, top-3 and even top-1 plus a uniform rest match full KD, so almost nothing the student uses lives in the tail. Temperature hurts: KD and reverse KL at `T = 4` fall below labels only.
 
-This page's runs (1000 steps, seed 0, width 16, page default `T = 4`): labels only 0.5803, forward KL 0.5534, reverse KL 0.5311, MSE 0.4255, hard 0.5820, top-1 0.5372, top-3 0.5516. At temperature 1, forward KL gave 0.5854. A toy teacher this confident cannot show where the tail matters most, such as language models with thousands of plausible next tokens.
+This page's runs (1000 steps, seed 0, width 16, page default `T = 4`): labels only 0.5803, forward KL 0.5551, reverse KL 0.5309, MSE 0.4134, hard 0.5838, top-1 0.5373, top-3 0.5525. At temperature 1, forward KL gave 0.5850. A toy teacher this confident cannot show where the tail matters most, such as language models with thousands of plausible next tokens.
 
 ## When it breaks
 

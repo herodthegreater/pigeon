@@ -1,6 +1,6 @@
 ## The idea
 
-Ordinary importance scores ask which neurons matter for everything the network does. *Task-aware pruning* scores neurons by how much they matter for the kept task alone, here a bird-vs-rest loss instead of 20-class cross-entropy, so neurons that only separate two kinds of vehicle are cut first. The output layer is then collapsed to a coarser label space, and the network is recovered by distilling only that grouped task. It is the toy version of carving pigeon's bird detector out of an 80-class YOLO.
+Ordinary importance scores ask which neurons matter for everything the network does. *Task-aware pruning* scores neurons by how much they matter for the kept task alone, here a bird-vs-rest loss instead of 20-class cross-entropy, so neurons that only separate two kinds of vehicle are cut first. The output layer is then collapsed to a coarser label space, and the network is recovered by distilling only that grouped task. It is the toy version of the YOLOv8n cockpit's job: carving a bird detector out of an 80-class YOLO.
 
 ## How it works
 
@@ -33,7 +33,7 @@ From `specialist_prune` (bird AP; recovered arms are means of 2 seeds with the s
 
 Before recovery, task-aware scoring does what it promises: the bird-scored cut keeps 0.44-0.76 bird AP at every width, against 0.08-0.37 for the all-class cut. The criteria pick different neurons. In the second hidden layer the kept sets overlap by 55% at width 128, 33% at 64, 16% at 32 and 0% at 4. After full recovery the advantage mostly disappears. From width 16 up the all-class carve recovers as well or slightly better, the bird-scored carve wins clearly only at width 8 (0.7289 against 0.6406), and at 8 and 16 a fresh specialist beats both. Collapsing the head beats 20-way KD at widths 16-64 (0.8950 against 0.8464 at 16), but not below.
 
-Page runs (500 recovery steps, one seed; "no recovery" measured after the head collapse): at width 16, bird importance goes 0.5068 → 0.7607 and all-class 0.1015 → 0.7187. At width 64, bird 0.5095 → 0.9694 and all-class 0.1538 → 0.9736.
+Page runs (500 recovery steps, one seed; "no recovery" measured after the head collapse): at width 16, bird importance goes from 0.4964 to 0.7735 and all-class from 0.0628 to 0.6328. At width 64, bird goes from 0.5490 to 0.9715 and all-class from 0.1221 to 0.9722.
 
 The toy's answer: task-aware importance matters when recovery is short or impossible. With enough recovery, *how many* neurons you keep matters more than *which*.
 
@@ -52,4 +52,4 @@ The toy's answer: task-aware importance matters when recovery is short or imposs
 
 ## Going further
 
-On a detector the recipe means scoring channels with a loss that counts only the target class, for example a Taylor importance on detection loss restricted to class 14, in place of pigeon's `GroupMagnitudeImportance`, which like `l1` ignores the task. pigeon's cockpit already measures task sensitivity directly: its sensitivity scan cuts 25% of each stage, records the drop in bird mAP@50, and ranks stages by FLOPs per unit of sensitivity. Head collapse is still open: README notes that specializing to pigeons would need "head collapse to one class".
+On a detector the recipe means scoring channels with a loss that counts only the target class, for example a Taylor importance on detection loss restricted to class 14, in place of the cockpit's `GroupMagnitudeImportance`, which like `l1` ignores the task. The cockpit already measures task sensitivity directly: its sensitivity scan cuts 25% of each stage, records the drop in bird mAP@50, and ranks stages by FLOPs per unit of sensitivity. Head collapse is still open: the cockpit's README notes that specializing to pigeons specifically, rather than all birds, would need "head collapse to one class".

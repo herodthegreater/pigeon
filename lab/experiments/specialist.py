@@ -1,4 +1,4 @@
-"""Group 6 -- the pigeon question: keep ONE capability (class 0, "bird") out of
+"""Group 6, the bird-detector question: keep ONE capability (class 0, "bird") out of
 a 20-class generalist. How small can a specialist get, how should its head be
 shaped, and what data must the recovery step see?"""
 
@@ -13,7 +13,7 @@ from ..nn import MLP
 from ..train import CE, KD, FixedSource, evaluate
 from ..world import TARGET
 
-G = "6 · Specialization (the pigeon question)"
+G = "6 · Specialization (the bird-detector question)"
 
 
 def groups(world) -> dict[str, np.ndarray]:
@@ -139,8 +139,8 @@ def specialist_prune():
 
 
 @experiment("specialist_data", G, "Recovery data for a specialist: are bird images enough?",
-            "pigeon's recovery set is 400 images that *all contain birds*. If the recovery "
-            "data only shows positives, can the model still learn what is NOT a bird?")
+            "The YOLOv8n cockpit's recovery set is 400 images that *all contain birds*. If the "
+            "recovery data only shows positives, can the model still learn what is NOT a bird?")
 def specialist_data():
     d = data()
     t = teacher()

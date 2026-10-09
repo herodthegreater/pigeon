@@ -49,17 +49,17 @@ So: compute `U` once; for `j = 0 .. d-1`, round column `j` of all rows and apply
 
 ## What the simulations show
 
-3x256 teacher, 91.39% accuracy. The three hidden layers are quantized, including the first one, which reads the 12 raw inputs. The output layer stays at full precision, as papers leave `lm_head` alone. "2-bit" means the ternary levels `{-s, 0, s}` (see the RTN page).
+3x256 teacher, 0.9150 accuracy. The three hidden layers are quantized, including the first one, which reads the 12 raw inputs. The output layer stays at full precision, as papers leave `lm_head` alone. "2-bit" means the ternary levels `{-s, 0, s}` (see the RTN page).
 
 | setting | RTN | GPTQ |
 |---|---|---|
-| 4-bit, per row | 0.9103 | 0.9131 |
-| 3-bit, per row | 0.8922 | 0.9079 |
-| 3-bit, scale per 16 | 0.9010 | 0.9110 |
-| 2-bit, per row | 0.4686 | 0.8207 |
-| 2-bit, scale per 16 | 0.7585 | 0.8389 |
+| 4-bit, per row | 0.9087 | 0.9149 |
+| 3-bit, per row | 0.8971 | 0.9093 |
+| 3-bit, scale per 16 | 0.9007 | 0.9115 |
+| 2-bit, per row | 0.4796 | 0.8314 |
+| 2-bit, scale per 16 | 0.7480 | 0.8426 |
 
-With **largest activations first**, GPTQ reaches 0.9097 at 3 bits and 0.8367 at 2 bits. Calling `lw.rtn` and `lw.gptq` directly at 3 bits on each layer's teacher inputs, GPTQ cut the relative output error of the second layer from 0.0300 to 0.0028, but of the first layer (only 12 inputs, so few columns to push errors onto) just from 0.0333 to 0.0322.
+With **largest activations first**, GPTQ reaches 0.9092 at 3 bits and 0.8352 at 2 bits. Calling `lw.rtn` and `lw.gptq` directly at 3 bits on each layer's teacher inputs (512 calibration inputs; error is `‖h W - h Wq‖² / ‖h W‖²`), GPTQ cut the relative output error of the second layer from 0.0313 to 0.0028 and of the third from 0.0388 to 0.0052, but of the first layer (only 12 inputs, so few columns to push errors onto) just from 0.0335 to 0.0324.
 
 ## When it breaks
 
@@ -71,7 +71,7 @@ With **largest activations first**, GPTQ reaches 0.9097 at 3 bits and 0.8367 at 
 ## Try this
 
 - **bits** 2, then 3, then 4, **scale per** row: watch the GPTQ-over-RTN gap shrink as rounding gets finer.
-- Turn on **largest activations first** at 2 bits. Look for the gain over 0.8207.
+- Turn on **largest activations first** at 2 bits. Look for the gain over 0.8314.
 
 ## Going further
 

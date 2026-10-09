@@ -36,4 +36,4 @@ Toy-MLP analogue, not YOLO: `loss_zoo` (lab/results/loss_zoo.json). Adding a Fit
 
 ## Going further
 
-Missing here: a torch loop running teacher and student together with hooks, and a trainer whose loss accepts extra terms. pigeon's pruned student has the teacher's layout, so spatial sizes line up at every stage. The closest analogue is `Hint`.
+Missing here: a torch loop running teacher and student together with hooks, and a trainer whose loss accepts extra terms. The YOLOv8n cockpit's pruned student has the teacher's layout, so spatial sizes line up at every stage. The closest analogue is `Hint`.

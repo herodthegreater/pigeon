@@ -6,9 +6,12 @@
     # for the Astro site: runtime assets into public/lab, page data where Astro
     # imports it at build time (no single-page app)
     python -m lab.web.build_static --out site/public/lab --data-out site/src/data/lab --no-frontend
-    # the same, skipping the slow parts (no model training, no Pyodide download):
-    # enough to build and browse every page locally; Run and Check need the full build
+    # the same, skipping the slow parts (no bundle, no Pyodide download): enough
+    # to build and browse every page locally; Run and Check need the full build
     python -m lab.web.build_static --out site/public/lab --data-out site/src/data/lab --no-frontend --data-only
+    # retrain-or-load the shipped models and write them to lab/models (only when you
+    # mean to change what the site ships; then re-measure every quoted page run)
+    python -m lab.web.build_static --save-models
 
 Everything the server computes on request is either pre-rendered here (method
 write-ups, source code, results, figures, lessons) or shipped to the browser
@@ -16,6 +19,12 @@ so it can be computed there: the lab's Python files and its pre-trained models
 go into ``lab_bundle.zip``, which ``worker.js`` unpacks into Pyodide (CPython
 compiled to WebAssembly). Runs and lesson checks then happen on the visitor's
 machine, inside a Web Worker, with no server at all.
+
+The models are the committed files in ``lab/models``, packed byte for byte;
+this build never trains them. Training the same model on another machine (CI's
+Linux, a different BLAS) gives slightly different weights, and every "page run"
+number a write-up quotes would drift with them. ``lab/tests/test_quotes.py``
+re-runs a sample of those quotes against ``lab/models``.
 
 Pyodide itself is self-hosted from the official release tarball (only the
 runtime and the numpy wheel, ~20 MB), so the site doesn't depend on any CDN.
@@ -78,13 +87,18 @@ def export_data(out: str, figures_out: str) -> None:
                     ignore=shutil.ignore_patterns("quick_*"), dirs_exist_ok=True)
 
 
-def collect_models() -> dict[str, object]:
-    """Train (or load) every cached model the runnable methods use, recording
-    the cache key each one is stored under."""
+def collect_models(shipped_only: bool = False) -> dict[str, object]:
+    """Load (or train) every model the runnable methods use, recording the
+    cache key each one is stored under. ``shipped_only``: every one must
+    already be in lab/models; missing ones stop the build instead of training."""
     seen: dict[str, object] = {}
     orig = common.cached
 
     def recording(key, build):
+        if shipped_only and not os.path.exists(common.shipped_path(key)):
+            raise SystemExit(f"lab/models/{key}.npz is missing. The site ships only committed "
+                             "models: run `python -m lab.web.build_static --save-models`, commit "
+                             "lab/models, and re-measure the write-ups' page runs.")
         obj = orig(key, build)
         seen[key] = obj
         return obj
@@ -104,8 +118,44 @@ def collect_models() -> dict[str, object]:
     return seen
 
 
+def npz_bytes(obj) -> bytes:
+    if isinstance(obj, bytes):
+        return obj
+    buf = io.BytesIO()
+    if isinstance(obj, MLP):
+        obj.save_npz(buf)
+    else:
+        np.savez(buf, array=np.asarray(obj))
+    return buf.getvalue()
+
+
+def shipped_models() -> dict[str, bytes]:
+    """The committed lab/models files the bundle carries, read as they are."""
+    keys = collect_models(shipped_only=True)
+    out = {}
+    for key in keys:
+        with open(common.shipped_path(key), "rb") as f:
+            out[key] = f.read()
+    return out
+
+
+def save_models() -> None:
+    """Write every model the runnable methods use to lab/models: what
+    lab/.cache has wins, then what lab/models already has; the rest is
+    trained."""
+    if common.QUICK:
+        raise SystemExit("unset LAB_QUICK: lab/models holds full-budget models")
+    os.makedirs(common.MODELS, exist_ok=True)
+    for key, obj in collect_models().items():
+        with open(common.shipped_path(key), "wb") as f:
+            f.write(npz_bytes(obj))
+        print(f"  lab/models/{key}.npz", flush=True)
+
+
 def export_bundle(out: str, models: dict[str, object]) -> None:
-    """lab_bundle.zip: the Python the browser needs, plus the models as .npz."""
+    """lab_bundle.zip: the Python the browser needs, plus the models as .npz
+    under lab/models, where ``common.cached`` finds them (the browser has no
+    lab/.cache)."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for name in BUNDLE_MODULES:
@@ -113,13 +163,8 @@ def export_bundle(out: str, models: dict[str, object]) -> None:
         for name in sorted(os.listdir(os.path.join(LAB, "experiments"))):
             if name.endswith(".py"):
                 z.write(os.path.join(LAB, "experiments", name), f"lab/experiments/{name}")
-        for key, obj in models.items():
-            mbuf = io.BytesIO()
-            if isinstance(obj, MLP):
-                obj.save_npz(mbuf)
-            else:
-                np.savez(mbuf, array=np.asarray(obj))
-            z.writestr(f"lab/.cache/{key}.npz", mbuf.getvalue())
+        for key, obj in sorted(models.items()):
+            z.writestr(f"lab/models/{key}.npz", npz_bytes(obj))
     with open(os.path.join(out, "lab_bundle.zip"), "wb") as f:
         f.write(buf.getvalue())
 
@@ -180,10 +225,16 @@ def main():
                     help="skip the single-page app (index.html, app.js, style.css); ship only "
                          "what the Astro site needs at runtime: worker.js, Pyodide, the bundle, figures")
     ap.add_argument("--data-only", action="store_true",
-                    help="write page data and figures only: no model training, no bundle, no Pyodide")
+                    help="write page data and figures only: no bundle, no Pyodide")
+    ap.add_argument("--save-models", action="store_true",
+                    help="write the models the site ships to lab/models (training any that "
+                         "neither lab/models nor lab/.cache has), then stop")
     args = ap.parse_args()
     if common.QUICK:
         raise SystemExit("unset LAB_QUICK: the site ships full-budget models")
+    if args.save_models:
+        save_models()
+        return
     out = os.path.abspath(args.out)
     data_out = os.path.abspath(args.data_out) if args.data_out else os.path.join(out, "data")
     # --data-only refreshes data and figures but keeps an existing runtime (Pyodide,
@@ -194,9 +245,8 @@ def main():
             shutil.rmtree(d)
         os.makedirs(d)
     if not args.data_only:
-        print("training / loading models ...", flush=True)
-        models = collect_models()
-        print(f"  {len(models)} models: {', '.join(models)}", flush=True)
+        models = shipped_models()
+        print(f"packing {len(models)} models from lab/models: {', '.join(models)}", flush=True)
         export_bundle(out, models)
     export_data(data_out, os.path.join(out, "figures"))
     if args.no_frontend:

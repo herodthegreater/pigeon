@@ -42,7 +42,7 @@ From `weight_sharing`, at equal bits per weight (accuracy on 20 classes; the stu
 
 At the same storage, a learned codebook beats the uniform grid at 2, 3 and 4 bits on both models. At 2 bits, uniform symmetric is ternary, `{-s, 0, +s}` with `s` the largest weight, so most weights round to zero (teacher 0.0707), while 4 k-means values keep 0.8487. At 1 bit both have two levels and score alike; at 5 bits both are near lossless. The student, with less spare capacity, loses more at every width: at 3 bits its k-means accuracy is 0.6453 against 0.8281 in fp32, while the teacher keeps 0.9039 against 0.9139. KD fine-tuning with re-snapping helps the teacher at every `k`, ending above fp32 from 8 values up, which is partly just extra training on 28,000 inputs. For the student it adds at most 0.0224.
 
-Page runs at the defaults (k = 4, fine-tune on): uniform 2-bit 0.0707, k-means 0.8487, after KD and re-snap 0.8646. At k = 2: uniform 1-bit 0.4013, k-means 0.3999, after KD and re-snap 0.4165. Symmetric 2-bit is ternary {-s, 0, +s}, which is why it scores below 1-bit sign quantization.
+Page runs at the defaults (k = 4, fine-tune on): uniform 2-bit 0.0562, k-means 0.8534, after KD and re-snap 0.8718. At k = 2: uniform 1-bit 0.4015, k-means 0.4494, after KD and re-snap 0.4586. Symmetric 2-bit is ternary {-s, 0, +s}, which is why it scores below 1-bit sign quantization.
 
 ## When it breaks
 
@@ -56,8 +56,8 @@ Page runs at the defaults (k = 4, fine-tune on): uniform 2-bit 0.0707, k-means 0
 
 - Set **values per layer** to 4 with **fine-tune + re-snap** off, then 8, then 16. The page's uniform row gets an extra bit. Watch k-means lose its lead as `k` grows.
 - At **values per layer** 2 and 16, toggle **fine-tune + re-snap** and compare what the KD row adds.
-- Set **values per layer** to 3. The uniform baseline uses `ceil(log2(3)) + 1` = 3 bits, so you can see how the page rounds a non-power-of-two `k`.
+- Set **values per layer** to 3. The uniform row reads 2-bit: the page rounds `log2(3)` up to `ceil(log2(3))` = 2 bits, which for symmetric rounding is also 3 levels, `{-s, 0, +s}`. Same level count, almost the same storage (k-means adds a 3-value codebook per layer): compare where the two put their levels.
 
 ## Going further
 
-Deep Compression chains pruning, then weight sharing with centroid fine-tuning, then Huffman coding of the indices. Modern non-uniform formats use fixed codebooks (QLoRA's NF4 levels follow a normal distribution) or learned vector codebooks. pigeon's harness only does uniform symmetric quantization (`harness/quant.py`). The teacher results above suggest a per-layer codebook could beat per-tensor uniform at 2-3 bits, and at equal storage the student benefited too. A per-layer k-means codebook could be added to `harness/model.py` beside `apply_uniform` and swept with `carve.py`.
+Deep Compression chains pruning, then weight sharing with centroid fine-tuning, then Huffman coding of the indices. Modern non-uniform formats use fixed codebooks (QLoRA's NF4 levels follow a normal distribution) or learned vector codebooks. The YOLOv8n cockpit's harness only does uniform symmetric quantization (`harness/quant.py`). The teacher results above suggest a per-layer codebook could beat per-tensor uniform at 2-3 bits, and at equal storage the student benefited too. A per-layer k-means codebook could be added to `harness/model.py` beside `apply_uniform` and swept with `carve.py`.

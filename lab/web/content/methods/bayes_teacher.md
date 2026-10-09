@@ -47,7 +47,7 @@ The perfect teacher beats the trained one at every width, and the gap grows with
 
 The last column trains on the posterior's top class as hard labels and recovers almost all of the gain. So most of the benefit is not the soft shape but *labels on all 28k inputs*: 3.5 times the 8k labeled set, each the most probable class rather than the sampled one. The soft part shows mostly in calibration: at 2x128, KL divergence to the true posterior is 0.1101 for the soft student, 0.1306 for the hard one, and 0.1900 for the student of the trained teacher.
 
-This page's runs (1000 steps, seed 0; labels only, KD from trained teacher, KD from posterior): width 16 gave 0.5803, 0.5854, 0.5898; width 64 gave 0.8511, 0.8572, 0.8685; width 128 gave 0.9008, 0.9028, 0.9172.
+This page's runs (1000 steps, seed 0; labels only, KD from trained teacher, KD from posterior): width 16 gave 0.5803, 0.5850, 0.5898; width 64 gave 0.8514, 0.8596, 0.8682; width 128 gave 0.9010, 0.9032, 0.9172.
 
 ## When it breaks
 
@@ -58,10 +58,10 @@ This page's runs (1000 steps, seed 0; labels only, KD from trained teacher, KD f
 
 ## Try this
 
-- Set **student width** to 128. Compare the posterior row with the trained teacher's own accuracy, 0.9139.
+- Set **student width** to 128. Compare the posterior row with the trained teacher's own accuracy in the teacher row, 0.9150.
 - Set **student width** to 8, then 16. See how much of the gap between labels and posterior survives when the student is tiny.
 - At **student width** 64, the gap between "KD from trained teacher" and "KD from exact posterior" is what a better teacher could buy at this size.
 
 ## Going further
 
-Real systems approximate the posterior with better teachers: ensembles, temperature-scaled calibration, or more training data. Menon et al. frame distillation as variance reduction: soft targets close to `p(y | x)` give a lower-variance estimate of the risk than one-hot labels. For pigeon's detector this says what to want in a teacher: calibrated, accurate probabilities on the student's training inputs. `lab/world.py:World._posterior` and `lab/experiments/teacher.py:oracle_teacher` are the closest analogues.
+Real systems approximate the posterior with better teachers: ensembles, temperature-scaled calibration, or more training data. Menon et al. frame distillation as variance reduction: soft targets close to `p(y | x)` give a lower-variance estimate of the risk than one-hot labels. For the cockpit's detector this says what to want in a teacher: calibrated, accurate probabilities on the student's training inputs. `lab/world.py:World._posterior` and `lab/experiments/teacher.py:oracle_teacher` are the closest analogues.

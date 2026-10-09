@@ -1,6 +1,6 @@
 {
  "name": "specialist_size",
- "group": "6 \u00b7 Specialization (the pigeon question)",
+ "group": "6 \u00b7 Specialization (the bird-detector question)",
  "title": "How small can a one-class specialist be?",
  "question": "Target-class AP vs. size for a 20-way generalist student and for specialists whose heads keep less and less of the teacher's label space.",
  "quick": false,
