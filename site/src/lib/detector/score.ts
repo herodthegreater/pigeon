@@ -6,6 +6,7 @@
  */
 
 import type { Condition } from "../ui/mascot";
+import { keptCondition } from "../ui/birds";
 
 /** [x0, y0, x1, y1] in pixels. */
 export type Box = [number, number, number, number];
@@ -85,9 +86,8 @@ export function matchCounts(dets: Det[], gt: Box[]): { found: number; missed: nu
   return { found, missed: gt.length - found, falseAlarms: dets.length - found };
 }
 
-/** The bird stays healthy while the recipe keeps at least 95% of native AP, and is bones at 60% or less. */
-export const HEALTHY_KEEP = 0.95;
-export const SKELETON_KEEP = 0.6;
+/** The detector uses the site's one bird rule (lib/ui/birds.ts): healthy at 95% of native AP or more, bones at 60% or less. */
+export { HEALTHY_KEEP, SKELETON_KEEP } from "../ui/birds";
 
 /**
  * The detector's condition from AP kept (ap / nativeAp). `starve` runs from 0 at the
@@ -95,8 +95,5 @@ export const SKELETON_KEEP = 0.6;
  */
 export function detectorCondition(ap: number, nativeAp: number): { condition: Condition; starve: number; kept: number } {
   const kept = nativeAp > 0 ? ap / nativeAp : 0;
-  if (kept >= HEALTHY_KEEP) return { condition: "healthy", starve: 0, kept };
-  if (kept <= SKELETON_KEEP) return { condition: "skeleton", starve: 1, kept };
-  const s = (HEALTHY_KEEP - kept) / (HEALTHY_KEEP - SKELETON_KEEP);
-  return { condition: "emaciated", starve: Math.min(0.999, Math.max(0.001, s)), kept };
+  return { ...keptCondition(kept), kept };
 }
