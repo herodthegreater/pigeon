@@ -48,7 +48,7 @@ The starting model is the distilled 2x32 student (2,132 parameters, 0.8278 accur
 | 3 | 0.6590 | 0.7936 |
 | 4 | 0.7926 | 0.8055 |
 
-At 2 bits, rank 1 (160 parameters) reaches 0.4362 and rank 12 (1,920 parameters, the page's maximum) reaches 0.7750. Rank 12 is almost as many parameters as the model itself, which is why the slider stops there; in a 7B model even rank 64 on every layer is a small fraction of the weights. At 2 and 3 bits, rank-4 adapters win back three quarters or more of the drop (73% and 80%). At 4 bits the drop is small (3.5 points) and they win back about a third of it, ending at 0.8055. Training is only 500 distillation steps, and this run can't tell whether longer training would close the rest.
+At 2 bits, rank 1 (160 parameters) reaches 0.4362 and rank 12 (1,920 parameters, the page's maximum) reaches 0.7750. Rank 12 is almost as many parameters as the model itself, which is why the slider stops there; in a 7B model even rank 64 on every layer is a small fraction of the weights. At 2 and 3 bits, rank-4 adapters win back three quarters or more of the drop (73% and 80%). At 4 bits the drop is small (3.5 points) and they win back a little over a third of it (37%), ending at 0.8055. Training is only 500 distillation steps, and this run can't tell whether longer training would close the rest.
 
 The merged model is no longer on the quantization grid: `Wq + A B` is a dense float matrix (the `params` column shows 2,132). To keep the memory savings at inference you keep the adapters separate, or re-quantize the merged weights and accept some loss.
 
