@@ -3,10 +3,12 @@
  * bird reads the same wherever it shows up.
  */
 
-import type { Condition } from "../../lib/ui/mascot";
+import { CONDITION_WORD as MASCOT_WORD, type Condition } from "../../lib/ui/mascot";
 
-/** The condition in the site's words (the Coop says the same). */
-export const CONDITION_WORD: Record<Condition, string> = { healthy: "healthy", emaciated: "starving", skeleton: "skeleton" };
+/** Condition words in running text: the same words the bird card uses (mascot.ts), lower case. */
+export const CONDITION_WORD = Object.fromEntries(
+  Object.entries(MASCOT_WORD).map(([k, v]) => [k, v.toLowerCase()]),
+) as Record<Condition, string>;
 
 /** "6.2 times smaller than fp32", "the same size as fp32", or "1.1 times bigger than fp32". */
 export function ratioPhrase(ratio: number, reference: string): string {

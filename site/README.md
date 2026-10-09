@@ -25,7 +25,8 @@ The Field Guide, Flight School and Results pages import the lab's content at bui
 python -m lab.web.build_static --out site/public/lab --data-out site/src/data/lab --no-frontend --data-only
 
 # Everything, including what Run and Check need in the browser (Pyodide, the lab bundle,
-# the trained models). Trains the shipped models first, so it takes a few minutes.
+# the trained models). It packs the models committed in lab/models, never retrains, and
+# downloads Pyodide once (about 20 MB).
 python -m lab.web.build_static --out site/public/lab --data-out site/src/data/lab --no-frontend
 ```
 
