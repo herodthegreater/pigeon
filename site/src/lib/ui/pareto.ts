@@ -68,8 +68,9 @@ export function paretoSVG(all: Attempt[], current: Attempt | null, width = 560):
   p.push(`<text x="${(M.l + W - M.r) / 2}" y="${H - 6}" text-anchor="middle" class="axis">Size (log scale): smaller to the left</text>`);
   p.push(`<text transform="translate(14 ${(M.t + H - M.b) / 2}) rotate(-90)" text-anchor="middle" class="axis">Accuracy</text>`);
   p.push(`<line x1="${M.l}" x2="${W - M.r}" y1="${y(WORKS.accuracy)}" y2="${y(WORKS.accuracy)}" stroke="var(--teal)" stroke-dasharray="5 4" stroke-width="1.5"/>`);
-  // Labelled just under the line at the small end: healthy runs sit above it, and few runs get this small.
-  p.push(`<text x="${M.l + 6}" y="${y(WORKS.accuracy) + 16}" class="works">Healthy above this line</text>`);
+  // Labelled just under the line at the small end, where few runs get. A run above it can still starve on pointing,
+  // so the label states the accuracy half of the rule and the caption gives both halves.
+  p.push(`<text x="${M.l + 6}" y="${y(WORKS.accuracy) + 16}" class="works">Healthy needs ${Math.round(WORKS.accuracy * 100)}% accuracy</text>`);
   if (f.length > 1) p.push(`<polyline points="${f.map((a) => `${x(a.bytes)},${y(a.accuracy)}`).join(" ")}" fill="none" stroke="var(--magenta)" stroke-width="1.5" opacity="0.7"/>`);
   for (const a of all) {
     const c = conditionOfAttempt(a);

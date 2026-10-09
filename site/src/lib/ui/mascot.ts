@@ -27,20 +27,23 @@ export interface Species {
   };
 }
 
+/** The ratio at which a rock pigeon becomes a mourning dove. */
+const DOVE_AT = 1.8;
+
 // Plumage colors are each real bird's colors: illustration data for the plate,
 // not UI colors, so they live here rather than in tokens.css.
 export const SPECIES: Species[] = [
   {
     id: "pigeon", name: "Rock Pigeon", latin: "Columba livia", grams: 350, minRatio: 0,
-    // Every model under the dove's 1.8x is a rock pigeon, so the note must hold for 1.0x and 1.7x alike (speciesNote has the 1.0x one).
-    note: "Barely lighter, if at all: it stays a rock pigeon until it is 1.8 times smaller.",
+    // Every model under the dove's ratio is a rock pigeon, so the note must hold at 1.0x and 1.7x alike (speciesNote has the 1.0x one).
+    note: `Still a rock pigeon: it takes ${DOVE_AT} times smaller to make a dove.`,
     scale: 1, body: { l: 58, h: 40 }, head: 14.5, beak: { l: 11, h: 5 },
     wing: { reach: 20, shape: "round" }, tail: { kind: "fan", l: 30 }, leg: 20,
     c: { body: "#8f99a6", belly: "#a7b0bb", head: "#737d8b", wing: "#9aa4b0", mark: "#2f3540", tail: "#6d7582",
       beak: "#3d4047", eye: "#d4572a", ring: "#e9e3d6", leg: "#c8606c", neckA: "#3f9b7f", neckB: "#8e4c8f" },
   },
   {
-    id: "dove", name: "Mourning Dove", latin: "Zenaida macroura", grams: 120, minRatio: 1.8,
+    id: "dove", name: "Mourning Dove", latin: "Zenaida macroura", grams: 120, minRatio: DOVE_AT,
     note: "Slimmer, with a long pointed tail.",
     scale: 0.9, body: { l: 52, h: 29 }, head: 13, beak: { l: 9, h: 3.5 },
     wing: { reach: 26, shape: "pointed" }, tail: { kind: "pointed", l: 50 }, leg: 16,

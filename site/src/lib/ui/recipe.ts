@@ -35,7 +35,7 @@ export const PRESETS: { id: string; name: string; hint: string; recipe: Recipe }
 const clone = (r: Recipe): Recipe => JSON.parse(JSON.stringify(r));
 
 export function describeStep(s: Step): string {
-  const parts = s.parts.length === ALL.length ? "all" : s.parts.map((p) => PART_NAMES[p]).join(" + ");
+  const parts = s.parts.length === ALL.length ? "all" : s.parts.length ? s.parts.map((p) => PART_NAMES[p]).join(" + ") : "no layers";
   switch (s.op) {
     case "int": {
       if (s.bits >= 16) return `off (${parts})`;

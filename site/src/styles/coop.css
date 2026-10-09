@@ -145,7 +145,9 @@
 
 .coop .specimens { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }
 .coop .specimen { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); position: relative; }
-.coop .specimen .frame { position: relative; aspect-ratio: 1; max-width: 100%; background-repeat: no-repeat; border: 2px solid transparent; }
+/* The photos are cut from a contact sheet; clipping to the padding box keeps a sliver of the neighbouring photo
+   out from under the (usually transparent) border, so a border, when drawn, sits on the page and not on a photo. */
+.coop .specimen .frame { position: relative; aspect-ratio: 1; max-width: 100%; background-repeat: no-repeat; background-clip: padding-box; border: 2px solid transparent; }
 .coop .specimen .boxes { position: absolute; inset: 0; width: 100%; height: 100%; }
 .coop .specimen .boxes rect { fill: none; vector-effect: non-scaling-stroke; }
 /* Each box is drawn twice: a dark keyline under the colored line, so it holds 3:1 on a white wall or a pale sky

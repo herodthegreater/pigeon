@@ -301,9 +301,11 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
             attempts.push(current);
             save();
             redrawChart();
-            // The full-precision Pigeon is the reference, not a bird anyone hatched, so it never goes on the life list.
+            // The full-precision Pigeon is the reference, not a bird anyone hatched, so it never goes on the life list;
+            // nor does a recipe whose steps apply to no layers, which leaves the reference untouched.
             const { m } = shown;
-            const life = preset === "fp32" ? { said: "", announce: false } : sight({
+            const untouched = preset === "fp32" || recipe.steps.every((step) => step.parts.length === 0);
+            const life = untouched ? { said: "", announce: false } : sight({
               bird: { ratio: shown.ratio, kept: r.score.accuracy / base.score.accuracy, condition: m.condition, starve: m.starve, species: m.dodo ? "dodo" : m.species.id, name: shown.name },
               model: "pigeon", modelName: "Pigeon", recipe: label, href: cageHref(CAGE, preset),
             }, warned);
