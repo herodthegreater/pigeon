@@ -1,6 +1,6 @@
 ## The idea
 
-Unstructured pruning leaves zeros that still get stored and multiplied. Structured pruning deletes whole *neurons*. Removing one hidden unit removes one column of the matrix feeding it and one row of the matrix it feeds, so the matrices really shrink and the model is smaller and faster on any hardware. Which neurons to keep is decided by an *importance score*. In a conv net the same idea removes channels, which is what pigeon does to YOLOv8n.
+Unstructured pruning leaves zeros that still get stored and multiplied. Structured pruning deletes whole *neurons*. Removing one hidden unit removes one column of the matrix feeding it and one row of the matrix it feeds, so the matrices really shrink and the model is smaller and faster on any hardware. Which neurons to keep is decided by an *importance score*. In a conv net the same idea removes channels, which is what the YOLOv8n cockpit does to its detector.
 
 ## How it works
 
@@ -43,11 +43,11 @@ After recovery with KD:
 | 32 | 0.7759 | 0.7439 | 0.8603 | 0.8360 | 0.8484 | 0.8469 |
 | 16 | 0.5512 | 0.5484 | 0.6856 | 0.6579 | 0.6517 | 0.7007 |
 
-Halving every layer drops accuracy to 0.30-0.42 before recovery. That is the cliff pigeon's STATUS.md reports for YOLOv8n, where even a 5% one-shot channel cut sent bird mAP@50 to 0. Recovery repairs a 2x cut completely. With the short budget, the L1-pruned net beats a fresh one at widths 128-32 (0.8927 against 0.8685 at 64). With the full budget the arms are within 0.01 at 128 and 64, L1 still leads at 32 (0.8603 against 0.8469), and at a 16x cut the fresh net wins (0.7007 against 0.6856). The pruned start mostly buys faster recovery. L1, which ignores data, is the best criterion from width 64 down. Taylor trails random at widths 128-32. Recovery with labels instead of KD ends lower in every full-budget arm.
+Halving every layer drops accuracy to 0.30-0.42 before recovery. That is the cliff the cockpit's STATUS.md reports for YOLOv8n, where even a 5% one-shot channel cut sent bird mAP@50 to 0. Recovery repairs a 2x cut completely. With the short budget, the L1-pruned net beats a fresh one at widths 128-32 (0.8927 against 0.8685 at 64). With the full budget the arms are within 0.01 at 128 and 64, L1 still leads at 32 (0.8603 against 0.8469), and at a 16x cut the fresh net wins (0.7007 against 0.6856). The pruned start mostly buys faster recovery. L1, which ignores data, is the best criterion from width 64 down. Taylor trails random at widths 128-32. Recovery with labels instead of KD ends lower in every full-budget arm.
 
-Page runs at the defaults (width 32, taylor, KD): no recovery 0.1104, recovered 0.6649, fresh 0.7793. With l1, 0.7252. With random, 0.6637. With labels, 0.6648. The page gives the fresh net twice the steps, so it favours it.
+Page runs at the defaults (width 32, taylor, KD): no recovery 0.1175, recovered 0.6835, fresh 0.7794. With l1, 0.7212. With random, 0.6653. With labels, 0.6737. The page gives the fresh net twice the steps, so it favours it.
 
-The toy can't show speed. On Apple's MPS, pigeon saw a 30% channel cut reduce MACs by 35% while latency got 6% worse.
+The toy can't show speed. On Apple's MPS, the cockpit saw a 30% channel cut reduce MACs by 35% while latency got 6% worse.
 
 ## When it breaks
 
@@ -65,4 +65,4 @@ The toy can't show speed. On Apple's MPS, pigeon saw a 30% channel cut reduce MA
 
 ## Going further
 
-In a detector a "neuron" is an output channel: one conv filter plus the matching input slice of every layer that reads it. Batch-norm, concatenations and residual adds tie channels into dependency groups. pigeon's `harness/prune.py` uses torch-pruning's `GroupNormPruner` with `GroupMagnitudeImportance`, the conv equivalent of `l1` here, and leaves the `Detect` head alone (see Channel pruning with dependency groups). Its loop matches what these numbers argue for: a ~12% cut fine-tuned on 400 bird images recovered to 0.388 mAP@50, 91% of native 0.428.
+In a detector a "neuron" is an output channel: one conv filter plus the matching input slice of every layer that reads it. Batch-norm, concatenations and residual adds tie channels into dependency groups. The cockpit's `harness/prune.py` uses torch-pruning's `GroupNormPruner` with `GroupMagnitudeImportance`, the conv equivalent of `l1` here, and leaves the `Detect` head alone (see Channel pruning with dependency groups). Its loop matches what these numbers argue for: a ~12% cut fine-tuned on 400 bird images recovered to 0.388 mAP@50, 91% of native 0.428.

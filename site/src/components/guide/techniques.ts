@@ -99,10 +99,14 @@ export const NOT_COVERED: Technique[] = [
   },
 ];
 
-/** Techniques the lab does cover, as one sentence with links to their pages. */
+/**
+ * Techniques the lab does cover, as one sentence with links to their pages. The
+ * pruning-then-distillation pages listed are the ones whose Run has a KD recovery
+ * option (checked in lab/methods.py on 2026-10-09); ShortGPT only deletes layers.
+ */
 export const COVERED =
   "Covered with pages that run here: [](method:awq), [](method:gptq), [](method:smoothquant); pruning followed " +
-  "by distillation ([](method:structured_pruning), [](method:layer_dropping), [](method:block_influence) and " +
+  "by distillation ([](method:magnitude_pruning), [](method:structured_pruning), [](method:layer_dropping) and " +
   "others in the families above); and quantization-aware distillation, the distillation option of [](method:qat).";
 
 const LINK = /\[([^\]]*)\]\((method|coop):([\w-]*)\)/g;

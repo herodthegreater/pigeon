@@ -38,9 +38,12 @@ jobs:
         run: pip install numpy matplotlib fastapi uvicorn pytest httpx
       - name: Test the lab (quick budgets)
         run: python -m pytest lab/tests -q --ignore=lab/tests/test_experiments.py
-      - name: Build the lab (trains the shipped models, ~5 min)
+      - name: Build the lab (packs the committed models in lab/models, never trains)
         # Runtime (Pyodide, the lab bundle, worker.js, figures) into public/lab;
         # page data into src/data/lab, which the Astro pages import at build time.
+        # The bundle carries lab/models byte for byte: retraining here would give
+        # slightly different weights, and the write-ups' page-run numbers would no
+        # longer match what Run shows. A missing model stops the build.
         run: python -m lab.web.build_static --out site/public/lab --data-out site/src/data/lab --no-frontend
 
       - uses: actions/setup-node@v6

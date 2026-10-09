@@ -1,21 +1,26 @@
 ---
 import "../styles/tokens.css";
-export type Section = "school" | "coop" | "guide" | "results";
+export type Section = "school" | "coop" | "guide" | "results" | "lifelist";
 interface Props { title: string; description?: string; active?: Section }
 const { title, description = "Learn model compression by shrinking a real bird-spotting model.", active } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
-const nav: [Section, string, string][] = [
-  ["school", "Flight School", "school/"],
-  ["coop", "The Coop", "coop/"],
-  ["guide", "Field Guide", "guide/"],
-  ["results", "Results", "results/"],
+// [section, the word dropped on narrow phones, the word always shown, href]. The dropped word stays in
+// the link's accessible name, so "Coop" still reads as "The Coop". Both words sit in one inner span:
+// the link is a flex box, and a flex item's trailing space would be dropped ("FlightSchool").
+const nav: [Section, string, string, string][] = [
+  ["school", "Flight ", "School", "school/"],
+  ["coop", "The ", "Coop", "coop/"],
+  ["guide", "Field ", "Guide", "guide/"],
+  ["results", "", "Results", "results/"],
+  ["lifelist", "", "Life list", "life-list/"],
 ];
 ---
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- No viewport-fit=cover: Safari keeps the page inside the safe area and fills a notch's insets with the paper color. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <title>{title}</title>
     <slot name="head" />
@@ -23,6 +28,8 @@ const nav: [Section, string, string][] = [
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" />
+    <!-- Without JavaScript the theme control can't do anything, so it isn't shown; the page follows the system. -->
+    <noscript><style>.theme { display: none !important; }</style></noscript>
     <!-- Apply a remembered theme before first paint, so a dark choice never flashes light. -->
     <script is:inline>
       try { const t = localStorage.getItem("pigeon.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
@@ -33,8 +40,8 @@ const nav: [Section, string, string][] = [
     <header class="top">
       <a class="brand" href={base}><span class="wordmark">Pigeon</span><span class="latin">Columba compressa</span></a>
       <nav aria-label="Sections">
-        {nav.map(([key, label, href]) => (
-          <a href={`${base}${href}`} aria-current={active === key ? "page" : undefined}>{label}</a>
+        {nav.map(([key, drop, word, href]) => (
+          <a href={`${base}${href}`} aria-current={active === key ? "page" : undefined}><span>{drop && <span class="drop">{drop}</span>}{word}</span></a>
         ))}
       </nav>
       <label class="theme">
@@ -49,12 +56,13 @@ const nav: [Section, string, string][] = [
     <slot />
     <style>
       .skip {
-        position: absolute; left: var(--space-2); top: -60px; z-index: 10; padding: var(--space-2) var(--space-3);
+        position: absolute; left: var(--space-2); top: -100px; z-index: 10; padding: var(--space-2) var(--space-3);
         background: var(--ink); color: var(--paper); border-radius: var(--radius);
       }
       .skip:focus { top: var(--space-2); }
+      /* Wide screens: brand, sections and theme on one line. */
       .top {
-        display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-5);
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-5);
         padding-inline: var(--gutter); padding-block: var(--space-3); border-bottom: 1px solid var(--rule);
       }
       .brand { display: flex; align-items: baseline; gap: var(--space-2); text-decoration: none; color: var(--ink); }
@@ -62,8 +70,8 @@ const nav: [Section, string, string][] = [
       .latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
       nav { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin-inline-end: auto; }
       nav a {
-        color: var(--muted); text-decoration: none; font-size: var(--step-0);
-        display: inline-flex; align-items: center; min-height: 36px; border-bottom: 2px solid transparent;
+        color: var(--muted); text-decoration: none; font-size: var(--step-0); white-space: nowrap;
+        display: inline-flex; align-items: center; justify-content: center; min-height: 36px; border-bottom: 2px solid transparent;
       }
       nav a:hover { color: var(--ink); }
       nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--teal); }
@@ -73,13 +81,25 @@ const nav: [Section, string, string][] = [
         background: var(--card); color: var(--ink);
       }
       @media (pointer: coarse), (max-width: 640px) {
+        .skip { display: inline-flex; align-items: center; min-height: var(--tap); }
         .brand { padding-block: var(--space-1); }
         nav a, .theme select { min-height: var(--tap); }
+        nav a { min-width: var(--tap); }
       }
-      /* Phones: brand and theme share the first row, the nav takes its own full-width row and wraps. */
-      @media (max-width: 640px) {
+      /* Up to tablet width: brand and theme share the first line, the sections take the whole second line. */
+      @media (max-width: 960px) {
         .top { gap: var(--space-1) var(--space-4); }
-        nav { order: 3; flex-basis: 100%; gap: 0 var(--space-4); }
+        .theme { order: 2; margin-inline-start: auto; }
+        nav { order: 3; flex-basis: 100%; gap: 0 var(--space-4); margin-inline-end: 0; }
+      }
+      /* Phones: the brand drops its Latin name, and each section keeps one word, so all five fit on one line at 320px. */
+      @media (max-width: 480px) {
+        .latin { display: none; }
+        nav { justify-content: space-between; gap: 0 var(--space-1); }
+        .drop {
+          position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+          clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
       }
     </style>
     <script>

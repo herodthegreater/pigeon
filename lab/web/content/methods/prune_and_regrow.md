@@ -35,7 +35,7 @@ A one-shot structural cut can take YOLOv8n's bird mAP@50 (average precision for 
 
 These are toy-MLP analogues, not YOLO. In `prune_structured` (lab/results/prune_structured.json), a 3x256 teacher cut to width 64 scores 0.1685 accuracy with no recovery and 0.8909 after fine-tuning on labels, the detector's fall-then-recover shape.
 
-`specialist_data` (lab/results/specialist_data.json) asks whether pigeon's all-bird recovery set is enough. A teacher pruned to 3x32 is recovered on different data and scored by bird average precision ("siblings" are the three bird-like classes; means of 2 seeds):
+`specialist_data` (lab/results/specialist_data.json) asks whether the cockpit's all-bird recovery set is enough. A teacher pruned to 3x32 is recovered on different data and scored by bird average precision ("siblings" are the three bird-like classes; means of 2 seeds):
 
 | recovery data | pruned 3x32 | fresh 2x16 |
 |---|---|---|
@@ -45,7 +45,7 @@ These are toy-MLP analogues, not YOLO. In `prune_structured` (lab/results/prune_
 | birds + equal # random others | 0.962 | 0.9246 |
 | birds + noise negatives | 0.9406 | 0.8835 |
 
-Birds alone gave the worst recovery; adding as many non-birds recovered almost everything. pigeon's set is less extreme: its photos contain background, which the detection loss treats as negatives.
+Birds alone gave the worst recovery; adding as many non-birds recovered almost everything. The cockpit's set is less extreme: its photos contain background, which the detection loss treats as negatives.
 
 ## When it breaks
 

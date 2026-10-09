@@ -2,23 +2,30 @@
 /**
  * The run box on a runnable method's page: one field per parameter, Run and
  * Reset, a one-line status (the only live region) and the result. The run itself
- * happens in the visitor's browser through lib/lab/python.ts.
+ * happens in the visitor's browser through lib/lab/python.ts. Every run that makes
+ * a model smaller ends in its birds, and each bird goes on the visitor's life list.
  */
 import "../styles/prose.css";
-import type { Param } from "../lib/lab/data";
+import { method, type Param } from "../lib/lab/data";
 
 interface Props { id: string; params: Param[] }
 const { id, params } = Astro.props;
 
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const fid = (p: Param) => `run-${p.name}`;
 const helpId = (p: Param) => (p.help ? `${fid(p)}-help` : undefined);
 const step = (p: Param) => p.step ?? (p.kind === "int" ? 1 : 0.01);
-const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind })));
+const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind, label: p.label })));
+const name = method(id).name;
 ---
-<section class="panel runbox" id="run" aria-labelledby="run-title" data-runbox data-method={id} data-params={kinds}>
+<section
+  class="panel runbox" id="run" aria-labelledby="run-title" data-runbox data-method={id} data-params={kinds}
+  data-name={name} data-page={`${base}guide/${id}/`} data-lifelist={`${base}life-list/`}
+>
   <h2 id="run-title">Run it in your browser</h2>
-  <form class="run-form">
+  <!-- autocomplete="off": a reload starts from the defaults, so a restored slider never disagrees with its label. -->
+  <form class="run-form" autocomplete="off">
     {params.length === 0 && <p>This method has no settings: Run uses the lab's defaults.</p>}
     {params.map((p) => (
       <div class="field">
@@ -62,22 +69,29 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
   <div class="run-results" data-results>
     <p class="run-idle">
       A run trains and evaluates real models on the lab's toy problem, here in your browser. The first run
-      downloads Python (about 20 MB); most runs then take 5 to 60 seconds.
+      downloads Python (about 20 MB); most runs then take 5 to 60 seconds. Every model a run makes smaller
+      ends in a bird.
     </p>
   </div>
-  <noscript><p class="run-idle">Running needs JavaScript, which is turned off in this browser.</p></noscript>
+  <noscript>
+    <p class="run-idle">Running needs JavaScript, which is turned off in this browser. Turn it on and reload the page to train these models here.</p>
+    <style is:inline>.runbox .run-form, .runbox .run-status, .runbox .run-results { display: none; }</style>
+  </noscript>
 </section>
 
 <script>
   import { run, onStatus, isReady, stop as stopPython } from "../lib/lab/python";
-  import { resultView } from "../lib/lab/results";
+  import { resultView, settingsText } from "../lib/lab/results";
   import { esc } from "../lib/lab/markdown";
+  import { recordSighting } from "../lib/ui/birds";
+  import { firstHealthyLine, runBirds, runHref, type Saved } from "./birds/runbirds";
 
   type Kind = "int" | "float" | "choice" | "bool";
 
   function setup(box: HTMLElement) {
     const mid = box.dataset.method!;
-    const kinds: { name: string; kind: Kind }[] = JSON.parse(box.dataset.params || "[]");
+    const fields: { name: string; kind: Kind; label: string }[] = JSON.parse(box.dataset.params || "[]");
+    const labels = Object.fromEntries(fields.map((f) => [f.name, f.label]));
     const form = box.querySelector("form")!;
     const btn = box.querySelector<HTMLButtonElement>("[data-run]")!;
     const stopBtn = box.querySelector<HTMLButtonElement>("[data-stop]")!;
@@ -92,6 +106,39 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
       const o = box.querySelector<HTMLOutputElement>(`output[for="${r.id}"]`);
       if (o) o.value = r.value;
     };
+    const syncAll = () => form.querySelectorAll<HTMLInputElement>('input[type="range"]').forEach(syncOutput);
+
+    /**
+     * A life list's "try this recipe again" link carries the run's settings in the
+     * address (?bits=3#run). Load the ones this form has, within its own limits; the
+     * browser clamps a slider to its range and step. Returns the settings loaded.
+     */
+    function loadFromAddress(): Record<string, unknown> {
+      const q = new URLSearchParams(location.search);
+      const loaded: Record<string, unknown> = {};
+      for (const { name, kind } of fields) {
+        const v = q.get(name);
+        const el = form.elements.namedItem(name);
+        if (v === null || !el) continue;
+        if (kind === "bool" && el instanceof HTMLInputElement && (v === "true" || v === "false")) {
+          el.checked = v === "true";
+          loaded[name] = el.checked;
+        } else if (kind === "choice" && el instanceof HTMLSelectElement && [...el.options].some((o) => o.value === v)) {
+          el.value = v;
+          loaded[name] = v;
+        } else if ((kind === "int" || kind === "float") && el instanceof HTMLInputElement && v.trim() !== "" && Number.isFinite(Number(v))) {
+          el.value = String(Number(v));
+          loaded[name] = Number(el.value);
+        }
+      }
+      return loaded;
+    }
+
+    // Start consistent whatever the browser restored: labels match their sliders, and Run is live.
+    const loaded = loadFromAddress();
+    syncAll();
+    btn.disabled = false;
+    btn.removeAttribute("aria-disabled");
 
     if (typeof Worker === "undefined" || typeof WebAssembly === "undefined") {
       btn.disabled = true;
@@ -100,6 +147,8 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
       return;
     }
 
+    if (Object.keys(loaded).length) say(`Settings loaded from the link: ${settingsText(loaded, labels)}. Run to try them.`);
+
     form.addEventListener("input", (e) => {
       const t = e.target as HTMLInputElement;
       if (t.type === "range") syncOutput(t);
@@ -107,7 +156,7 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
     form.addEventListener("reset", () => {
       // The browser restores the fields after this event; read them on the next task.
       setTimeout(() => {
-        form.querySelectorAll<HTMLInputElement>('input[type="range"]').forEach(syncOutput);
+        syncAll();
         if (!running) say("Settings are back to their defaults.");
       });
     });
@@ -119,19 +168,34 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
       stopPython();
     });
 
+    /** Save each bird to the life list, and name the species whose first healthy bird this is. */
+    function save(sightings: ReturnType<typeof runBirds>["sightings"]): Saved {
+      if (!sightings.length) return null;
+      const firstHealthy: string[] = [];
+      let saved = 0;
+      for (const s of sightings) {
+        const r = recordSighting(s);
+        if (!r.ok) return { ok: false, saved };
+        saved++;
+        if (r.firstHealthy) firstHealthy.push(s.name);
+      }
+      return { ok: true, firstHealthy };
+    }
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (running) return;
       const params: Record<string, unknown> = {};
-      for (const { name, kind } of kinds) {
+      for (const { name, kind } of fields) {
         const el = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
         if (!el) continue;
         params[name] = kind === "bool" ? (el as HTMLInputElement).checked : kind === "choice" ? el.value : Number(el.value);
       }
 
+      // aria-disabled, not disabled: a disabled button loses keyboard focus, and the press is ignored while running anyway.
       running = true;
       stopped = false;
-      btn.disabled = true;
+      btn.setAttribute("aria-disabled", "true");
       btn.textContent = "Running";
       stopBtn.hidden = false;
       out.setAttribute("aria-busy", "true");
@@ -157,9 +221,19 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
 
       try {
         const res = await run(mid, params);
-        out.innerHTML = resultView(res);
+        const birds = runBirds(res as Parameters<typeof runBirds>[0], {
+          methodId: mid,
+          methodName: box.dataset.name || mid,
+          href: runHref(box.dataset.page || "", res.params),
+          settings: settingsText(res.params, labels),
+          lifeListHref: box.dataset.lifelist || "",
+        });
+        const saved = save(birds.sightings);
+        out.innerHTML = resultView(res, labels) + birds.render(saved);
         tick.textContent = "";
-        say(`Done in ${res.seconds.toFixed(1)} s`);
+        const after = !saved ? "" : saved.ok ? firstHealthyLine(saved.firstHealthy)
+          : saved.saved ? `Only ${saved.saved} of its ${birds.sightings.length} birds were saved to your life list.` : "Its birds couldn't be saved to your life list.";
+        say(`Done in ${res.seconds.toFixed(1)} s.${after ? ` ${after}` : ""}`);
       } catch (err) {
         if (stopped) {
           tick.textContent = "";
@@ -175,11 +249,13 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
         clearInterval(timer);
         stop();
         running = false;
-        btn.disabled = false;
+        btn.removeAttribute("aria-disabled");
         btn.textContent = "Run";
-        // The Stop button is about to disappear; if it had focus, hand focus to Run.
-        if (document.activeElement === stopBtn || stopped) btn.focus();
+        // The Stop button is about to disappear; if it had focus (or focus was lost), hand it to Run,
+        // without scrolling a reader away from wherever they are on the page.
+        const lost = document.activeElement === stopBtn || document.activeElement === document.body || !document.activeElement;
         stopBtn.hidden = true;
+        if (lost || stopped) btn.focus({ preventScroll: true });
         out.removeAttribute("aria-busy");
       }
     });
@@ -212,10 +288,11 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
 </style>
 
 <style is:global>
-  /* The result HTML is injected by resultView(), so these rules are global, scoped under the run box. */
+  /* The result HTML is injected by resultView() and runBirds(), so these rules are global, scoped under the run box. */
   .runbox .error-box { overflow-wrap: anywhere; }
   .runbox .restable td, .runbox .restable th { padding: var(--space-2) var(--space-1); }
   .runbox .restable td:first-child { min-width: 9ch; }
+  .runbox .restable .ref-note { color: var(--muted); }
   .runbox .bar { height: 4px; margin-top: var(--space-1); background: var(--rule); border-radius: 2px; min-width: 48px; }
   .runbox .bar i { display: block; height: 100%; background: var(--teal); border-radius: 2px; }
   .runbox svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
@@ -235,5 +312,36 @@ const kinds = JSON.stringify(params.map((p) => ({ name: p.name, kind: p.kind }))
   .runbox .run-meta { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
   @media (pointer: coarse), (max-width: 640px) {
     .runbox details.chart-data > summary { min-height: var(--tap); padding-block: var(--space-3); }
+  }
+
+  /* The run's birds: the best one on a plate, the rest as one ruled line each, like a specimen drawer. */
+  .runbox .run-birds { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--rule); padding-top: var(--space-3); }
+  .runbox .run-birds h3 { font-size: var(--step-1); }
+  .runbox .no-bird { font-size: var(--step--1); color: var(--ink); }
+  .runbox .best-bird { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .runbox .best-plate { background: var(--card); border: 1px solid var(--rule); padding: var(--space-2); max-width: 300px; }
+  .runbox .best-plate svg, .runbox .mini svg { display: block; width: 100%; height: auto; }
+  .runbox .best-bird figcaption { display: flex; flex-direction: column; gap: 2px; }
+  .runbox .bird-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+  .runbox .bird-species { font-family: var(--display); font-size: var(--step-1); font-weight: 600; line-height: 1.2; }
+  .runbox .bird-cond { font-size: var(--step--1); font-weight: 600; }
+  .runbox .bird-latin { font-family: var(--display); font-style: italic; color: var(--magenta); font-size: var(--step--1); }
+  .runbox .bird-row { font-size: var(--step--1); font-weight: 600; margin-top: var(--space-1); }
+  .runbox .bird-nums { font-size: var(--step--1); }
+  .runbox .bird-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+  .runbox .bird-rows li {
+    display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--space-3); align-items: center;
+    padding-block: var(--space-2); border-bottom: 1px solid var(--rule);
+  }
+  .runbox .mini-text { display: flex; flex-direction: column; font-size: var(--step--1); line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+  .runbox .mini-label { font-weight: 600; }
+  .runbox .mini-nums { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+  .runbox .c-healthy { color: var(--good); }
+  .runbox .c-emaciated { color: var(--warn); }
+  .runbox .c-skeleton { color: var(--bad); }
+  .runbox .bird-rule, .runbox .bird-saved { font-size: var(--step--1); color: var(--muted); }
+  /* The link sits inside a sentence: padding grows its tap area to 44px without spreading the lines apart. */
+  @media (pointer: coarse), (max-width: 640px) {
+    .runbox .bird-saved a { padding-block: calc((var(--tap) - 1em) / 2); }
   }
 </style>

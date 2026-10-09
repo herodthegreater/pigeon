@@ -1,0 +1,194 @@
+/* The Coop: both cages (coop/index.astro for Pigeon, coop/yolo.astro for YOLOv8n) share one look,
+   so it is written once here. Page-only rules (Pigeon's chart and heatmap, YOLOv8n's stage sliders)
+   stay in each page. Everything is scoped under .coop; much of it styles markup the scripts inject. */
+
+.coop {
+  max-width: 1320px; margin: 0 auto; padding: var(--space-5) var(--gutter) var(--space-8);
+  display: flex; flex-direction: column; gap: var(--space-6);
+}
+.coop h2 { font-size: var(--step-2); }
+
+/* ------------------------------------------------------------ the bird and its numbers */
+
+.coop .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--space-5); }
+.coop .bird-card {
+  background: var(--card); border: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5) var(--space-3) var(--space-2);
+}
+/* The one motion on the page reports a real change: the bird fading out as it becomes another species. */
+.coop .bird { transition: opacity 0.25s; }
+.coop .bird.swap { opacity: 0; }
+.coop .bird svg { width: 100%; height: auto; display: block; }
+.coop .bird-meta { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.coop .bird-meta h1 { font-size: var(--step-3); }
+.coop .latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
+.coop .bird-note { color: var(--muted); margin-top: var(--space-2); }
+.coop .retry { align-self: start; margin-top: var(--space-2); }
+/* The life list: one quiet line under the bird, the link and how many species it holds. */
+.coop .life { font-size: var(--step--1); color: var(--muted); margin-top: var(--space-2); }
+/* The bird's condition: a plain sentence-case line whose color is the state, named in words too. */
+.coop .condition { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+.coop .condition[data-c="healthy"] { color: var(--good); }
+.coop .condition[data-c="emaciated"] { color: var(--warn); }
+.coop .condition[data-c="skeleton"], .coop .condition[data-c="error"] { color: var(--bad); }
+
+.coop .board { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.coop .status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
+/* The bar drops to its own line when the status text fills a phone's width. */
+.coop .bar { flex: 1 1 120px; height: 3px; background: var(--sunk); max-width: 220px; }
+.coop .bar span { display: block; height: 100%; width: 0; background: var(--teal); transition: width 0.15s; }
+.coop .board[data-state="error"] .status { color: var(--bad); font-family: var(--body); }
+.coop .board[data-state="error"] .bar { display: none; }
+
+.coop .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border: 1px solid var(--rule); background: var(--card); }
+.coop .metric { padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.coop .metric + .metric { border-left: 1px solid var(--rule); }
+.coop .metric dt { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+.coop .metric dd { margin: 0; }
+.coop .value {
+  font-family: var(--display); font-size: var(--step-3); font-weight: 600; line-height: 1.1;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2);
+}
+.coop .value small { font-family: var(--mono); font-size: var(--step--2); font-weight: 400; }
+.coop .value small.down { color: var(--bad); }
+.coop .value small.up { color: var(--good); }
+.coop .value small.flat { color: var(--muted); }
+/* A quick estimate (≈) is greyed until the score on every photo lands. */
+.coop .metrics.estimate .value > span:first-child { color: var(--muted); }
+.coop .desc { font-size: var(--step--2); color: var(--muted); line-height: 1.35; }
+.coop .basis { font-size: var(--step--1); color: var(--muted); }
+.coop .basis:empty { display: none; }
+/* The score to beat, or the rule the bird follows: a ruled record line, like an entry in a field notebook. */
+.coop .record { border-block: 1px solid var(--rule); padding-block: var(--space-3); }
+.coop .record strong { font-family: var(--display); font-size: var(--step-1); }
+
+/* ------------------------------------------------------------ recipe and results */
+
+.coop .work { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+/* Sticky and scrollable on wide screens; the padding keeps focus rings inside the scroll box. */
+.coop .recipe-col {
+  display: flex; flex-direction: column; gap: var(--space-3); position: sticky; top: var(--space-3);
+  max-height: calc(100vh - 2 * var(--space-3)); overflow: auto; padding: var(--space-1); margin: calc(-1 * var(--space-1));
+}
+.coop .intro { color: var(--muted); font-size: var(--step--1); }
+.coop .results { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.coop .pane { display: flex; flex-direction: column; gap: var(--space-3); }
+.coop .pane-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.coop .caption { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
+/* Waiting lines, replaced when the engine is ready. */
+.coop .waiting { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); padding: var(--space-3) 0; }
+.coop .specimens .waiting { grid-column: 1 / -1; }
+.coop .check { display: flex; gap: var(--space-2); align-items: center; font-size: var(--step--1); }
+.coop input[type="checkbox"], .coop input[type="radio"], .coop input[type="range"] { accent-color: var(--teal); }
+/* A disabled secondary button keeps its resting look on hover: it can't be pressed. */
+.coop .btn.secondary:disabled:hover { border-color: var(--rule-strong); color: var(--ink); text-decoration: none; }
+
+/* Every run, as a table. The scroll box is a focusable region, so a keyboard can scroll its last columns into view. */
+.coop .runs-scroll { overflow-x: auto; }
+.coop .runs-scroll table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+.coop .runs-scroll th, .coop .runs-scroll td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--rule); }
+.coop .runs-scroll th { font-weight: 600; }
+.coop .runs-scroll td:first-child { min-width: 10em; }
+.coop .runs-scroll .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.coop .runs-scroll tr[aria-current="true"] td { background: var(--teal-wash); }
+.coop .runs-scroll td.c-healthy { color: var(--good); }
+.coop .runs-scroll td.c-emaciated { color: var(--warn); }
+.coop .runs-scroll td.c-skeleton { color: var(--bad); }
+/* On the highlighted row the condition word goes back to ink: amber on the teal wash falls just short of 4.5:1. */
+.coop .runs-scroll tr[aria-current="true"] td[class^="c-"] { color: var(--ink); }
+
+/* ------------------------------------------------------------ recipe editors: lib/ui/recipe.ts, lib/ui/yolorecipe.ts */
+
+#recipe { display: flex; flex-direction: column; gap: var(--space-4); }
+#recipe .sub { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+#recipe .presets, #recipe .add { display: flex; flex-direction: column; gap: var(--space-2); }
+#recipe .preset-row, #recipe .add-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Toggles, not actions: a preset shows whether it is the recipe loaded (aria-pressed), so presets and the
+   segmented controls keep a lighter toggle look. Every action button (Remove, Add a step, Clear the cuts,
+   Clear history, Reset to native) is the site's one .btn.secondary. */
+#recipe .preset {
+  display: inline-flex; align-items: center; min-height: 36px; padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--card); color: var(--ink);
+  font-size: var(--step--1); cursor: pointer;
+}
+#recipe .preset:hover { border-color: var(--teal); }
+#recipe .preset[aria-pressed="true"] { background: var(--teal-wash); border-color: var(--teal); font-weight: 600; }
+/* Two lines reserved, so the steps below don't jump as hints change. */
+#recipe .preset-hint { font-size: var(--step--1); color: var(--muted); min-height: 3.1em; }
+#recipe .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+#recipe .empty { color: var(--muted); font-size: var(--step--1); padding: var(--space-3); border: 1px dashed var(--rule); }
+#recipe .step { border: 1px solid var(--rule); background: var(--card); }
+#recipe .step-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--rule); }
+#recipe .step-head h3 { font-size: var(--step-1); flex: 1; }
+#recipe .step-n { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
+#recipe .step-body { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+/* Field labels read like the Field Guide's run box: semibold ink, the value in mono teal. */
+#recipe .field { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: var(--step--1); font-weight: 600; }
+#recipe .field output { font-family: var(--mono); font-weight: 500; color: var(--teal); }
+/* A short note under a control, saying what the chosen setting stores. */
+#recipe .note { font-size: var(--step--1); color: var(--muted); }
+#recipe select {
+  flex: 1 1 12em; max-width: 100%; min-height: 36px; padding: 0 var(--space-2);
+  border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--card); color: var(--ink); font-weight: 400;
+}
+#recipe input[type="range"] { width: 100%; margin: 0; }
+#recipe fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+#recipe legend { padding: 0; margin-bottom: var(--space-1); }
+#recipe .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--rule-strong); border-radius: var(--radius); overflow: hidden; }
+#recipe .seg label { position: relative; }
+#recipe .seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+#recipe .seg span { display: grid; place-items: center; min-height: 32px; padding: var(--space-1); text-align: center; font-size: var(--step--1); }
+#recipe .seg label + label span { border-left: 1px solid var(--rule-strong); }
+#recipe .seg input:checked + span { background: var(--teal-wash); color: var(--ink); font-weight: 600; }
+/* The radio itself is invisible, so its focus ring is drawn on the segment it covers. */
+#recipe .seg input:focus-visible + span { outline: 2px solid var(--magenta); outline-offset: -2px; }
+
+/* ------------------------------------------------------------ photo tiles: lib/ui/specimens.ts, lib/ui/detections.ts */
+
+.coop .specimens { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }
+.coop .specimen { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); position: relative; }
+/* The photos are cut from a contact sheet; clipping to the padding box keeps a sliver of the neighbouring photo
+   out from under the (usually transparent) border, so a border, when drawn, sits on the page and not on a photo. */
+.coop .specimen .frame { position: relative; aspect-ratio: 1; max-width: 100%; background-repeat: no-repeat; background-clip: padding-box; border: 2px solid transparent; }
+.coop .specimen .boxes { position: absolute; inset: 0; width: 100%; height: 100%; }
+.coop .specimen .boxes rect { fill: none; vector-effect: non-scaling-stroke; }
+/* Each box is drawn twice: a dark keyline under the colored line, so it holds 3:1 on a white wall or a pale sky
+   as well as on dark foliage. --bird-line is the darkest ink the palette has, and dark in both themes. */
+.coop .specimen .boxes .keyline rect { stroke: var(--bird-line); stroke-width: 3.5; }
+.coop .specimen .boxes .truth-boxes rect { stroke: var(--truth-box); stroke-width: 1.5; }
+.coop .specimen figcaption { display: flex; flex-direction: column; font-size: var(--step--2); line-height: 1.3; }
+.coop .specimen .truth { font-weight: 600; }
+.coop .specimen .verdict { color: var(--muted); }
+.coop .specimen .credit { font-size: var(--step--2); color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The whole tile is the link to the source photo, so the tap target is the photo, not a 12px line of text. */
+.coop .specimen .credit::after { content: ""; position: absolute; inset: 0; }
+/* The hidden "(opens in a new tab)" would otherwise sit past the clipped credit line, off the page's right edge. */
+.coop .specimen .credit .visually-hidden { left: 0; top: 0; }
+.coop .specimen:hover .credit { text-decoration: underline; }
+/* Where :has() works, the focus ring moves from the one-line link to the whole tile it covers. */
+@supports selector(:has(*)) {
+  .coop .specimen:has(.credit:focus-visible) { outline: 2px solid var(--magenta); outline-offset: 2px; }
+  .coop .specimen .credit:focus-visible { outline: none; }
+}
+
+/* ------------------------------------------------------------ touch and narrow screens */
+
+@media (pointer: coarse), (max-width: 640px) {
+  #recipe .preset, #recipe select, #recipe .seg span { min-height: var(--tap); }
+  /* 16px stops iOS zooming the page when a select is tapped. */
+  #recipe select { font-size: var(--step-0); }
+  #recipe input[type="range"] { height: var(--tap); }
+  .coop .check { min-height: var(--tap); }
+  .coop .life a { display: inline-flex; align-items: center; min-height: var(--tap); }
+}
+@media (max-width: 1000px) {
+  .coop .hero, .coop .work { grid-template-columns: minmax(0, 1fr); }
+  .coop .recipe-col { position: static; max-height: none; overflow: visible; }
+}
+@media (max-width: 640px) {
+  .coop .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .coop .metric:nth-child(3) { border-left: 0; }
+  .coop .metric:nth-child(n + 3) { border-top: 1px solid var(--rule); }
+  .coop .bird-card { grid-template-columns: minmax(0, 1fr); padding: var(--space-3); }
+  .coop .specimens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

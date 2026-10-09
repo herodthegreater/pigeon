@@ -2,10 +2,14 @@
 import Base from "../../layouts/Base.astro";
 import CoopPicker from "../../components/CoopPicker.astro";
 import { WORKS_LINE } from "../../lib/ui/mascot";
+import "../../styles/coop.css";
 
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 const testsets = import.meta.glob<{ images: unknown[] }>("/public/testset/testset.json", { eager: true, import: "default" });
 const photos = Object.values(testsets)[0]?.images?.length;
 if (!photos) throw new Error("public/testset/testset.json is missing or has no images");
+// The life list is its own page; the cage links to it only when that page is in the build, so no build ships a dead link.
+const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/src/pages/life-list/index.astro"], { query: "?raw", import: "default" })).length > 0;
 ---
 <Base title="The Coop · Pigeon" active="coop" description="A sandbox for compressing a real bird-spotting model in your browser.">
   <main id="main" class="coop">
@@ -22,6 +26,7 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
             <p class="bird-note">The Coop runs Pigeon inside your browser, so it needs JavaScript. Turn JavaScript on and reload the page.</p>
             <style is:inline>#bird-condition, #bird-note, #board, #work { display: none; }</style>
           </noscript>
+          {lifeList && <p class="life"><a href={`${base}life-list/`}>Your life list</a> <span id="life-count"></span></p>}
           <button type="button" class="btn retry" id="retry" hidden>Reload the page</button>
         </div>
       </div>
@@ -35,7 +40,7 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
           <div class="metric"><dt>Size</dt><dd class="value num"><span id="m-size">…</span><small id="m-ratio"></small></dd><dd class="desc">real bytes, scales and indices included</dd></div>
         </dl>
         <p class="basis" id="basis"></p>
-        <p class="best" id="best" data-works={WORKS_LINE}>No working compressed Pigeon yet. The line to beat: {WORKS_LINE}.</p>
+        <p class="record" id="best" data-works={WORKS_LINE}>No healthy compressed Pigeon yet. The line to beat: {WORKS_LINE}.</p>
       </div>
     </section>
     <p class="visually-hidden" id="announce" role="status" aria-live="polite" aria-atomic="true"></p>
@@ -51,236 +56,109 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
         <section class="pane" aria-labelledby="tried-title">
           <div class="pane-head">
             <h2 id="tried-title">Everything you've tried</h2>
-            <button type="button" class="btn secondary" id="clear" disabled>Clear history</button>
+            <button type="button" class="btn secondary" id="clear" autocomplete="off" disabled>Clear history</button>
           </div>
           <div class="chart" id="pareto"><p class="waiting">Your runs are plotted here once the original Pigeon has been scored.</p></div>
           <details class="runs">
             <summary>Show every run as a table</summary>
-            <div class="runs-scroll" id="pareto-table"><p class="waiting">No runs yet: the first one is the original Pigeon, scored as the page loads.</p></div>
+            <div class="runs-scroll" id="pareto-table" tabindex="0" role="region" aria-label="Every run, as a table"><p class="waiting">No runs yet: the first one is the original Pigeon, scored as the page loads.</p></div>
           </details>
-          <p class="caption">Each dot is one full {photos}-photo scoring run. Filled dots still work. The magenta line joins the best tradeoffs: nothing else you tried is both smaller <em>and</em> more accurate.</p>
+          <p class="caption">Each mark is one full {photos}-photo scoring run, kept in this browser, and named the way the bird is: a filled dot is healthy ({WORKS_LINE}), a hollow dot is starving, a cross is a skeleton. The magenta line joins the best tradeoffs: nothing else you tried is both smaller <em>and</em> more accurate.</p>
+          <p class="caption" id="store-note" hidden>This browser won't let the page save anything, so these runs will be gone when you leave or reload.</p>
         </section>
 
         <section class="pane" aria-labelledby="drawer-title">
           <div class="pane-head">
             <h2 id="drawer-title">Specimen drawer</h2>
-            <label class="check"><input type="checkbox" id="heat" checked disabled /> Show where Pigeon looks</label>
+            <label class="check"><input type="checkbox" id="heat" autocomplete="off" checked disabled /> Show where Pigeon looks</label>
           </div>
           <div class="specimens heat" id="specimens"><p class="waiting">Test photos appear here with Pigeon's verdicts once the engine has scored them.</p></div>
-          <p class="caption">Magenta shows what drives Pigeon's answer, and the ring marks its hottest point. Teal boxes are where the birds really are. A dashed border means this setting changed Pigeon's answer compared with the original.</p>
+          <p class="caption">Magenta shows what drives Pigeon's answer, and the ring marks its hottest point. Teal boxes are where the birds really are. A solid red border marks a wrong answer. A dashed border marks an answer this setting changed from the original Pigeon's: red if the change made it wrong, teal if it made it right.</p>
         </section>
       </div>
     </div>
   </main>
 
-  <!-- The page's own markup. -->
-  <style>
-    .coop {
-      max-width: 1320px; margin: 0 auto; padding: var(--space-5) var(--gutter) var(--space-8);
-      display: flex; flex-direction: column; gap: var(--space-6);
-    }
-    h2 { font-size: var(--step-2); }
-
-    .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--space-5); }
-    .bird-card {
-      background: var(--card); border: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-      align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5) var(--space-3) var(--space-2);
-    }
-    .bird { transition: opacity 0.25s; }
-    .bird.swap { opacity: 0; }
-    .bird-meta { display: flex; flex-direction: column; gap: var(--space-1); }
-    .bird-meta h1 { font-size: var(--step-3); }
-    .latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
-    .bird-note { color: var(--muted); margin-top: var(--space-2); }
-    .retry { align-self: start; margin-top: var(--space-2); }
-    /* The bird's condition: a plain sentence-case line whose color is the state. */
-    .condition { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
-    .condition[data-c="healthy"] { color: var(--good); }
-    .condition[data-c="emaciated"] { color: var(--warn); }
-    .condition[data-c="skeleton"], .condition[data-c="error"] { color: var(--bad); }
-
-    .board { display: flex; flex-direction: column; gap: var(--space-3); }
-    .status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
-    /* The bar drops to its own line when the status text fills a phone's width. */
-    .bar { flex: 1 1 120px; height: 3px; background: var(--sunk); max-width: 220px; }
-    .bar span { display: block; height: 100%; width: 0; background: var(--teal); transition: width 0.15s; }
-    .board[data-state="error"] .status { color: var(--bad); font-family: var(--body); }
-    .board[data-state="error"] .bar { display: none; }
-
-    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border: 1px solid var(--rule); background: var(--card); }
-    .metric { padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
-    .metric + .metric { border-left: 1px solid var(--rule); }
-    .metric dt { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
-    .metric dd { margin: 0; }
-    .value {
-      font-family: var(--display); font-size: var(--step-3); font-weight: 600; line-height: 1.1;
-      display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2);
-    }
-    .value small { font-family: var(--mono); font-size: var(--step--2); font-weight: 400; }
-    .value small.down { color: var(--bad); }
-    .value small.up { color: var(--good); }
-    .value small.flat { color: var(--muted); }
-    .metrics.estimate .value > span:first-child { color: var(--muted); }
-    .desc { font-size: var(--step--2); color: var(--muted); line-height: 1.35; }
-    .basis { font-size: var(--step--1); color: var(--muted); }
-    .basis:empty { display: none; }
-    /* The score to beat: a ruled record line, like an entry in a field notebook. */
-    .best { border-block: 1px solid var(--rule); padding-block: var(--space-3); }
-    .best :global(strong) { font-family: var(--display); font-size: var(--step-1); }
-
-    .work { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
-    /* Sticky and scrollable on wide screens; the padding keeps focus rings inside the scroll box. */
-    .recipe-col {
-      display: flex; flex-direction: column; gap: var(--space-3); position: sticky; top: var(--space-3);
-      max-height: calc(100vh - 2 * var(--space-3)); overflow: auto; padding: var(--space-1); margin: calc(-1 * var(--space-1));
-    }
-    .intro { color: var(--muted); font-size: var(--step--1); }
-
-    .results { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
-    .pane { display: flex; flex-direction: column; gap: var(--space-3); }
-    .pane-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
-    .caption { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
-    .chart { background: var(--card); border: 1px solid var(--rule); padding: var(--space-2); }
-    /* Waiting lines, replaced when the engine is ready. */
-    .waiting { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); padding: var(--space-3) 0; }
-    .chart .waiting { padding: var(--space-3); }
-    .specimens .waiting { grid-column: 1 / -1; }
-    .runs summary { cursor: pointer; font-size: var(--step--1); color: var(--teal); width: fit-content; }
-    .runs-scroll { overflow-x: auto; margin-top: var(--space-2); }
-
-    @media (pointer: coarse), (max-width: 640px) {
-      .runs summary { min-height: var(--tap); display: flex; align-items: center; }
-    }
-    @media (max-width: 1000px) {
-      .hero, .work { grid-template-columns: minmax(0, 1fr); }
-      .recipe-col { position: static; max-height: none; overflow: visible; }
-    }
-    @media (max-width: 640px) {
-      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .metric:nth-child(3) { border-left: 0; }
-      .metric:nth-child(n + 3) { border-top: 1px solid var(--rule); }
-      .bird-card { grid-template-columns: minmax(0, 1fr); padding: var(--space-3); }
-    }
-  </style>
-
-  <!-- Markup the scripts inject (bird, recipe editor, chart, run table, specimens). -->
+  <!-- Pigeon's own injected markup: the chart, the run table's disclosure, the heatmap and the step parts. The shared look is in styles/coop.css. -->
   <style is:global>
-    #bird svg { width: 100%; height: auto; display: block; }
-    .coop .check { display: flex; gap: var(--space-2); align-items: center; font-size: var(--step--1); }
-    .coop input[type="checkbox"], .coop input[type="radio"], .coop input[type="range"] { accent-color: var(--teal); }
-
-    /* Recipe editor: lib/ui/recipe.ts */
-    #recipe { display: flex; flex-direction: column; gap: var(--space-4); }
-    #recipe .sub { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
-    #recipe .presets, #recipe .add { display: flex; flex-direction: column; gap: var(--space-2); }
-    #recipe .preset-row, #recipe .add-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    #recipe button {
-      display: inline-flex; align-items: center; min-height: 36px; padding: var(--space-1) var(--space-3);
-      border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--card); color: var(--ink);
-      font-size: var(--step--1); cursor: pointer;
-    }
-    #recipe button:hover { border-color: var(--teal); }
-    #recipe .preset[aria-pressed="true"] { background: var(--teal-wash); border-color: var(--teal); font-weight: 600; }
-    #recipe .add-btn { border-style: dashed; }
-    #recipe .remove { color: var(--muted); }
-    /* Two lines reserved, so the steps below don't jump as hints change. */
-    #recipe .preset-hint { font-size: var(--step--1); color: var(--muted); min-height: 3.1em; }
-    #recipe .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
-    #recipe .empty { color: var(--muted); font-size: var(--step--1); padding: var(--space-3); border: 1px dashed var(--rule); }
-    #recipe .step { border: 1px solid var(--rule); background: var(--card); }
-    #recipe .step-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--rule); }
-    #recipe .step-head h3 { font-size: var(--step-1); flex: 1; }
-    #recipe .step-n { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
-    #recipe .step-body { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
-    #recipe .field { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); font-size: var(--step--1); }
-    #recipe .field output { font-family: var(--mono); color: var(--teal); }
-    #recipe .field select {
-      max-width: 60%; min-height: 36px; padding: var(--space-1) var(--space-2);
-      border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink);
-    }
-    #recipe input[type="range"] { width: 100%; }
-    #recipe fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-    #recipe legend { padding: 0; margin-bottom: var(--space-1); }
-    #recipe .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--rule-strong); border-radius: var(--radius); overflow: hidden; }
-    #recipe .seg label { position: relative; }
-    #recipe .seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
-    #recipe .seg span { display: grid; place-items: center; min-height: 32px; padding: var(--space-1); text-align: center; font-size: var(--step--1); }
-    #recipe .seg label + label span { border-left: 1px solid var(--rule-strong); }
-    #recipe .seg input:checked + span { background: var(--teal-wash); color: var(--ink); font-weight: 600; }
-    #recipe .seg input:focus-visible + span { outline: 2px solid var(--magenta); outline-offset: -2px; }
-    #recipe .parts { margin-top: var(--space-1); display: flex; flex-direction: column; gap: var(--space-1); }
-    #recipe .part { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-2); align-items: center; font-size: var(--step--1); }
-    #recipe .share { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
-
     /* Size vs accuracy chart: lib/ui/pareto.ts draws it at its on-screen width, so these sizes are real. */
+    #pareto { background: var(--card); border: 1px solid var(--rule); padding: var(--space-2); }
+    #pareto .waiting { padding: var(--space-3); }
     #pareto svg { width: 100%; height: auto; display: block; }
     #pareto .tick { font-family: var(--mono); font-size: var(--step--2); fill: var(--muted); }
     #pareto .axis { font-family: var(--body); font-size: var(--step--1); fill: var(--muted); }
     #pareto .works { font-family: var(--body); font-size: var(--step--1); font-weight: 600; fill: var(--teal); }
-    #pareto-table table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
-    #pareto-table th, #pareto-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--rule); }
-    #pareto-table th { font-weight: 600; }
-    #pareto-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    #pareto-table tr[aria-current="true"] td { background: var(--teal-wash); }
+    .coop .runs summary { cursor: pointer; font-size: var(--step--1); color: var(--teal); width: fit-content; }
+    .coop .runs .runs-scroll { margin-top: var(--space-2); }
 
-    /* Specimen drawer: lib/ui/specimens.ts */
-    #specimens { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }
-    #specimens .specimen { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); position: relative; }
-    #specimens .frame { position: relative; aspect-ratio: 1; max-width: 100%; background-repeat: no-repeat; border: 2px solid transparent; }
+    /* Applies to: one line per layer kind, with its share of the weights. */
+    #recipe .parts { margin-top: var(--space-1); display: flex; flex-direction: column; gap: var(--space-1); }
+    #recipe .part { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-2); align-items: center; font-size: var(--step--1); }
+    #recipe .share { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+
+    /* A wrong answer has a solid red border; an answer this setting changed has a dashed one, red if now wrong, teal if now right. */
     #specimens .specimen[data-correct="false"] .frame { border-color: var(--bad); }
-    #specimens .specimen[data-flipped="true"] .frame { border-style: dashed; }
+    #specimens .specimen[data-flipped="true"] .frame { border-style: dashed; border-color: var(--teal); }
+    #specimens .specimen[data-flipped="true"][data-correct="false"] .frame { border-color: var(--bad); }
+    #specimens .specimen[data-correct="false"] .verdict { color: var(--bad); }
     #specimens canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.2s; mix-blend-mode: multiply; }
     #specimens.heat canvas { opacity: 1; }
-    #specimens .boxes { position: absolute; inset: 0; width: 100%; height: 100%; }
-    #specimens .boxes rect { fill: none; stroke: var(--truth-box); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
     /* The peak: a light ring with a dark hairline outside it, so it reads on bright and dark photos alike. */
     #specimens .peak {
       position: absolute; width: 14px; height: 14px; translate: -50% -50%; border-radius: 50%;
       border: 2px solid var(--plate); outline: 1px solid var(--bird-line); opacity: 0;
     }
     #specimens.heat .peak { opacity: 1; }
-    #specimens figcaption { display: flex; flex-direction: column; font-size: var(--step--2); line-height: 1.3; }
-    #specimens .truth { font-weight: 600; }
-    #specimens .verdict { color: var(--muted); }
-    #specimens .specimen[data-correct="false"] .verdict { color: var(--bad); }
-    #specimens .credit { font-size: var(--step--2); color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* The whole tile is the link to the source photo, so the tap target is the photo, not a 12px line of text. */
-    #specimens .credit::after { content: ""; position: absolute; inset: 0; }
-    #specimens .specimen:hover .credit { text-decoration: underline; }
-    /* Where :has() works, the focus ring moves from the one-line link to the whole tile it covers. */
-    @supports selector(:has(*)) {
-      #specimens .specimen:has(.credit:focus-visible) { outline: 2px solid var(--magenta); outline-offset: 2px; }
-      #specimens .credit:focus-visible { outline: none; }
-    }
 
-    /* Touch: every injected control gets a 44px target. */
     @media (pointer: coarse), (max-width: 640px) {
-      #recipe button, #recipe .field select, #recipe .seg span { min-height: var(--tap); }
-      #recipe .remove { padding-inline: var(--space-3); }
-      .coop .check, #recipe .part { min-height: var(--tap); }
-      #recipe input[type="range"] { height: var(--tap); }
-    }
-    @media (max-width: 640px) {
-      #specimens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .coop .runs summary { min-height: var(--tap); display: flex; align-items: center; }
+      #recipe .part { min-height: var(--tap); }
     }
   </style>
 
   <script>
-    import { Engine, QUICK, type Ready } from "../../lib/engine/client";
+    import { Engine, QUICK, Unsupported, type Ready } from "../../lib/engine/client";
     import type { Result } from "../../lib/engine/worker";
-    import { RecipeEditor } from "../../lib/ui/recipe";
-    import { mascotSVG, DODO } from "../../lib/ui/mascot";
+    import { RecipeEditor, presetOf } from "../../lib/ui/recipe";
+    import { mascotSVG, speciesNote, CONDITION_WORD, DODO } from "../../lib/ui/mascot";
     import { paretoSVG, paretoTable, smallestWorking, formatSize, type Attempt } from "../../lib/ui/pareto";
-    import { Specimens } from "../../lib/ui/specimens";
+    import { Specimens, esc } from "../../lib/ui/specimens";
+    import { bindLifeListCount, cageHref, sight } from "../../lib/ui/coopbirds";
 
     const $ = (id: string) => document.getElementById(id)!;
     const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
-    const STORE = "pigeon.coop.attempts";
+    const CAGE = `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}coop/`;
     const WORKS = $("best").dataset.works!;
 
+    // Every full run is kept in this browser. Runs saved before October 2026 under the old key used a size that
+    // counted too few MX and NV block scales, so those are dropped rather than shown with a size that was too small.
+    const STORE = "pigeon.coop.runs", OLD_STORE = "pigeon.coop.attempts";
+    const runs = (raw: string | null): Attempt[] => {
+      try {
+        const v = JSON.parse(raw ?? "[]");
+        return Array.isArray(v) ? v.filter((a) => a && typeof a.label === "string" && [a.bytes, a.accuracy, a.pointing].every(Number.isFinite)) : [];
+      } catch {
+        return []; // a damaged list starts over
+      }
+    };
     let attempts: Attempt[] = [];
-    try { attempts = JSON.parse(localStorage.getItem(STORE) ?? "[]"); } catch {}
+    let canStore = true;
+    try {
+      const old = localStorage.getItem(OLD_STORE);
+      if (old !== null) {
+        if (localStorage.getItem(STORE) === null) localStorage.setItem(STORE, JSON.stringify(runs(old).filter((a) => !/ (MX|NV)\/\d+/.test(a.label))));
+        localStorage.removeItem(OLD_STORE);
+      }
+      attempts = runs(localStorage.getItem(STORE));
+      localStorage.setItem(STORE, JSON.stringify(attempts)); // also proves this browser lets the page write
+    } catch {
+      canStore = false;
+    }
     const save = () => { try { localStorage.setItem(STORE, JSON.stringify(attempts.slice(-200))); } catch {} };
+    $("store-note").hidden = canStore;
+
+    const lifeCount = document.getElementById("life-count");
+    if (lifeCount) bindLifeListCount(lifeCount);
 
     const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
     const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -308,15 +186,19 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
     });
 
     function failLoad(err: unknown) {
+      // A browser without Web Workers or WebAssembly can't be fixed by a reload or a better connection, so it gets no Reload button.
+      const unsupported = err instanceof Unsupported;
       const cond = $("bird-condition");
       cond.dataset.c = "error";
-      cond.textContent = "Couldn't load";
-      $("bird-note").textContent = `The engine stopped: ${errText(err)}. Check your connection and reload. If it keeps failing, try a recent Chrome, Firefox or Safari.`;
-      $("retry").hidden = false;
+      cond.textContent = unsupported ? "Can't run in this browser" : "Couldn't load";
+      $("bird-note").textContent = unsupported
+        ? "This browser can't run the Coop: it needs Web Workers and WebAssembly. Open it in a current Chrome, Firefox, Safari or Edge."
+        : `The engine stopped: ${errText(err)}. Check your connection and reload. If it keeps failing, try a current Chrome, Firefox, Safari or Edge.`;
+      $("retry").hidden = unsupported;
       for (const id of ["metrics", "basis", "best", "work"]) $(id).hidden = true;
       bar.style.width = "0";
-      status("Engine stopped", "error");
-      announce(`The Coop couldn't load: ${errText(err)}`);
+      status(unsupported ? "Can't start in this browser" : "Engine stopped", "error");
+      announce(unsupported ? "The Coop can't run in this browser: it needs Web Workers and WebAssembly." : `The Coop couldn't load: ${errText(err)}`);
       return null;
     }
     $("retry").addEventListener("click", () => location.reload());
@@ -330,9 +212,10 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
       const base = baseline;
       const sheet = (s: number) => `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}testset/sheet-${s}.webp`;
       const specimens = new Specimens($("specimens"), images, sheet, 10);
-      let label = "Full precision";
-      let current: Attempt | null = null;
+      let current: Attempt = { label: "Full precision", bytes: base.totalBytes, accuracy: base.score.accuracy, pointing: base.score.pointing };
+      let lastFinal: Result = base; // what the board falls back to when a run fails
       let shownSpecies = "";
+      const warned = { blocked: false };
 
       function delta(el: HTMLElement, v: number, ref: number) {
         const d = (v - ref) * 100;
@@ -340,20 +223,21 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
         el.className = Math.abs(d) < 0.05 ? "flat" : d > 0 ? "up" : "down";
       }
 
-      // Quick results come from the first 100 photos: mark them with ≈ until the full score lands.
-      // Returns the one-line summary that is announced for a full result.
-      function show(r: Result, final: boolean): string {
+      // Quick results come from the first 100 photos: marked with ≈ until the full score lands.
+      // Returns the drawn bird and the one-line summary that is announced for a full result.
+      function show(r: Result, final: boolean) {
         const s = r.score;
         const est = final ? "" : "≈ ";
+        const ratio = r.originalBytes / r.totalBytes;
         $("metrics").classList.toggle("estimate", !final);
         $("basis").textContent = final ? `Measured on all ${s.n} photos.` : `≈ Estimate from the first ${s.n} photos. Confirming on all ${images.length}…`;
         $("m-acc").textContent = est + pct(s.accuracy); delta($("m-acc-d"), s.accuracy, base.score.accuracy);
         $("m-pt").textContent = est + pct(s.pointing); delta($("m-pt-d"), s.pointing, base.score.pointing);
         $("m-ag").textContent = est + pct(s.agreement);
         $("m-size").textContent = formatSize(r.totalBytes);
-        $("m-ratio").textContent = `${(r.originalBytes / r.totalBytes).toFixed(2)}× smaller`;
+        $("m-ratio").textContent = `${ratio.toFixed(2)}× smaller`;
         $("m-ratio").className = "flat";
-        const m = mascotSVG({ ratio: r.originalBytes / r.totalBytes, accuracy: s.accuracy, pointing: s.pointing });
+        const m = mascotSVG({ ratio, accuracy: s.accuracy, pointing: s.pointing });
         const bird = $("bird");
         const key = m.dodo ? "dodo" : m.species.id;
         if (key !== shownSpecies && shownSpecies) {
@@ -363,15 +247,16 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
         shownSpecies = key;
         const cond = $("bird-condition");
         cond.dataset.c = m.condition;
-        const condition = m.condition === "healthy" ? "Healthy · still works" : m.condition === "emaciated" ? `Starving · ${Math.round(m.starve * 100)}% of the way to bones` : "Skeleton · broken";
+        const word = CONDITION_WORD[m.condition];
+        const condition = m.condition === "healthy" ? `${word} · still works` : m.condition === "emaciated" ? `${word} · ${Math.round(m.starve * 100)}% of the way to a skeleton` : `${word} · stopped working`;
         cond.textContent = final ? condition : `Early read · ${condition}`;
         const name = m.dodo ? DODO.name : m.species.name;
         $("bird-name").textContent = name;
-        $("bird-latin").textContent = `${m.dodo ? DODO.latin : m.species.latin}${m.dodo ? "" : ` · about ${m.species.grams} g`}`;
-        $("bird-note").textContent = m.dodo ? DODO.note : m.condition === "skeleton" ? "This setting broke Pigeon: it's guessing." : m.species.note;
+        $("bird-latin").textContent = m.dodo ? DODO.latin : `${m.species.latin} · about ${m.species.grams} g`;
+        $("bird-note").textContent = m.dodo ? DODO.note : m.condition === "skeleton" ? "This setting broke Pigeon: it's guessing." : speciesNote(m.species, ratio);
         if (final) specimens.update(r.logits, r.cams, base.logits);
-        const plain = m.condition === "healthy" ? "healthy" : m.condition === "emaciated" ? "starving" : "skeleton";
-        return `Scored: accuracy ${pct(s.accuracy)}, pointing ${pct(s.pointing)}, ${formatSize(r.totalBytes)}, ${name}, ${plain}`;
+        const summary = `Scored: accuracy ${pct(s.accuracy)}, pointing ${pct(s.pointing)}, ${formatSize(r.totalBytes)}, ${name}, ${word.toLowerCase()}`;
+        return { m, name, ratio, summary };
       }
 
       // The chart is drawn at its on-screen width (see pareto.ts), and again when that width changes.
@@ -392,12 +277,13 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
         $("pareto-table").innerHTML = paretoTable(attempts, current);
         const best = smallestWorking(attempts, base.totalBytes);
         $("best").innerHTML = best
-          ? `Smallest working Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${(base.totalBytes / best.bytes).toFixed(1)}× smaller, ${pct(best.accuracy)} accurate): <em>${best.label.replace(/[<>&]/g, "")}</em>`
-          : `No working compressed Pigeon yet. The line to beat: ${WORKS}.`;
+          ? `Smallest healthy Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${(base.totalBytes / best.bytes).toFixed(1)}× smaller, ${pct(best.accuracy)} accurate): <em>${esc(best.label)}</em>`
+          : `No healthy compressed Pigeon yet. The line to beat: ${WORKS}.`;
       }
 
-      const editor = new RecipeEditor($("recipe"), tensors, (recipe, l) => {
-        label = l;
+      const editor = new RecipeEditor($("recipe"), tensors, (recipe, label) => {
+        const preset = presetOf(recipe);
+        let estimated = false;
         bar.style.width = "0";
         status(`Scoring on ${QUICK} photos…`);
         engine.evaluate(recipe, {
@@ -405,37 +291,50 @@ if (!photos) throw new Error("public/testset/testset.json is missing or has no i
             bar.style.width = `${(done / total) * 100}%`;
             status(stage === "quick" ? `Scoring on ${QUICK} photos… ${done}/${total}` : `Quick estimate shown · confirming on all ${total}… ${done}/${total}`);
           },
-          onQuick: (r) => show(r, false),
+          onQuick: (r) => { estimated = true; show(r, false); },
           onFull: (r) => {
-            const summary = show(r, true);
-            status(`Scored on all ${r.score.n} photos · ${Math.round(r.ms.infer)} ms`, "ok");
-            announce(summary);
+            const shown = show(r, true);
+            lastFinal = r;
             current = { label, bytes: r.totalBytes, accuracy: r.score.accuracy, pointing: r.score.pointing };
             const dup = attempts.findIndex((a) => a.label === label);
             if (dup >= 0) attempts.splice(dup, 1);
             attempts.push(current);
             save();
             redrawChart();
+            // The full-precision Pigeon is the reference, not a bird anyone hatched, so it never goes on the life list;
+            // nor does a recipe whose steps apply to no layers, which leaves the reference untouched.
+            const { m } = shown;
+            const untouched = preset === "fp32" || recipe.steps.every((step) => step.parts.length === 0);
+            const life = untouched ? { said: "", announce: false } : sight({
+              bird: { ratio: shown.ratio, kept: r.score.accuracy / base.score.accuracy, condition: m.condition, starve: m.starve, species: m.dodo ? "dodo" : m.species.id, name: shown.name },
+              model: "pigeon", modelName: "Pigeon", recipe: label, href: cageHref(CAGE, preset),
+            }, warned);
+            status(`Scored on all ${r.score.n} photos · ${Math.round(r.ms.infer)} ms${life.said ? ` · ${life.said}` : ""}`, "ok");
+            announce(life.announce ? `${shown.summary}. ${life.said}` : shown.summary);
           },
           onError: (message) => {
+            // Put the board back on the last run that finished, so every number on it is one that was measured in full.
             bar.style.width = "0";
-            $("metrics").classList.add("estimate");
-            status(`Scoring failed (${message}). The numbers below are from the last run that finished. Change the recipe to try again.`, "error");
-            announce(`Scoring failed: ${message}`);
+            show(lastFinal, true);
+            status(estimated
+              ? `Scoring failed on all ${images.length} photos (${message}), so the quick estimate was dropped. The numbers below are from your last finished run. Change the recipe, or pick it again, to retry.`
+              : `Scoring failed (${message}). The numbers below are from your last finished run. Change the recipe, or pick it again, to retry.`, "error");
+            announce(`Scoring failed: ${message}. The board shows your last finished run again.`);
           },
         });
       });
 
-      const summary = show(base, true);
-      current = { label, bytes: base.totalBytes, accuracy: base.score.accuracy, pointing: base.score.pointing };
-      if (!attempts.some((a) => a.label === label)) attempts.push(current);
+      const summary = show(base, true).summary;
+      if (!attempts.some((a) => a.label === current.label)) attempts.push(current);
       redrawChart();
       status(`Scored on all ${base.score.n} photos · ready`, "ok");
 
+      // Firefox can restore a checkbox's state on reload, so the drawer follows the box rather than the markup.
       const heat = $("heat") as HTMLInputElement, clear = $("clear") as HTMLButtonElement;
-      heat.disabled = clear.disabled = false;
+      $("specimens").classList.toggle("heat", heat.checked);
       heat.addEventListener("change", () => $("specimens").classList.toggle("heat", heat.checked));
-      clear.addEventListener("click", () => { attempts = current ? [current] : []; save(); redrawChart(); });
+      clear.addEventListener("click", () => { attempts = [current]; save(); redrawChart(); });
+      heat.disabled = clear.disabled = false;
 
       // ?preset=<id> (Flight School and the Field Guide link here): load it as if its button were clicked.
       // Unknown ids are ignored, and focus stays where the visitor is.

@@ -31,18 +31,18 @@ Paper orientation: `y = W x`, `W` is (out, in), and `X` holds calibration inputs
 
 ## What the simulations show
 
-3x256 teacher (0.9139). The three hidden layers are quantized, including the first (12 raw inputs); the output layer stays at full precision, like `lm_head` in the papers. "2-bit" is ternary, `{-s, 0, s}`.
+3x256 teacher (0.9150). The three hidden layers are quantized, including the first (12 raw inputs); the output layer stays at full precision, like `lm_head` in the papers. "2-bit" is ternary, `{-s, 0, s}`.
 
 | setting | RTN | AWQ | GPTQ |
 |---|---|---|---|
-| 4-bit, per row | 0.9103 | 0.9096 | 0.9131 |
-| 3-bit, per row | 0.8922 | 0.8958 | 0.9079 |
-| 3-bit, scale per 16 | 0.9010 | 0.9002 | 0.9110 |
-| 2-bit, per row | 0.4686 | 0.4987 | 0.8207 |
+| 4-bit, per row | 0.9087 | 0.9102 | 0.9149 |
+| 3-bit, per row | 0.8971 | 0.8971 | 0.9093 |
+| 3-bit, scale per 16 | 0.9007 | 0.9035 | 0.9115 |
+| 2-bit, per row | 0.4796 | 0.4711 | 0.8314 |
 
-AWQ's gains here are small: at 3 bits it trims RTN's loss from 2.2 to 1.8 points, while GPTQ cuts it to 0.6. At 4 bits, and at 3 bits with a scale per 16, it is slightly *worse* than RTN end to end. Each layer's own error is no worse than RTN's, but that objective does not exactly track final accuracy. At 2 bits, accuracy rises a little (0.4686 to 0.4987) while the bird class's average precision dips (0.7947 to 0.7834).
+AWQ's gains here are small. At 3 bits per row it ties RTN exactly, 1.8 points below the teacher, while GPTQ cuts the loss to 0.6. At 4 bits, and at 3 bits with a scale per 16, it gains a little (0.9102 against 0.9087, 0.9035 against 0.9007). At 2 bits the two scores move apart: accuracy falls a little (0.4796 to 0.4711) while the bird class's average precision rises (0.7380 to 0.7534). Each layer's own error is never worse than RTN's (the search includes `s = 1`, which is RTN), but that objective does not exactly track final accuracy.
 
-Calling `lw.rtn` and `lw.awq` directly at 3 bits on each layer's teacher inputs, AWQ matched RTN's relative output error to four decimals on the first two layers (0.0333 and 0.0300). It improved the third layer from 0.0397 to 0.0369.  The toy network has no LLM-style outlier channels, so there is little to protect; that is what this world can't reproduce.
+Calling `lw.rtn` and `lw.awq` directly at 3 bits on each layer's teacher inputs (512 calibration inputs; error is `‖h W - h Wq‖² / ‖h W‖²`), AWQ matched RTN's relative output error to four decimals on the first layer (0.0335) and barely moved the second (0.0313 to 0.0309). It improved the third layer from 0.0388 to 0.0355. The toy network has no LLM-style outlier channels, so there is little to protect; that is what this world can't reproduce.
 
 ## When it breaks
 
@@ -52,9 +52,9 @@ Calling `lw.rtn` and `lw.awq` directly at 3 bits on each layer's teacher inputs,
 
 ## Try this
 
-- **bits** 3, **scale per** row: compare RTN, AWQ and (on the GPTQ page) GPTQ. Look for AWQ landing between the two.
-- **bits** 4, or **scale per** 16 at 3 bits: look for AWQ slightly below RTN. The per-layer objective is not the end-to-end metric.
-- **bits** 2: look for AWQ's small accuracy gain next to GPTQ's large one, and the bird AP moving the other way.
+- **bits** 3, **scale per** row: compare RTN, AWQ and (on the GPTQ page) GPTQ. Look for AWQ tying RTN while GPTQ pulls ahead.
+- **bits** 4, or **scale per** 16 at 3 bits: look for AWQ slightly above RTN, by much less than GPTQ gains.
+- **bits** 2: look for AWQ's accuracy slipping while its bird AP rises. The per-layer objective is not the end-to-end metric.
 
 ## Going further
 

@@ -4,13 +4,13 @@ test suite.
 Every entry says which kind of model it belongs to (``family``), whether it
 runs here (``status``), which functions implement it (``code``, shown on the
 site), what knobs it has (``params``) and, if runnable, a ``run(params)`` that
-trains/compresses a real model in a few seconds and returns a comparison.
+trains/compresses a real model (most runs take seconds to a minute) and returns a comparison.
 The tests iterate over this registry, so a method cannot appear on the site
 without also being exercised by ``pytest``.
 
 status:
     runnable   runs here, on the toy MLP world (numpy only)
-    cockpit    real code for the YOLO detector; runs in pigeon's cockpit
+    cockpit    real code for the YOLO detector; runs in the YOLOv8n cockpit
                (``uvicorn server:app``) with torch + ultralytics installed
     reference  needs a kind of model this repo doesn't have (e.g. a sequence
                model); explained, with code pointers, but not runnable
@@ -32,23 +32,24 @@ from .compress import (collapse_head, drop_layers, kbits, kmeans_share, low_rank
 from .nn import MLP
 from .train import CE, KD, SP, FixedSource, Hint, OnlineSource
 
-STEPS = 100 if QUICK else 1000     # web runs must finish in seconds
+STEPS = 100 if QUICK else 1000     # keeps most web runs under a minute
 FT = STEPS // 2
 FT_LR = 3e-3
 
 FAMILIES = {
     "small": dict(title="Small networks", blurb=(
         "Every method runs here on a toy 20-class problem with a known best-possible answer. "
-        "Start here: the ideas are the same at every scale, and each run takes seconds.")),
+        "Start here: the ideas are the same at every scale, and most runs finish in under a minute.")),
     "llm": dict(title="Language-model methods", blurb=(
         "Algorithms invented for large language models. The layer-by-layer ones (GPTQ, AWQ, "
         "SmoothQuant, Wanda, SparseGPT, QLoRA, ShortGPT) are pure linear algebra on one weight "
         "matrix at a time, so they run here on the same toy network. Methods that need text, "
         "tokens or a KV cache are explained but marked as reference.")),
-    "vision": dict(title="Vision / detector (pigeon)", blurb=(
+    "vision": dict(title="Vision / detector (YOLOv8n cockpit)", blurb=(
         "What changes when the model is a convolutional detector like YOLOv8: channels instead "
-        "of neurons, dependency groups, batch-norm. The cockpit methods run in pigeon's web UI "
-        "(cockpit/server.py) on a real model; the rest are explained for reference.")),
+        "of neurons, dependency groups, batch-norm. The cockpit methods run in the YOLOv8n "
+        "cockpit's web UI (cockpit/server.py) on a real model; the rest are explained for "
+        "reference.")),
 }
 
 CATEGORIES = {
@@ -505,8 +506,9 @@ def run_layer_drop(p):
 # SMALL NETWORKS -- quantization & factorization
 # ===========================================================================
 @method(id="ptq", name="Post-training quantization", family="small", category="quantize",
-        summary="Round every weight to one of 2^b levels after training. No data, no "
-                "gradients; how fine the scale groups are decides how low b can go.",
+        summary="Round every weight to one of 2^b − 1 evenly spaced levels, symmetric around "
+                "zero (two levels at 1 bit), after training. No data, no gradients; how fine the "
+                "scale groups are decides how low b can go.",
         code=["lab/nn.py:fake_quantize", "lab/compress.py:quantize", "cockpit/harness/quant.py:fake_quantize"],
         params=[P("bits", "bits", "int", 4, 1, 8, 1),
                 P("group", "scale shared by", "choice", "16",
@@ -679,7 +681,7 @@ def run_big_then_prune(p):
 
 
 # ===========================================================================
-# SMALL NETWORKS -- specialization (the pigeon question)
+# SMALL NETWORKS -- specialization (the bird-detector question)
 # ===========================================================================
 def _spec():
     from .experiments import specialist as S
@@ -1033,7 +1035,7 @@ reference(id="conv_quantization", name="Quantizing a detector", family="vision",
           papers=["Nagel et al. A White Paper on Neural Network Quantization (2021)"])
 reference(id="prune_and_regrow", name="Prune, then fine-tune (cut and regrow)", family="vision",
           category="prune", status="cockpit",
-          summary="pigeon's core loop: remove channels, then fine-tune the survivor on bird "
+          summary="The cockpit's core loop: remove channels, then fine-tune the survivor on bird "
                   "images until mAP climbs back.",
           code=["cockpit/harness/prune.py:removal_plan", "cockpit/harness/mask.py:apply_plan", "cockpit/recover_job.py:main"],
           experiments=["prune_structured", "specialist_data"],

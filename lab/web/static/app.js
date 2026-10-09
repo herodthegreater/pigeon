@@ -249,8 +249,8 @@ async function pageHome() {
     <ol class="lessons">${lessons.slice(0, 4).map((L) => lessonItem(L)).join("")}</ol>
     <p><a href="#/learn">All lessons</a></p>
     <h2>How to read a method page</h2>
-    <div class="legend-row">${pill("runnable")} <span>trains and compresses a real model here in seconds</span></div>
-    <div class="legend-row">${pill("cockpit")} <span>real code for pigeon's YOLO detector; run it in the cockpit (<code>uvicorn server:app</code>)</span></div>
+    <div class="legend-row">${pill("runnable")} <span>trains and compresses a real model here; most runs finish in under a minute</span></div>
+    <div class="legend-row">${pill("cockpit")} <span>real code for the YOLOv8n cockpit's detector; run it in the cockpit (<code>uvicorn server:app</code>)</span></div>
     <div class="legend-row">${pill("reference")} <span>needs a model this repo doesn't have yet (e.g. a language model); explained with the closest code here</span></div>`, "");
 }
 
@@ -311,8 +311,8 @@ async function pageMethod(id) {
       <div class="btns"><button class="btn" type="submit">Run</button></div></form>
       <div id="runout" aria-live="polite"><div class="status-line">${STATIC
         ? "Trains and evaluates real models on the toy world, in your browser. The first run downloads Python (about 20 MB); most runs then take 5–60 s."
-        : "Trains and evaluates real models on the toy world. Most runs take 2–15 s; the very first one also trains the shared teacher."}</div></div></div>`
-    : m.status === "cockpit" ? `<div class="box"><h3>Run it in the cockpit</h3><p class="muted" style="font-size:.9rem">This is pigeon's real detector code. It needs torch, ultralytics and torch-pruning, then:</p><pre><code>uvicorn server:app --port 8000</code></pre><p class="muted" style="font-size:.9rem">The closest thing that runs here is linked in the write-up.</p></div>`
+        : "Trains and evaluates real models on the toy world, starting from the shipped models in lab/models. Most runs take 2–15 s."}</div></div></div>`
+    : m.status === "cockpit" ? `<div class="box"><h3>Run it in the cockpit</h3><p class="muted" style="font-size:.9rem">This is the YOLOv8n cockpit's real detector code. It needs torch, ultralytics and torch-pruning, then:</p><pre><code>uvicorn server:app --port 8000</code></pre><p class="muted" style="font-size:.9rem">The closest thing that runs here is linked in the write-up.</p></div>`
     : `<div class="box"><h3>Reference only</h3><p class="muted" style="font-size:.9rem;margin:0">This method needs a kind of model this repo doesn't have. The write-up explains the algorithm and points to the closest code you can run here.</p></div>`;
   const side = `<aside class="panel">${runBox}
     ${toc.length ? `<div class="box toc"><h3>On this page</h3>${toc.map((t) => `<a href="#/method/${id}" data-jump="${t.id}">${esc(t.text)}</a>`).join("")}${m.code.length ? `<a href="#/method/${id}" data-jump="source">Source code</a>` : ""}${m.experiments.length ? `<a href="#/method/${id}" data-jump="simulations">Simulation figures</a>` : ""}</div>` : ""}

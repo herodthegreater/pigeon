@@ -29,7 +29,7 @@ From `small_tricks`, with 3,000 training steps and 3 seeds (accuracy on 20 class
 
 The collapsed network gains as much as training 4 times longer, at no inference cost. Training is costlier: each step of the expanded 2x16 net touches 6,980 parameters instead of 820.
 
-Page runs (1,000 steps): at width 16 and expansion 4, plain gets 0.5803 and the collapsed net 0.6589. The expanded and collapsed rows match exactly. With expansion 1 (a product of two matrices with no extra width) the collapsed net gets 0.5766, no better than plain. The extra width, not the factorization, is what helps. At width 32: plain 0.7398, collapsed 0.8278.
+Page runs (1,000 steps): at width 16 and expansion 4, plain gets 0.5803 and the collapsed net 0.6589. The expanded and collapsed rows match exactly. With expansion 1 (a product of two matrices with no extra width) the collapsed net gets 0.5766, no better than plain. The extra width, not the factorization, is what helps. At width 32: plain 0.7398, collapsed 0.8253.
 
 The toy doesn't separate *why* it helps. Candidate reasons include the implicit momentum-like acceleration Arora et al. describe, the different effective initialization of a product of two random matrices, and weight decay acting on the factors rather than on their product.
 
@@ -43,9 +43,9 @@ The toy doesn't separate *why* it helps. Candidate reasons include the implicit 
 ## Try this
 
 - At **width** 16, step **expansion factor** through 1, 2, 4 and 8. Look for where the gain over "plain" stops growing.
-- Compare **width** 16 and 32 at **expansion factor** 4. In the page run the gain over plain was 0.0786 at width 16 and 0.088 at width 32. Check whether it keeps growing at 64.
+- Compare **width** 16 and 32 at **expansion factor** 4. In the page run the gain over plain was 0.0786 at width 16 and 0.0855 at width 32. Check whether it keeps growing at 64.
 - Check the "trained expanded" and "collapsed back" rows. They should match to every printed digit while their parameter counts differ by about 8x.
 
 ## Going further
 
-ExpandNets applies this to CNNs by expanding a `k x k` conv into a `1 x 1`, a `k x k` and another `1 x 1`, all linear, and contracting after training. RepVGG trains parallel `3x3`, `1x1` and identity branches and merges them into one `3x3` conv for inference. pigeon already depends on the same algebra in its most common form: `server.py` fuses YOLOv8n when loading it, folding each batch-norm into the preceding conv (see Batch-norm folding). Training a specialist with expanded convs and contracting it before export could give a better small detector with the same deployed shape.
+ExpandNets applies this to CNNs by expanding a `k x k` conv into a `1 x 1`, a `k x k` and another `1 x 1`, all linear, and contracting after training. RepVGG trains parallel `3x3`, `1x1` and identity branches and merges them into one `3x3` conv for inference. The YOLOv8n cockpit already depends on the same algebra in its most common form: `server.py` fuses YOLOv8n when loading it, folding each batch-norm into the preceding conv (see Batch-norm folding). Training a specialist with expanded convs and contracting it before export could give a better small detector with the same deployed shape.

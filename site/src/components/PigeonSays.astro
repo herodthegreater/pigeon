@@ -1,0 +1,92 @@
+---
+/**
+ * Pigeon's margin note: a small drawing of Pigeon beside a short note, the way
+ * a field guide puts a figure in the margin. Pigeon is the site's guide, so the
+ * note always carries real information, and the bird's condition matches it:
+ *   tip   a healthy Pigeon (something that helps)
+ *   warn  a starving Pigeon (something that goes wrong if you ignore it)
+ *   fail  Pigeon's bones (something that has already gone wrong)
+ * One Pigeon per view: a page that shows two notes at once passes bird={false}
+ * to the second, which keeps the drawing's column so the notes line up.
+ * The drawing is decorative (the label and text say it all) unless `decorative`
+ * is false, when it keeps mascotSVG's own name, e.g. "Rock Pigeon, emaciated".
+ */
+import { mascotSVG } from "../lib/ui/mascot";
+
+export type Mood = "tip" | "warn" | "fail";
+
+interface Props {
+  mood: Mood;
+  /** The note's first line, e.g. "Pigeon's hint, 1 of 2". Defaults to the mood's name. */
+  label?: string;
+  href?: string;
+  /** Link text for `href`: names where it goes, never "Learn more". */
+  link?: string;
+  bird?: boolean;
+  decorative?: boolean;
+  [attr: `data-${string}`]: string | boolean | undefined;
+  hidden?: boolean;
+  class?: string;
+}
+
+const { mood, label, href, link, bird = true, decorative = true, class: extra, ...rest } = Astro.props;
+
+const LABEL: Record<Mood, string> = { tip: "Pigeon's tip", warn: "Pigeon's warning", fail: "Pigeon's note" };
+
+// Ratio 1 keeps Pigeon a rock pigeon. The bones are drawn at 1.5 because mascotSVG
+// draws a broken model under 1.3x as a dodo, and this is Pigeon, not the dodo.
+const STATE = { tip: { ratio: 1, starve: 0 }, warn: { ratio: 1, starve: 0.6 }, fail: { ratio: 1.5, starve: 1 } };
+
+/**
+ * mascotSVG names its clip path and gradient after the species and condition, so
+ * two healthy Pigeons on one page would share ids. Its halo id is unique per call:
+ * prefix every id (and every reference to one) with it.
+ */
+function ownIds(svg: string): string {
+  const n = svg.match(/id="halo-(\d+)"/)?.[1] ?? "0";
+  return svg.replace(/(\sid="|url\(#)([\w-]+)/g, (_, before: string, id: string) => `${before}ps${n}-${id}`);
+}
+
+const drawing = bird ? ownIds(mascotSVG(STATE[mood]).svg) : "";
+const svg = decorative ? drawing.replace(/\srole="img"\saria-label="[^"]*"/, "") : drawing;
+---
+<div class:list={["pigeon-says", extra]} data-mood={mood} role="note" {...rest}>
+  {bird ? (
+    <span class="pigeon-bird" aria-hidden={decorative ? "true" : undefined} set:html={svg} />
+  ) : (
+    <span class="pigeon-bird" aria-hidden="true"></span>
+  )}
+  <div class="pigeon-text">
+    <p class="pigeon-label">{label ?? LABEL[mood]}</p>
+    <div class="pigeon-body"><slot /></div>
+    {href && link && <p class="pigeon-more"><a href={href}>{link}</a></p>}
+  </div>
+</div>
+
+<style>
+  /* A margin note, not a card: no box, no rule. The bird's own ground line anchors it. */
+  .pigeon-says {
+    display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-3);
+    align-items: start; max-width: var(--measure);
+  }
+  .pigeon-bird { display: block; width: 72px; }
+  .pigeon-bird :global(svg) { display: block; width: 100%; height: auto; }
+  .pigeon-text { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--step--1); min-width: 0; }
+  /* The label says whose note it is; its color is the note's real state. */
+  .pigeon-label { font-weight: 600; color: var(--teal); }
+  .pigeon-says[data-mood="warn"] .pigeon-label { color: var(--warn); }
+  .pigeon-says[data-mood="fail"] .pigeon-label { color: var(--bad); }
+  .pigeon-body { color: var(--ink); overflow-wrap: anywhere; }
+  .pigeon-body :global(p + p) { margin-top: var(--space-1); }
+  .pigeon-body :global(code) {
+    font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 4px;
+  }
+  .pigeon-more a { font-weight: 600; }
+  @media (pointer: coarse), (max-width: 640px) {
+    .pigeon-more a { display: inline-flex; align-items: center; min-height: var(--tap); }
+  }
+  @media (max-width: 360px) {
+    .pigeon-says { grid-template-columns: 56px minmax(0, 1fr); gap: var(--space-2); }
+    .pigeon-bird { width: 56px; }
+  }
+</style>

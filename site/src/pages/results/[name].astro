@@ -45,7 +45,7 @@ const plain = (s: string) => s.replace(/\*([^*\n]+)\*/g, "$1");
 
     {e.notes && <p class="notes"><strong>Note:</strong> <Fragment set:html={inline(e.notes)} /></p>}
 
-    <ResultTable rows={e.rows} refs={e.refs} seconds={e.seconds} />
+    <ResultTable title={e.title} rows={e.rows} refs={e.refs} seconds={e.seconds} />
   </main>
 </Base>
 

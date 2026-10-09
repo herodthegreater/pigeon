@@ -1,14 +1,13 @@
 ---
 import Base from "../../layouts/Base.astro";
 import "../../styles/page.css";
-import { meta, methods, FAMILY_ORDER, STATUS_ORDER, STATUS_LABEL, type Status } from "../../lib/lab/data";
+import { meta, methods, FAMILY_ORDER, STATUS_ORDER, STATUS_LABEL } from "../../lib/lab/data";
 import { NOT_COVERED, COVERED, COVERAGE_LABEL, renderLine } from "../../components/guide/techniques";
+import { codeCounts, guideLede } from "../../components/guide/counts";
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 const M = meta();
 const all = methods();
-
-const count = (s: Status) => all.filter((m) => m.status === s).length;
 const families = FAMILY_ORDER.map((f) => {
   const ms = all.filter((m) => m.family === f);
   const categories = Object.entries(M.categories)
@@ -26,19 +25,11 @@ const families = FAMILY_ORDER.map((f) => {
 });
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const verb = (n: number, one: string, many: string) => (n === 1 ? one : many);
-const lede =
-  `${all.length} compression methods, each written up with the real source code it runs. ` +
-  `${count("runnable")} of them ${verb(count("runnable"), "runs", "run")} in your browser; ` +
-  `${count("cockpit")} ${verb(count("cockpit"), "runs", "run")} in the YOLOv8n cockpit on your own machine, ` +
-  `and ${count("reference")} ${verb(count("reference"), "is a reference write-up", "are reference write-ups")} ` +
-  `for kinds of models the lab doesn't have.`;
+// Every number in the lede is counted from the lab data, including which pages show code.
+const counts = codeCounts();
+const { lede, description } = guideLede(counts);
 ---
-<Base
-  title="Field Guide · Pigeon"
-  active="guide"
-  description={`${all.length} model compression methods with their real source code; ${count("runnable")} run in your browser.`}
->
+<Base title="Field Guide · Pigeon" active="guide" description={description}>
   <main id="main" class="page guide">
     <header>
       <h1>Field Guide</h1>
@@ -111,8 +102,6 @@ const lede =
     padding-top: var(--space-6); border-top: 1px solid var(--rule);
   }
   .family h2, .family h3 { scroll-margin-top: var(--space-4); }
-  /* Categories are index labels, set in the body face so they don't compete with the serif method names. */
-  .family > .group > h3 { font-family: var(--body); font-size: var(--step-0); font-weight: 600; }
   .entry .aside.runnable { color: var(--teal); font-weight: 600; }
 
   .techniques { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); max-width: var(--measure); }

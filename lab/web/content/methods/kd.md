@@ -46,7 +46,7 @@ KD on the 8k labeled inputs matches labels only at every width; KD on the pool h
 
 Temperature makes things worse here. In `temperature_alpha` (2x16, labeled inputs), `T = 1` gives 0.6631-0.6639 for every `alpha`, and accuracy falls as `T` rises: 0.6399 at `T = 4`, 0.5815 at `T = 16` (`alpha = 1.0`). The teacher's logits are very spread out (median max-minus-min: 47.2), so a high `T` asks a tiny student to copy structure it cannot represent, and it becomes overconfident: NLL (mean negative log-probability of the true class) rises from 1.0176 at `T = 1` to 1.8606 at `T = 4`.
 
-This page's runs (1000 steps, seed 0, pool): at width 16, labels only 0.5803, KD at `T = 4` 0.5534, KD at `T = 1` 0.5854. At width 64, labels only 0.8511, `T = 4` 0.8237, `T = 1` 0.8572. Single-seed gaps under about 0.015 are noise. The toy cannot say how a softer teacher, trained with heavy augmentation, would shift the best `T`.
+This page's runs (1000 steps, seed 0, pool): at width 16, labels only 0.5803, KD at `T = 4` 0.5551, KD at `T = 1` 0.5850. At width 64, labels only 0.8514, `T = 4` 0.8232, `T = 1` 0.8596. Single-seed gaps under about 0.015 are noise. The toy cannot say how a softer teacher, trained with heavy augmentation, would shift the best `T`.
 
 ## When it breaks
 
@@ -62,4 +62,4 @@ This page's runs (1000 steps, seed 0, pool): at width 16, labels only 0.5803, KD
 
 ## Going further
 
-Real models use the same loss with large unlabeled or augmented transfer sets and many epochs (see the function-matching page). Teacher logits are precomputed (as `FixedSource` does) or computed on the fly for augmented inputs. For a detector like pigeon's the outputs are per-box class scores and coordinates, so the KD term is applied per anchor or matched box; `lab/common.py:distill` is the closest analogue here.
+Real models use the same loss with large unlabeled or augmented transfer sets and many epochs (see the function-matching page). Teacher logits are precomputed (as `FixedSource` does) or computed on the fly for augmented inputs. For a detector like the cockpit's YOLOv8n the outputs are per-box class scores and coordinates, so the KD term is applied per anchor or matched box; `lab/common.py:distill` is the closest analogue here.

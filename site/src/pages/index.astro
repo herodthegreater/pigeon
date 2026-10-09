@@ -26,14 +26,29 @@ const UNFINISHED = chapters.filter((c) => c.gap).length;
 
 const and = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
-// The species ladder: each bird drawn at the compression ratio where Pigeon becomes it.
+const presets = PRESETS.filter((p) => p.id !== "fp32");
+const mixed = PRESETS.find((p) => p.id === "mixed");
+if (!mixed) throw new Error("index: the Coop's mixed-precision preset is missing");
+// Recorded, not measured on this page: the Mixed precision preset's row in docs/findings-pigeon.md
+// ("In the browser"), the smallest healthy Pigeon on record.
+const RECORDED = { kb: 737, ratio: 5.0, accuracy: "94.4", pointing: "98.0" };
+
+// The key to the birds: each drawn at the compression ratio where a model becomes it. A species
+// smaller than the recorded best is marked: the size exists, but no healthy Pigeon has reached it.
 const ladder = SPECIES.map((sp) => ({
   sp,
   svg: mascotSVG({ ratio: Math.max(1, sp.minRatio), accuracy: 0.95, pointing: 0.98 }).svg,
   size: sp.minRatio > 0 ? `≥ ${sp.minRatio}× smaller` : "uncompressed",
+  reached: sp.minRatio <= RECORDED.ratio,
 }));
 const bones = mascotSVG({ ratio: 4, accuracy: 0.5, pointing: 0.2 }).svg;
-const presets = PRESETS.filter((p) => p.id !== "fp32");
+const reachedName = [...ladder].reverse().find((b) => b.reached)!.sp.name;
+const unreached = ladder.filter((b) => !b.reached).map((b) => b.sp);
+const guideName = (id: string) => {
+  const m = allMethods.find((x) => x.id === id);
+  if (!m) throw new Error(`index: no Field Guide method "${id}"`);
+  return m.name;
+};
 
 const redirect = labRedirectScript(
   { methods: allMethods.map((m) => m.id), families: FAMILY_ORDER, lessons: allLessons.map((l) => l.id), experiments: exps.map((e) => e.name) },
@@ -45,7 +60,7 @@ const redirect = labRedirectScript(
   <main id="main" class="page home">
     <header class="lead">
       <h1>Shrink a real model with your own hands, and watch what it costs.</h1>
-      <p class="lede">Pigeon is a small image model with one job: <em>is there a bird, and where?</em> Quantize it, prune it, palettize it, right here in your browser, on {photos} real photos. Keep it accurate and it slims from a pigeon into a hummingbird. Push too far and it starves.</p>
+      <p class="lede">Pigeon is a small image model with one job: <em>is there a bird, and where?</em> Quantize it, prune it, palettize it, right here in your browser, on {photos} real photos. Keep it accurate and it slims from a rock pigeon to a common swift. Push further with these tools, which never retrain it, and it starves.</p>
       <div class="cta">
         <a class="btn" href={`${base}coop/`}>Open the Coop</a>
         <a class="btn secondary" href={`${base}school/`}>Start Flight School</a>
@@ -54,16 +69,17 @@ const redirect = labRedirectScript(
 
     <section class="flagship" aria-labelledby="coop-title">
       <h2 id="coop-title">The Coop</h2>
-      <p class="intro">Where the shrinking happens. Stack quantization, pruning and palettes into a recipe. After every change Pigeon scores itself again on all {photos} photos and shows what it cost: accuracy, pointing, and the real size in bytes.</p>
+      <p class="intro">Where the shrinking happens. Stack quantization, pruning and palettes into a recipe. After every change Pigeon scores itself again on all {photos} photos and shows what it cost: accuracy, pointing, and the real size in bytes. The Coop's second cage holds <a href={`${base}coop/yolo/`}>YOLOv8n</a>, a real detector that draws a box around every bird it finds, to shrink the same way.</p>
 
       <figure class="ladder">
         <ol class="birds">
-          {ladder.map(({ sp, svg, size }) => (
+          {ladder.map(({ sp, svg, size, reached }) => (
             <li>
               <div class="svg" aria-hidden="true" set:html={svg} />
               <p class="bird-name">{sp.name}</p>
               <p class="bird-latin">{sp.latin}</p>
               <p class="bird-size num"><span>{size}</span><span>{sp.grams} g</span></p>
+              {!reached && <p class="bird-reach">No healthy Pigeon this small yet</p>}
             </li>
           ))}
           <li class="dead">
@@ -72,7 +88,15 @@ const redirect = labRedirectScript(
             <p class="bird-size"><span>pushed too far:</span><span>it's guessing</span></p>
           </li>
         </ol>
-        <figcaption>How much smaller Pigeon gets decides which bird it becomes. It stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and a broken model is bones.</figcaption>
+        <figcaption>
+          <p>The key to sizes: how much smaller a model gets decides which bird it becomes. Pigeon stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and a broken model is bones.</p>
+          <p>
+            The smallest healthy Pigeon on record is a {reachedName}: the {mixed.name} preset, {RECORDED.kb} KB, {RECORDED.ratio.toFixed(2)} times smaller, with {RECORDED.accuracy}% accuracy and {RECORDED.pointing}% pointing (recorded in the lab's notes, not measured on this page).
+            No recipe on record keeps it healthy at {unreached[0].minRatio} times smaller or more, where the {unreached[0].name} starts. That probably takes retraining, which the Coop's tools never do;
+            the Field Guide's <a href={`${base}guide/qat/`}>{guideName("qat")}</a> and <a href={`${base}guide/kd/`}>{guideName("kd")}</a> show how it works on the lab's small models.
+          </p>
+          <p>Every bird you hatch, in either cage or in a Field Guide run, is kept on your <a href={`${base}life-list/`}>life list</a>.</p>
+        </figcaption>
       </figure>
 
       <h3 id="presets-title">Open the Coop with a preset loaded</h3>
@@ -86,7 +110,7 @@ const redirect = labRedirectScript(
     </section>
 
     <section class="more" aria-labelledby="more-title">
-      <h2 id="more-title">Lessons, methods and experiments</h2>
+      <h2 id="more-title">Lessons, methods, experiments and your birds</h2>
       <ul class="entries">
         <li>
           <a class="entry" href={`${base}school/`}>
@@ -107,6 +131,13 @@ const redirect = labRedirectScript(
             <span class="name">Results</span>
             <span class="aside num">{exps.length} experiments</span>
             <span class="summary">Simulations in {expGroups} groups, each asking one question about compression, with its figures, its numbers, and a report on what they show.</span>
+          </a>
+        </li>
+        <li>
+          <a class="entry" href={`${base}life-list/`}>
+            <span class="name">Life list</span>
+            <span class="aside">kept in your browser</span>
+            <span class="summary">Every bird you hatch in the Coop's two cages and in Field Guide runs, the way a birder keeps a life list: each species once, at its best sighting, with the recipe that made it.</span>
           </a>
         </li>
       </ul>
@@ -144,7 +175,9 @@ const redirect = labRedirectScript(
     .bird-latin { font-family: var(--display); font-style: italic; color: var(--magenta); font-size: var(--step--1); line-height: 1.3; }
     .bird-size { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); display: flex; flex-direction: column; }
     .dead .bird-name { color: var(--bad); }
-    .ladder figcaption { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
+    /* An honest gap in the key: the size exists, Pigeon hasn't reached it healthy. */
+    .bird-reach { font-size: var(--step--2); font-style: italic; color: var(--muted); line-height: 1.3; }
+    .ladder figcaption { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); display: flex; flex-direction: column; gap: var(--space-2); }
 
     .presets {
       list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));

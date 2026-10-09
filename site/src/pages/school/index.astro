@@ -4,11 +4,24 @@ import "../../styles/page.css";
 import { lessons, methods } from "../../lib/lab/data";
 import { CHECK_LIMIT_S } from "../../lib/lab/python";
 import { course, lessonHref } from "../../components/school/course";
+import PigeonSays from "../../components/PigeonSays.astro";
 
 const chapters = course();
 const all = lessons();
 const names = new Map(methods().map((m) => [m.id, m.name]));
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+
+// The lede's numbers, counted from the chapters as they render (dropped citations don't count).
+const reading = chapters.filter((c) => c.links.some((l) => l.kind === "read")).length;
+const coded = chapters.filter((c) => c.links.some((l) => l.kind === "code")).length;
+const tried = chapters.filter((c) => c.links.some((l) => l.kind === "try")).length;
+const gaps = chapters.filter((c) => c.gap).length;
+const total = chapters.length;
+const of = (k: number) => (k === total ? `All ${total}` : `${k} of the ${total}`);
+// The lede's second sentence after "...point to the Field Guide sections that teach them".
+const rest =
+  (coded === total ? " and every one has a coding lesson" : coded === 0 ? "; none has a coding lesson yet" : ` and ${coded} have a coding lesson`) +
+  (gaps === 0 ? "." : `; the ${gaps === 1 ? "one" : gaps} that ${gaps === 1 ? "isn't" : "aren't"} fully written yet ${gaps === 1 ? "says" : "say"} what's missing.`);
 ---
 <Base
   title="Flight School · Pigeon"
@@ -19,18 +32,18 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
     <header>
       <h1>Flight School</h1>
       <p class="lede">
-        Today Flight School is a reading map: {chapters.length} chapters in order, each pointing to
-        the <a href={`${base}guide/`}>Field Guide</a> write-ups that teach it, plus {all.length} coding lessons where
-        you build the algorithms yourself. Some
-        chapters aren't fully written yet, and those say what's missing.
+        Today Flight School is a reading map: {chapters.length} chapters in order, plus {all.length} coding lessons
+        where you build the algorithms yourself, checked against tests in your browser. {of(reading)} chapters point to
+        the <a href={`${base}guide/`}>Field Guide</a> sections that teach them{rest}
       </p>
     </header>
 
     <section class="group" aria-labelledby="course">
       <h2 id="course">The course</h2>
       <p>
-        Each chapter lists the sections to read, the lesson that codes the idea, and, where it fits, a preset that
-        loads it onto Pigeon's real weights in the Coop.
+        A chapter lists the Field Guide sections to read, then the lesson that codes the idea when it has one
+        ({coded} of {chapters.length} do), then a preset that loads the idea onto Pigeon's real weights in the Coop
+        where one fits ({tried} of {chapters.length}).
       </p>
       <ol class="course" role="list">
         {chapters.map((c) => (
@@ -64,9 +77,16 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
       </p>
       <p>
         Your code runs in your own browser (Python compiled to WebAssembly), with a {CHECK_LIMIT_S}-second limit
-        per check. Nothing is sent to a server, and drafts are saved in this browser.
+        per check. Nothing is sent to a server: your drafts and the lessons you pass are kept in this browser only.
       </p>
       <p class="progress" data-progress data-total={all.length} hidden></p>
+      <PigeonSays mood="warn" data-storage-blocked hidden>
+        <p>
+          This browser blocks site storage, so passed lessons and drafts aren't remembered here. The lessons still
+          check your code; copy it somewhere before you leave a page. Allowing site storage for this site, or opening it
+          outside a private window, brings both back.
+        </p>
+      </PigeonSays>
       <ul class="entries">
         {all.map((l) => (
           <li>
@@ -116,24 +136,42 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
   }
 
   .progress { font-weight: 600; }
+  .progress[data-none] { font-weight: 400; color: var(--muted); }
   .entry .passed { color: var(--teal); font-weight: 600; }
 </style>
 
 <script>
   // Progress lives in this browser only, under the keys the old lab used, so earlier passes still count.
+  // Blocked storage (strict settings, some private windows) must not look like "nothing passed yet":
+  // try a write once, and say which of the two it is.
+  const storageWorks = (() => {
+    try {
+      localStorage.setItem("pigeon.probe", "1");
+      localStorage.removeItem("pigeon.probe");
+      return true;
+    } catch {
+      return false;
+    }
+  })();
   const read = (k: string) => {
     try { return localStorage.getItem(k); } catch { return null; }
   };
-  let passed = 0;
-  document.querySelectorAll<HTMLElement>("[data-passed]").forEach((el) => {
-    if (read(`passed:${el.dataset.passed}`) === "1") {
-      el.hidden = false;
-      passed++;
-    }
-  });
   const line = document.querySelector<HTMLElement>("[data-progress]");
-  if (line && passed > 0) {
-    line.textContent = `${passed} of ${line.dataset.total} passed in this browser`;
+  if (!storageWorks) {
+    document.querySelector<HTMLElement>("[data-storage-blocked]")!.hidden = false;
+  } else if (line) {
+    let passed = 0;
+    document.querySelectorAll<HTMLElement>("[data-passed]").forEach((el) => {
+      if (read(`passed:${el.dataset.passed}`) === "1") {
+        el.hidden = false;
+        passed++;
+      }
+    });
+    const total = Number(line.dataset.total);
+    line.textContent = passed > 0
+      ? `${passed} of ${total} passed in this browser`
+      : `None of the ${total} lessons is marked passed in this browser yet. Pass one and it shows here.`;
+    line.toggleAttribute("data-none", passed === 0);
     line.hidden = false;
   }
 </script>

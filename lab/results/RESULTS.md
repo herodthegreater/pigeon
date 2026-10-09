@@ -968,11 +968,11 @@ Reference ceiling (Bayes-optimal): acc 0.9734, target AP 0.9992.
 
 <sub>99s</sub>
 
-## 6 · Specialization (the pigeon question)
+## 6 · Specialization (the bird-detector question)
 
 ### Recovery data for a specialist: are bird images enough?  (`specialist_data`)
 
-*pigeon's recovery set is 400 images that *all contain birds*. If the recovery data only shows positives, can the model still learn what is NOT a bird?*
+*The YOLOv8n cockpit's recovery set is 400 images that *all contain birds*. If the recovery data only shows positives, can the model still learn what is NOT a bird?*
 
 ![specialist_data 0](figures/specialist_data_0.png)
 

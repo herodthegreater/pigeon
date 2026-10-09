@@ -768,7 +768,7 @@ lesson(
 
     Miss one and the shapes no longer match. In a CNN with skip connections
     the same idea needs a *dependency group* of layers, which is what
-    torch-pruning solves for pigeon's YOLO.
+    torch-pruning solves for the cockpit's YOLOv8n.
 
     Implement `keep_neurons(W1, b1, W2, keep)` returning the smaller
     `(W1, b1, W2)` that keeps only the hidden neurons listed in `keep`, and

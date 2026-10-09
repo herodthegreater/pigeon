@@ -58,7 +58,7 @@ export const PRESETS: { id: string; name: string; hint: string; recipe: Detector
   { id: "int8-channel", name: "INT8 per channel", hint: "8-bit integers with one scale for every output channel.", recipe: { ...nativeRecipe(), bits: 8 } },
   { id: "int8-tensor", name: "INT8, one scale", hint: "8-bit integers, one scale shared by a whole tensor.", recipe: { ...nativeRecipe(), bits: 8, granularity: "tensor" } },
   { id: "int4-channel", name: "INT4 per channel", hint: "4-bit integers: 15 levels per output channel.", recipe: { ...nativeRecipe(), bits: 4 } },
-  { id: "fp4-group", name: "FP4, groups of 32", hint: "4-bit floats on the E2M1 grid, a scale for every 32 weights.", recipe: { ...nativeRecipe(), bits: 4, granularity: "group", group: 32, levels: "fp" } },
+  { id: "fp4-group", name: "FP4, groups of 32", hint: "4-bit floats on the E2M1 grid, a scale for each block of up to 32 weights in an output channel.", recipe: { ...nativeRecipe(), bits: 4, granularity: "group", group: 32, levels: "fp" } },
   { id: "cut-l16", name: "Cut L16 by 30%", hint: "Masks the weakest 30% of the channels in L16, a downsampling conv in the neck.", recipe: { ...nativeRecipe(), masks: { "model.16": 0.3 } } },
   { id: "neck-20", name: "Trim the neck 20%", hint: "Masks the weakest 20% of the channels in every neck stage, L12 to L21.", recipe: { ...nativeRecipe(), masks: Object.fromEntries(NECK.map((s) => [s, 0.2])) } },
 ];

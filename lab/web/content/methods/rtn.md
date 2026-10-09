@@ -29,18 +29,18 @@ In a transformer, the same rule is applied to every `nn.Linear` inside every blo
 
 ## What the simulations show
 
-The model is the 3x256 teacher (91.39% test accuracy). As in the papers, the output layer (the toy's `lm_head`) is left at full precision: `apply_layerwise(..., skip_last=True)`. The first layer, which reads the 12 raw inputs, *is* quantized, whereas papers usually keep the embedding at 16 bits. The `params` column counts *nonzero* parameters, so it shows how many weights rounded to zero.
+The model is the 3x256 teacher (0.9150 test accuracy). As in the papers, the output layer (the toy's `lm_head`) is left at full precision: `apply_layerwise(..., skip_last=True)`. The first layer, which reads the 12 raw inputs, *is* quantized, whereas papers usually keep the embedding at 16 bits. The `params` column counts *nonzero* parameters, so it shows how many weights rounded to zero.
 
 | setting | accuracy | nonzero params |
 |---|---|---|
-| teacher, fp32 | 0.9139 | 140,052 |
-| RTN 8-bit, per row | 0.9142 | 138,711 |
-| RTN 4-bit, per row | 0.9103 | 116,440 |
-| RTN 3-bit, per row | 0.8922 | 87,253 |
-| RTN 3-bit, scale per 16 | 0.9010 | 103,671 |
-| RTN 2-bit, per row | 0.4686 | 23,876 |
+| teacher, fp32 | 0.9150 | 140,052 |
+| RTN 8-bit, per row | 0.9146 | 138,738 |
+| RTN 4-bit, per row | 0.9087 | 116,376 |
+| RTN 3-bit, per row | 0.8971 | 87,183 |
+| RTN 3-bit, scale per 16 | 0.9007 | 103,706 |
+| RTN 2-bit, per row | 0.4796 | 23,815 |
 
-8 and 4 bits are nearly free. At 3 bits RTN loses about 2 points; at 2 bits (ternary) accuracy halves and only 23,876 of 140,052 parameters stay nonzero. Smaller groups help because one large weight no longer sets the step size for 256 others. The toy world can't show the main reason RTN fails in real LLMs: a few input channels with activations 100 times larger than the rest (see AWQ and SmoothQuant).
+8 and 4 bits are nearly free. At 3 bits RTN loses about 2 points; at 2 bits (ternary) accuracy halves and only 23,815 of 140,052 parameters stay nonzero. Smaller groups help because one large weight no longer sets the step size for 256 others. The toy world can't show the main reason RTN fails in real LLMs: a few input channels with activations 100 times larger than the rest (see AWQ and SmoothQuant).
 
 ## When it breaks
 

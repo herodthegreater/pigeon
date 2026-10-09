@@ -2,10 +2,12 @@
  * Renders a method run's result: a table with a bar per row, an optional line
  * chart, the note and what ran. Ported from lab/web/static/app.js; the chart now
  * gives every series its own dash and marker (color is never the only cue) and
- * ships its numbers as a table, so nothing depends on hovering.
+ * ships its numbers as a table, so nothing depends on hovering. Columns and
+ * settings use the same words as the Results tables (labels.ts).
  */
 
 import { esc } from "./markdown";
+import { cap, label as keyLabel } from "./labels";
 import type { RunResult } from "./python";
 
 export const fmt = (v: unknown, k?: string): string => {
@@ -48,7 +50,8 @@ export function lineChart(chart: NonNullable<RunResult["chart"]>, ylabel: string
   y0 = Math.max(0, y0 - pad); y1 = y1 + pad;
   const X = (v: number) => l + ((v - x0) / (x1 - x0)) * (W - l - r);
   const Y = (v: number) => H - b - ((v - y0) / (y1 - y0)) * (H - t - b);
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(ylabel)} by ${esc(chart.x)}, ${names.length} series. The numbers are in the table below.">`;
+  const xlabel = cap(keyLabel(chart.x)); // the same words as the Results figures' axes
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(ylabel)} by ${esc(keyLabel(chart.x))}, ${names.length} series. The numbers are in the table below.">`;
   for (let k = 0; k <= 4; k++) {
     const v = y0 + ((y1 - y0) * k) / 4, y = Y(v);
     s += `<line class="grid" x1="${l}" x2="${W - r}" y1="${y}" y2="${y}"/><text x="${l - 6}" y="${y + 4}" text-anchor="end">${v.toFixed(2)}</text>`;
@@ -57,7 +60,7 @@ export function lineChart(chart: NonNullable<RunResult["chart"]>, ylabel: string
     s += `<text x="${X(v)}" y="${H - b + 16}" text-anchor="middle">${+v.toFixed(3)}</text>`;
   });
   s += `<line class="axis" x1="${l}" x2="${W - r}" y1="${H - b}" y2="${H - b}"/>`;
-  s += `<text x="${(W + l) / 2}" y="${H - 2}" text-anchor="middle">${esc(chart.x)}</text>`;
+  s += `<text x="${(W + l) / 2}" y="${H - 2}" text-anchor="middle">${esc(xlabel)}</text>`;
   names.forEach((n, k) => {
     const st = SERIES[k % SERIES.length];
     const p = [...chart.series[n]].sort((a, c) => a[0] - c[0]);
@@ -70,28 +73,45 @@ export function lineChart(chart: NonNullable<RunResult["chart"]>, ylabel: string
   // The same numbers as a table: every point, readable without a mouse.
   const xsSorted = [...new Set(xs)].sort((a, c) => a - c);
   const cell = (n: string, x: number) => chart.series[n].find((q) => q[0] === x);
-  s += `<details class="chart-data"><summary>Chart data</summary><div class="tablewrap" tabindex="0"><table><thead><tr><th scope="col">${esc(chart.x)}</th>${names.map((n) => `<th scope="col" class="num">${esc(n)}</th>`).join("")}</tr></thead><tbody>${xsSorted
+  s += `<details class="chart-data"><summary>Chart data</summary><div class="tablewrap" tabindex="0"><table><thead><tr><th scope="col">${esc(xlabel)}</th>${names.map((n) => `<th scope="col" class="num">${esc(n)}</th>`).join("")}</tr></thead><tbody>${xsSorted
     .map((x) => `<tr><th scope="row" class="num">${+x.toFixed(3)}</th>${names.map((n) => { const q = cell(n, x); return `<td class="num">${q ? q[1].toFixed(3) : ""}</td>`; }).join("")}</tr>`)
     .join("")}</tbody></table></div></details>`;
   return s;
 }
 
-export function resultView(res: RunResult): string {
+/** A run's settings in the method's own words: "student width 16, temperature 4, student sees pool". */
+export function settingsText(params: Record<string, unknown>, labels: Record<string, string> = {}): string {
+  return Object.entries(params)
+    .map(([k, v]) => {
+      const name = labels[k] ?? k;
+      return typeof v === "boolean" ? `${name}: ${v ? "yes" : "no"}` : `${name} ${v}`;
+    })
+    .join(", ");
+}
+
+/** Extra columns a run can carry, in the order the table shows them. Storage is what a run's birds are sized by. */
+const EXTRA = ["kbits", "params", "fidelity", "sparsity"];
+
+/** `labels` maps each setting's key to the words its field uses on the page. */
+export function resultView(res: RunResult, labels: Record<string, string> = {}): string {
   const metric = res.metric || "acc";
-  const label = metric === "target_ap" ? "bird AP" : "accuracy";
-  const max = Math.max(...res.rows.map((r) => Number(r[metric] ?? 0)), 1e-9);
-  const extra = ["params", "fidelity", "sparsity"].filter((k) => res.rows.some((r) => r[k] !== undefined) && k !== metric);
+  const head = (k: string) => esc(cap(keyLabel(k)));
+  const rows = res.rows as Record<string, unknown>[];
+  const max = Math.max(...rows.map((r) => Number(r[metric] ?? 0)), 1e-9);
+  const extra = EXTRA.filter((k) => rows.some((r) => r[k] !== undefined) && k !== metric);
   const other = metric === "acc" ? "target_ap" : "acc";
-  const showOther = res.rows.some((r) => r[other] !== undefined);
-  let h = `<div class="tablewrap" tabindex="0"><table class="restable"><thead><tr><th scope="col">Model</th><th scope="col" class="num">${label}</th>${showOther ? `<th scope="col" class="num">${other === "acc" ? "accuracy" : "bird AP"}</th>` : ""}${extra.map((k) => `<th scope="col" class="num">${k}</th>`).join("")}</tr></thead><tbody>`;
-  for (const r of res.rows) {
+  const showOther = rows.some((r) => r[other] !== undefined);
+  let h = `<div class="tablewrap" tabindex="0" role="region" aria-label="Run results"><table class="restable"><thead><tr><th scope="col">Model</th><th scope="col" class="num">${head(metric)}</th>${showOther ? `<th scope="col" class="num">${head(other)}</th>` : ""}${extra.map((k) => `<th scope="col" class="num">${head(k)}</th>`).join("")}</tr></thead><tbody>`;
+  for (const r of rows) {
     const v = r[metric] as number | undefined;
-    h += `<tr><td>${esc(r.label)}${v !== undefined ? `<div class="bar" aria-hidden="true"><i style="width:${(100 * v) / max}%"></i></div>` : ""}</td><td class="num">${fmt(v)}</td>${showOther ? `<td class="num">${fmt(r[other])}</td>` : ""}${extra.map((k) => `<td class="num">${fmt(r[k], k)}</td>`).join("")}</tr>`;
+    // The row every bird is measured against, said in words when its label doesn't already.
+    const ref = r.ref === true && !/reference/i.test(String(r.label)) ? ` <span class="ref-note">(reference)</span>` : "";
+    h += `<tr><td>${esc(r.label)}${ref}${v !== undefined ? `<div class="bar" aria-hidden="true"><i style="width:${(100 * v) / max}%"></i></div>` : ""}</td><td class="num">${fmt(v)}</td>${showOther ? `<td class="num">${fmt(r[other])}</td>` : ""}${extra.map((k) => `<td class="num">${fmt(r[k], k)}</td>`).join("")}</tr>`;
   }
   h += "</tbody></table></div>";
-  if (res.chart) h += lineChart(res.chart, label);
+  if (res.chart) h += lineChart(res.chart, cap(keyLabel(metric)));
   if (res.note) h += `<p class="run-note">${esc(res.note)}</p>`;
-  const ran = Object.entries(res.params).map(([k, v]) => `${k} ${v}`).join(", ") || "default settings";
+  const ran = settingsText(res.params, labels) || "default settings";
   h += `<p class="run-meta">Ran in ${res.seconds.toFixed(1)} s with ${esc(ran)}.</p>`;
   return h;
 }

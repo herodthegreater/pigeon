@@ -34,7 +34,7 @@ From `layer_drop` (accuracy on 20 classes; KD rows are mean of 2 seeds, 1,500 re
 
 Deleting even one plain layer drops accuracy to chance (5% for 20 classes). Residual nets lose accuracy gradually. With recovery the difference disappears: both architectures end at or slightly above their 8-layer teacher, even with 6 of 8 hidden layers gone. The teacher was much deeper than this task needs, and recovery (distilling on 28,000 inputs) is also extra training, which is how a cut model can beat it. A DistilBERT-style student built from every other teacher layer scored 0.9162, against 0.9192 from a random init, so the inherited layers gave no head start.
 
-Page runs (500 recovery steps): at the defaults (residual, 2 deleted, KD), 0.8044 before recovery and 0.9154 after. Plain with 2 deleted goes from 0.066 to 0.9064. Residual with 6 deleted goes from 0.258 to 0.8963.
+Page runs (500 recovery steps): at the defaults (residual, 2 deleted, KD), 0.8051 before recovery and 0.9174 after. Plain with 2 deleted goes from 0.0722 to 0.9069. Residual with 6 deleted goes from 0.2549 to 0.8967.
 
 The toy can't measure latency, and its layers are identical. That 2 hidden layers suffice here says nothing about a detector.
 
@@ -54,4 +54,4 @@ The toy can't measure latency, and its layers are identical. That 2 hidden layer
 
 ## Going further
 
-In language models, the ShortGPT page in this lab scores transformer blocks by how little they change the residual stream,, a cheaper score than trial deletion. LayerDrop (Fan et al.) trains with random layer deletion so the model tolerates it later. pigeon does not delete layers. Its cockpit cuts channels within stages (`harness/mask.py`, `harness/prune.py`). In YOLOv8, many backbone blocks contain residual bottlenecks, so block deletion is a lever pigeon could try, guided by the cockpit's per-stage sensitivity scan and followed by fine-tuning.
+In language models, the ShortGPT page in this lab scores transformer blocks by how little they change the residual stream, a cheaper score than trial deletion. LayerDrop (Fan et al.) trains with random layer deletion so the model tolerates it later. The YOLOv8n cockpit does not delete layers. It cuts channels within stages (`harness/mask.py`, `harness/prune.py`). In YOLOv8, many backbone blocks contain residual bottlenecks, so block deletion is a lever the cockpit could try, guided by the cockpit's per-stage sensitivity scan and followed by fine-tuning.

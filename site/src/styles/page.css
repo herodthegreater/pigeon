@@ -21,7 +21,10 @@
 /* A titled group of entries (a family, a category, a group of experiments). */
 .group { display: flex; flex-direction: column; gap: var(--space-2); }
 .group > h2 { font-size: var(--step-2); }
-.group > h3 { font-size: var(--step-1); }
+/* A group label above ruled entries is an index label, set in the body face, so it
+   doesn't compete with the serif entry names below it (Field Guide categories,
+   Results' experiment groups). */
+.group > h3 { font-family: var(--body); font-size: var(--step-0); font-weight: 600; }
 .group > p { color: var(--muted); max-width: var(--measure); }
 
 /* Ruled entries: each row is one link, the whole row is the target. */
@@ -41,20 +44,24 @@
 }
 
 /* Two columns: the reading on the left, a side panel (run box, contents) on the right.
-   Phones get the panel first only when it holds the page's main action. */
+   Below 960px they stack in source order, so a page whose panel must come before a
+   long read puts it first in the source (Results) or repeats it above (method contents). */
 .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: var(--space-6); align-items: start; }
 .cols > * { min-width: 0; } /* long code and tables scroll inside their own box, never widen the page */
-/* The side panel follows the reader, and scrolls on its own once a run result makes it tall. */
+/* The side panel follows the reader, and scrolls on its own once a run result makes it tall.
+   A scroll box clips what overflows it, focus rings included, so the padding gives the
+   ring room inside it and the negative margin keeps the panel's edges where they were. */
 .side {
   display: flex; flex-direction: column; gap: var(--space-4); position: sticky; top: var(--space-3);
   max-height: calc(100vh - 2 * var(--space-3)); overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--space-1); margin: calc(-1 * var(--space-1));
 }
 .panel { border-top: 2px solid var(--ink); padding-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
 .panel > h2 { font-size: var(--step-1); }
 .panel > p { font-size: var(--step--1); color: var(--muted); }
 @media (max-width: 960px) {
   .cols { grid-template-columns: minmax(0, 1fr); }
-  .side { position: static; max-height: none; overflow: visible; }
+  .side { position: static; max-height: none; overflow: visible; padding: 0; margin: 0; }
 }
 
 /* Contents list for long pages. */
@@ -68,4 +75,5 @@
 /* Errors and loading lines that name what is happening. */
 .state { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
 .state.error { color: var(--bad); font-family: var(--body); }
-.error-box { border: 1px solid var(--bad); background: var(--bad-wash); color: var(--ink); padding: var(--space-3); border-radius: var(--radius); font-size: var(--step--1); }
+/* Square, like every panel and plate (prose.css explains the one radius). */
+.error-box { border: 1px solid var(--bad); background: var(--bad-wash); color: var(--ink); padding: var(--space-3); font-size: var(--step--1); }

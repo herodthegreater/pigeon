@@ -31,17 +31,17 @@ Choosing the mask per block, not all at once, is the paper's *adaptive mask sele
 
 ## What the simulations show
 
-3x256 teacher (0.9139), 512 calibration inputs. The hidden layers are pruned, including the first (12 raw inputs). The output layer stays dense, like `lm_head` in the papers. All three methods remove the same number of weights in every row, so the nonzero counts match: 72,980 at 0.5, 46,356 at 0.7 and 19,476 at 0.9, out of 140,052.
+3x256 teacher (0.9150), 512 calibration inputs. The hidden layers are pruned, including the first (12 raw inputs). The output layer stays dense, like `lm_head` in the papers. All three methods remove the same number of weights in every row, so the nonzero counts match: 72,980 at 0.5, 46,356 at 0.7 and 19,476 at 0.9, out of 140,052.
 
 | fraction removed, block size | magnitude | Wanda | SparseGPT |
 |---|---|---|---|
-| 0.5, 32 | 0.8841 | 0.8797 | 0.8946 |
-| 0.7, 32 | 0.7772 | 0.7261 | 0.8333 |
-| 0.7, 256 | 0.7772 | 0.7261 | 0.8250 |
-| 0.7, 4 | 0.7772 | 0.7261 | 0.7385 |
-| 0.9, 32 | 0.1430 | 0.1106 | 0.2601 |
+| 0.5, 32 | 0.8899 | 0.8838 | 0.8946 |
+| 0.7, 32 | 0.7696 | 0.7187 | 0.8326 |
+| 0.7, 256 | 0.7696 | 0.7187 | 0.8275 |
+| 0.7, 4 | 0.7696 | 0.7187 | 0.7344 |
+| 0.9, 32 | 0.1302 | 0.1152 | 0.2417 |
 
-At 50%, all three are within 1.5 points of each other. At 70%, error compensation is worth 5.6 points over magnitude and 10.7 over Wanda. Block size matters at the small end: with blocks of 4 columns, each mask decision sees too little of the row, and SparseGPT falls to 0.7385, between Wanda and magnitude. Blocks of 32 and 256 are close. At 90% everything fails, though SparseGPT fails least.
+At 50%, all three are within 1.1 points of each other. At 70%, error compensation is worth 6.3 points over magnitude and 11.4 over Wanda. Block size matters at the small end: with blocks of 4 columns, each mask decision sees too little of the row, and SparseGPT falls to 0.7344, between Wanda and magnitude. Blocks of 32 and 256 are close. At 90% everything fails, though SparseGPT fails least.
 
 ## When it breaks
 

@@ -40,14 +40,14 @@ Both are added to the KD loss with a weight, and both need the teacher's hidden 
 | KD + similarity-preserving | 0.6666 |
 | hint only (+labels) | 0.6223 |
 
-Neither term adds to plain KD beyond seed noise (standard deviations here are 0.004-0.010), and a hint with labels but no KD is worse than labels alone. This page's runs (1000 steps, seed 0, width 16) agree: KD 0.5854; KD + SP at weight 50 gave 0.5829, at weight 1 gave 0.5850; KD + hint at weight 0.05 gave 0.5897, at weight 5 gave 0.5116.
+Neither term adds to plain KD beyond seed noise (standard deviations here are 0.004-0.010), and a hint with labels but no KD is worse than labels alone. This page's runs (1000 steps, seed 0, width 16) agree: KD 0.5850; KD + SP at weight 50 gave 0.5800, at weight 1 gave 0.5846; KD + hint at weight 0.05 gave 0.5892, at weight 5 gave 0.5092.
 
 Likely reason: forcing 16 student units to linearly predict 256 teacher units uses capacity the student needs for the task. The toy also lacks what makes these methods work on images: spatial feature maps, where "which region is active" is a cheap, transferable signal.
 
 ## When it breaks
 
 - The loss weight must be tuned to the term's natural scale: here a hint works around 0.05 and SP around 50 (the page default).
-- Too large a hint weight crowds out the task (0.5116 at weight 5 above).
+- Too large a hint weight crowds out the task (0.5092 at weight 5 above).
 - Which layers to pair is a guess; a hint at the wrong depth can fight the student's own solution.
 - SP depends on the batch: small batches give a poor Gram matrix, and cost grows as `N²`.
 

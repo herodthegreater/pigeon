@@ -27,6 +27,9 @@ export type Boot = { stage: "download"; bytes: number } | { stage: "score"; done
 
 export const QUICK = 100;
 
+/** The browser lacks what the engine needs (Web Workers, WebAssembly): a reload or a better connection can't fix it. */
+export class Unsupported extends Error {}
+
 export class Engine {
   private worker: Worker | null;
   private nextId = 1;
@@ -36,10 +39,18 @@ export class Engine {
   constructor(private onBoot?: (b: Boot) => void) {
     if (typeof Worker === "undefined" || typeof WebAssembly === "undefined") {
       this.worker = null;
-      this.ready = Promise.reject(new Error("this browser can't run Web Workers with WebAssembly"));
+      this.ready = Promise.reject(new Unsupported("this browser can't run Web Workers with WebAssembly"));
       return;
     }
-    const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    } catch {
+      // Browsers without module workers throw here rather than failing later.
+      this.worker = null;
+      this.ready = Promise.reject(new Unsupported("this browser can't start the engine's background worker"));
+      return;
+    }
     this.worker = worker;
     let booted = false;
     this.ready = new Promise((resolve, rejectReady) => {

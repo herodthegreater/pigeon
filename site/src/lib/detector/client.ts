@@ -16,25 +16,39 @@ export interface LiveHandlers {
   onError?: (message: string) => void;
 }
 
-/** Why the detector can't start in this browser, said plainly; null when it can. */
-export function missingSupport(): string | null {
-  if (typeof Worker === "undefined") return "this browser can't run background workers (Web Workers)";
-  if (typeof OffscreenCanvas === "undefined") return "this browser can't draw off screen (OffscreenCanvas), which the detector needs to reach WebGL from a worker";
+/**
+ * Why the detector can't start in this browser, said plainly; null when it can.
+ * `setting` is true when a browser setting (hardware acceleration) might fix it, so a reload afterwards can help.
+ */
+export function missingSupport(): { reason: string; setting: boolean } | null {
+  if (typeof Worker === "undefined") return { reason: "this browser can't run background workers (Web Workers)", setting: false };
+  if (typeof OffscreenCanvas === "undefined")
+    return { reason: "this browser can't draw off screen (OffscreenCanvas), which the detector needs to reach WebGL from a worker", setting: false };
   const canvas = document.createElement("canvas");
-  if (!canvas.getContext("webgl2")) return "this browser has WebGL 2 turned off or doesn't support it";
+  if (!canvas.getContext("webgl2")) return { reason: "this browser has WebGL 2 turned off or doesn't support it", setting: true };
   return null;
 }
 
+/** The worker couldn't get WebGL: hardware acceleration may be off. */
 export class NoWebGL extends Error {}
+/** The browser can't start the detector's module worker at all. */
+export class NoWorker extends Error {}
 
 export class DetectorEngine {
-  private worker: Worker;
+  private worker: Worker | null = null;
   private nextId = 1;
   private current: { id: number; h: LiveHandlers } | null = null;
   readonly ready: Promise<Ready>;
 
   constructor(private onBoot: (b: Boot) => void) {
-    const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    } catch {
+      // Browsers without module workers throw here rather than failing later.
+      this.ready = Promise.reject(new NoWorker("this browser can't start the detector's background worker"));
+      return;
+    }
     this.worker = worker;
     let booted = false;
     this.ready = new Promise((resolve, rejectReady) => {
@@ -67,7 +81,7 @@ export class DetectorEngine {
   evaluate(recipe: DetectorRecipe, h: LiveHandlers) {
     const id = this.nextId++;
     this.current = { id, h };
-    this.worker.postMessage({ type: "evaluate", id, recipe, quick: true });
+    this.worker?.postMessage({ type: "evaluate", id, recipe, quick: true });
   }
 
   private fail(message: string, id?: number) {

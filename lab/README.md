@@ -1,7 +1,7 @@
 # lab: distillation & compression simulations
 
-pigeon asks *how much of a general model does one task need?* on a real YOLO
-detector, where every experiment costs minutes of GPU time and one COCO subset.
+The YOLOv8n cockpit asks *how much of a general model does one task need?* on a
+real YOLO detector, where every experiment costs minutes of GPU time and one COCO subset.
 This lab asks the same question in a **miniature world where everything is
 known**, so that each way of making a model smaller, or a small model better,
 can be run thousands of times on a laptop CPU, with seeds and error bars, and
@@ -19,10 +19,11 @@ python -m lab.web                 # http://127.0.0.1:8100
 
 - **Small networks / Language models / Vision**: every method on its own page
   with a plain-language write-up, the exact source code that runs (read from
-  the repo), a **Run it** panel that trains and compresses a real model in
-  seconds, and the simulation figures. Methods are tagged *runs here*,
-  *runs in the cockpit* (pigeon's YOLO code, needs torch) or *reference*
-  (needs a model this repo doesn't have, e.g. a language model).
+  the repo), a **Run it** panel that trains and compresses a real model (most
+  runs take seconds to a minute), and the simulation figures. Methods are
+  tagged *runs here*, *runs in the cockpit* (the YOLOv8n cockpit's code, needs
+  torch) or *reference* (needs a model this repo doesn't have, e.g. a language
+  model).
 - **Build it yourself**: 10 coding lessons, from softmax and backprop to
   distillation, pruning, quantization, the SVD and GPTQ. You write the code in
   the page; it runs hidden tests against it (gradient checks, comparisons with
@@ -40,6 +41,30 @@ pre-rendered JSON; the trained models ship as `.npz` files in
 `lab_bundle.zip`; lesson checks run in the worker with a 30-second limit
 (a runaway loop just restarts Python). Nothing needs a backend, so it's free to
 host and safe to make public.
+
+### The shipped models (`models/`)
+
+The eight trained models behind the Run buttons (the 3x256 teacher at seeds
+0 to 3, the plain and residual 8x128 teachers, the distilled 2x32 student and
+the 4,000 inverted inputs) are committed in `lab/models/`. The static build
+packs those files byte for byte and never trains, so CI can't drift: training
+the same model on another machine or BLAS gives slightly different weights, and
+every number a write-up quotes from its page's Run would move with them.
+`common.cached` falls back to these files before training anything, so a fresh
+clone and the browser use the same weights (LAB_QUICK models never come from
+here). `lab/tests/test_quotes.py` re-runs a sample of the quoted runs against
+them.
+
+To change what the site ships, train or load the models and write them out,
+then re-measure every quoted page run in Pyodide
+(`lab/web/run_in_pyodide.cjs`) and update the write-ups:
+
+```bash
+python -m lab.web.build_static --save-models   # lab/.cache wins, then lab/models; the rest is trained
+```
+
+The experiments in `results/` were recorded with an earlier training of the
+same 3x256 teacher (0.9139 test accuracy); the shipped one scores 0.9150.
 
 `.github/workflows/pages.yml` runs the tests, builds the site and deploys it on
 every push to `main` that touches `lab/`. One-time setup: in the repository's
@@ -103,7 +128,8 @@ Superclass structure is what gives soft labels *dark knowledge*: "70 % bird,
 | `lessons.py` | the 10 build-it-yourself lessons and the sandboxed checker |
 | `web/` | FastAPI server + a dependency-free single-page front end; `web/content/methods/*.md` are the write-ups; `web/build_static.py` + `web/static/worker.js` make the in-browser (GitHub Pages) version |
 | `tests/` | pytest suite generated from the registry |
-| `common.py` | shared world, cached teachers, step-budgeted `scratch` / `distill` helpers, registry |
+| `common.py` | shared world, cached teachers (lab/.cache, then the shipped `models/`), step-budgeted `scratch` / `distill` helpers, registry |
+| `models/` | the trained models the website ships, committed so CI never retrains them |
 | `experiments/` | the 28 experiments |
 | `report.py` | results → figures + `results/RESULTS.md` |
 | `selftest.py` | gradient checks for every loss and layer type |
@@ -154,7 +180,7 @@ data-starved teachers (`teacher_checkpoints`), label-smoothed teachers
 students that don't match their teachers (`fidelity_gap`).
 
 **Specialist data edge case**: what if the recovery data only contains the
-target class, like pigeon's 400 all-bird fine-tune images? (`specialist_data`)
+target class, like the cockpit's 400 all-bird fine-tune images? (`specialist_data`)
 
 ## Limits of a toy world
 

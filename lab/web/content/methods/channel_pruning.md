@@ -1,6 +1,6 @@
 ## The idea
 
-A convolution layer outputs a stack of feature maps called *channels*, one per filter. Deleting a channel removes that filter and one input slice of every layer that reads it, so the model gets smaller and does less arithmetic. With residual adds and concatenations, one channel is read by several layers, and all of them must lose it together or the shapes stop matching. That set is a *dependency group*. The torch-pruning library finds the groups by tracing the network; pigeon adds one rewrite so YOLOv8's main block can be traced.
+A convolution layer outputs a stack of feature maps called *channels*, one per filter. Deleting a channel removes that filter and one input slice of every layer that reads it, so the model gets smaller and does less arithmetic. With residual adds and concatenations, one channel is read by several layers, and all of them must lose it together or the shapes stop matching. That set is a *dependency group*. The torch-pruning library finds the groups by tracing the network; the YOLOv8n cockpit adds one rewrite so YOLOv8's main block can be traced.
 
 ## How it works
 

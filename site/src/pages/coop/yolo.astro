@@ -4,6 +4,7 @@ import CoopPicker from "../../components/CoopPicker.astro";
 import { SPECIES } from "../../lib/ui/mascot";
 import { HEALTHY_KEEP, SKELETON_KEEP } from "../../lib/detector/score";
 import { QUICK } from "../../lib/detector/recipe";
+import "../../styles/coop.css";
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 const testsets = import.meta.glob<{ images: unknown[] }>("/public/testset/testset.json", { eager: true, import: "default" });
@@ -17,6 +18,8 @@ if (!model) throw new Error("public/coop/yolov8n/model.json is missing: run cock
 const rec = model.recorded;
 const ladder = SPECIES.filter((s) => s.minRatio > 0).map((s) => `${s.name.split(" ").pop()!.toLowerCase()} from ${s.minRatio}×`).join(", ");
 const keepPct = (v: number) => `${Math.round(v * 100)}%`;
+// The life list is its own page; the cage links to it only when that page is in the build, so no build ships a dead link.
+const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/src/pages/life-list/index.astro"], { query: "?raw", import: "default" })).length > 0;
 ---
 <Base title="YOLOv8n · The Coop · Pigeon" active="coop" description="Compress YOLOv8n, a real bird-finding detector, in your browser and score it on 500 test photos.">
   <main id="main" class="coop">
@@ -33,6 +36,7 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
             <p class="bird-note">The Coop runs YOLOv8n inside your browser, so it needs JavaScript. Turn JavaScript on and reload the page.</p>
             <style is:inline>#bird-condition, #bird-note, #board, #work { display: none; }</style>
           </noscript>
+          {lifeList && <p class="life"><a href={`${base}life-list/`}>Your life list</a> <span id="life-count"></span></p>}
           <button type="button" class="btn retry" id="retry" hidden>Reload the page</button>
         </div>
       </div>
@@ -46,7 +50,7 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
           <div class="metric"><dt>Compute</dt><dd class="value num"><span id="m-macs">…</span><small id="m-macs-d"></small></dd><dd class="desc">multiply-adds per photo, live channels only</dd></div>
         </dl>
         <p class="basis" id="basis"></p>
-        <p class="rule-line" id="rule">
+        <p class="record rule-line" id="rule">
           The bird's species follows how many times smaller the weights are than native ({ladder}).
           Its health follows AP kept: healthy at {keepPct(HEALTHY_KEEP)} of native or more, a skeleton at {keepPct(SKELETON_KEEP)} or less, starving in between.
         </p>
@@ -58,7 +62,7 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
       <section class="recipe-col" aria-labelledby="recipe-title">
         <div class="pane-head">
           <h2 id="recipe-title">Recipe</h2>
-          <button type="button" class="btn secondary" id="reset" disabled>Reset to native</button>
+          <button type="button" class="btn secondary" id="reset" autocomplete="off" disabled>Reset to native</button>
         </div>
         <p class="intro">One precision for every weight, and a channel cut for each stage. Every change scores YOLOv8n again: first on {QUICK} photos for a quick estimate, then on all {photos}.</p>
         <div id="recipe"><p class="waiting">The controls appear once native YOLOv8n has been scored.</p></div>
@@ -74,10 +78,11 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
         <section class="pane" aria-labelledby="tried-title">
           <div class="pane-head">
             <h2 id="tried-title">Everything you've tried</h2>
-            <button type="button" class="btn secondary" id="clear" disabled>Clear history</button>
+            <button type="button" class="btn secondary" id="clear" autocomplete="off" disabled>Clear history</button>
           </div>
-          <div class="runs-scroll" id="runs"><p class="waiting">No runs yet: the first one is native YOLOv8n, scored as the page loads.</p></div>
-          <p class="caption">One row per full {photos}-photo scoring run, kept in this browser. The highlighted row is the recipe on screen now.</p>
+          <div class="runs-scroll" id="runs" tabindex="0" role="region" aria-label="Every run, as a table"><p class="waiting">No runs yet: the first one is native YOLOv8n, scored as the page loads.</p></div>
+          <p class="caption">One row per full {photos}-photo scoring run, kept in this browser. The highlighted row is the recipe on screen now; the last column is the bird's condition.</p>
+          <p class="caption" id="store-note" hidden>This browser won't let the page save anything, so these runs will be gone when you leave or reload.</p>
         </section>
 
         <section class="pane about" aria-labelledby="about-title">
@@ -87,146 +92,22 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
           <p>Size counts every stored bit: weights at the recipe's precision, one 16-bit number per shared scale, and biases kept at 16 bits. Native is Ultralytics' checkpoint with BatchNorm folded into the convolutions, stored as fp16: {(model.params * 2 / 1e6).toFixed(2)} MB for {(model.params / 1e6).toFixed(2)} million parameters. Precision never changes compute; only channel cuts do.</p>
           <p class="credits">
             YOLOv8n is by <a href="https://github.com/ultralytics/ultralytics">Ultralytics</a>, under the <a href="https://github.com/ultralytics/ultralytics/blob/main/LICENSE">AGPL-3.0 license</a>.
-            The photos come from Open Images; each one is credited by name in the <a href={`${base}coop/#drawer-title`}>specimen drawer on Pigeon's page</a>, and the twelve above link to their sources.
+            The photos come from Open Images. The twelve above link to their sources, as do the twenty-four in the <a href={`${base}coop/#drawer-title`}>specimen drawer on Pigeon's page</a>; every photo's author, source and license are listed in the <a href={`${base}testset/testset.json`}>test set's index</a> (JSON).
           </p>
         </section>
       </div>
     </div>
   </main>
 
-  <!-- The page's own markup: the same look as the Pigeon cage (coop/index.astro). -->
-  <style>
-    .coop {
-      max-width: 1320px; margin: 0 auto; padding: var(--space-5) var(--gutter) var(--space-8);
-      display: flex; flex-direction: column; gap: var(--space-6);
-    }
-    h2 { font-size: var(--step-2); }
-
-    .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--space-5); }
-    .bird-card {
-      background: var(--card); border: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-      align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5) var(--space-3) var(--space-2);
-    }
-    .bird { transition: opacity 0.25s; }
-    .bird.swap { opacity: 0; }
-    .bird-meta { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-    .bird-meta h1 { font-size: var(--step-3); }
-    .latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
-    .bird-note { color: var(--muted); margin-top: var(--space-2); }
-    .retry { align-self: start; margin-top: var(--space-2); }
-    /* The bird's condition: a plain sentence-case line whose color is the state. */
-    .condition { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
-    .condition[data-c="healthy"] { color: var(--good); }
-    .condition[data-c="emaciated"] { color: var(--warn); }
-    .condition[data-c="skeleton"], .condition[data-c="error"] { color: var(--bad); }
-
-    .board { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-    .status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
-    .bar { flex: 1 1 120px; height: 3px; background: var(--sunk); max-width: 220px; }
-    .bar span { display: block; height: 100%; width: 0; background: var(--teal); transition: width 0.15s; }
-    .board[data-state="error"] .status { color: var(--bad); font-family: var(--body); }
-    .board[data-state="error"] .bar { display: none; }
-
-    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border: 1px solid var(--rule); background: var(--card); }
-    .metric { padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-    .metric + .metric { border-left: 1px solid var(--rule); }
-    .metric dt { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
-    .metric dd { margin: 0; }
-    .value {
-      font-family: var(--display); font-size: var(--step-3); font-weight: 600; line-height: 1.1;
-      display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2);
-    }
-    .value small { font-family: var(--mono); font-size: var(--step--2); font-weight: 400; }
-    .value small.down { color: var(--bad); }
-    .value small.up { color: var(--good); }
-    .value small.flat { color: var(--muted); }
-    .metrics.estimate .value > span:first-child { color: var(--muted); }
-    .desc { font-size: var(--step--2); color: var(--muted); line-height: 1.35; }
-    .basis { font-size: var(--step--1); color: var(--muted); }
-    .basis:empty { display: none; }
-    /* The rule the bird follows: a ruled record line, like an entry in a field notebook. */
-    .rule-line { border-block: 1px solid var(--rule); padding-block: var(--space-3); font-size: var(--step--1); }
-
-    .work { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
-    /* Sticky and scrollable on wide screens; the padding keeps focus rings inside the scroll box. */
-    .recipe-col {
-      display: flex; flex-direction: column; gap: var(--space-3); position: sticky; top: var(--space-3);
-      max-height: calc(100vh - 2 * var(--space-3)); overflow: auto; padding: var(--space-1); margin: calc(-1 * var(--space-1));
-    }
-    .intro { color: var(--muted); font-size: var(--step--1); }
-
-    .results { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
-    .pane { display: flex; flex-direction: column; gap: var(--space-3); }
-    .pane-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
-    .caption { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
-    .waiting { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); padding: var(--space-3) 0; }
-    .specimens .waiting { grid-column: 1 / -1; }
-    .runs-scroll { overflow-x: auto; }
-    .about { border-top: 1px solid var(--rule); padding-top: var(--space-4); }
-    .about p { max-width: var(--measure); font-size: var(--step--1); }
-    .about .credits { color: var(--muted); }
-
-    /* Touch: the credit links get a full tap target, even mid-sentence. */
-    @media (pointer: coarse), (max-width: 640px) {
-      .about a { display: inline-flex; align-items: center; min-height: var(--tap); }
-    }
-    @media (max-width: 1000px) {
-      .hero, .work { grid-template-columns: minmax(0, 1fr); }
-      .recipe-col { position: static; max-height: none; overflow: visible; }
-    }
-    @media (max-width: 640px) {
-      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .metric:nth-child(3) { border-left: 0; }
-      .metric:nth-child(n + 3) { border-top: 1px solid var(--rule); }
-      .bird-card { grid-template-columns: minmax(0, 1fr); padding: var(--space-3); }
-    }
-  </style>
-
-  <!-- Markup the scripts inject (bird, recipe editor, photo tiles, runs table). -->
+  <!-- YOLOv8n's own injected markup: the precision note, the stage sliders, the detections and the about notes. The shared look is in styles/coop.css. -->
   <style is:global>
-    #bird svg { width: 100%; height: auto; display: block; }
-    .coop input[type="radio"], .coop input[type="range"] { accent-color: var(--teal); }
+    .coop .about { border-top: 1px solid var(--rule); padding-top: var(--space-4); }
+    .coop .about p { max-width: var(--measure); font-size: var(--step--1); }
+    .coop .about .credits { color: var(--muted); }
+    .coop .rule-line { font-size: var(--step--1); }
 
-    /* Recipe editor: lib/ui/yolorecipe.ts */
-    #recipe { display: flex; flex-direction: column; gap: var(--space-4); }
-    #recipe .sub { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
-    #recipe .presets { display: flex; flex-direction: column; gap: var(--space-2); }
-    #recipe .preset-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    #recipe button {
-      display: inline-flex; align-items: center; min-height: 36px; padding: var(--space-1) var(--space-3);
-      border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--card); color: var(--ink);
-      font-size: var(--step--1); cursor: pointer;
-    }
-    #recipe button:hover { border-color: var(--teal); }
-    #recipe button:disabled { opacity: 0.6; cursor: default; }
-    #recipe button:disabled:hover { border-color: var(--rule-strong); }
-    #recipe .preset[aria-pressed="true"] { background: var(--teal-wash); border-color: var(--teal); font-weight: 600; }
-    #recipe .remove { color: var(--muted); }
-    /* Two lines reserved, so the steps below don't jump as hints change. */
-    #recipe .preset-hint { font-size: var(--step--1); color: var(--muted); min-height: 3.1em; }
-    #recipe .step { border: 1px solid var(--rule); background: var(--card); }
-    #recipe .step-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--rule); }
-    #recipe .step-head h3 { font-size: var(--step-1); flex: 1; }
-    #recipe .step-body { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
-    #recipe .field { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); font-size: var(--step--1); }
-    #recipe .field output { font-family: var(--mono); color: var(--teal); }
-    #recipe .field select {
-      min-height: 36px; padding: var(--space-1) var(--space-2);
-      border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink);
-    }
-    #recipe input[type="range"] { width: 100%; margin: 0; }
-    #recipe fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-    #recipe fieldset:disabled { opacity: 0.6; }
-    #recipe legend { padding: 0; margin-bottom: var(--space-1); }
-    #recipe .note { font-size: var(--step--1); color: var(--muted); }
-    #recipe .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--rule-strong); border-radius: var(--radius); overflow: hidden; }
     #recipe .seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    #recipe .seg label { position: relative; }
-    #recipe .seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
-    #recipe .seg span { display: grid; place-items: center; min-height: 32px; padding: var(--space-1); text-align: center; font-size: var(--step--1); }
-    #recipe .seg label + label span { border-left: 1px solid var(--rule-strong); }
-    #recipe .seg input:checked + span { background: var(--teal-wash); color: var(--ink); font-weight: 600; }
-    #recipe .seg input:focus-visible + span { outline: 2px solid var(--magenta); outline-offset: -2px; }
+    #recipe fieldset:disabled { opacity: 0.6; }
     #recipe fieldset:disabled .seg input { cursor: default; }
     /* Stage cuts: one ruled line per stage, the label (layer, kind, share of compute), its slider, its value. */
     #recipe .stages { display: flex; flex-direction: column; margin-top: var(--space-2); }
@@ -240,65 +121,36 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
     #recipe .stage .share { flex-basis: 100%; font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
     #recipe .stage output { font-family: var(--mono); color: var(--teal); text-align: right; }
 
-    /* Photo tiles: lib/ui/detections.ts */
-    #tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }
-    #tiles .specimen { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); position: relative; }
-    #tiles .frame { position: relative; aspect-ratio: 1; max-width: 100%; background-repeat: no-repeat; border: 2px solid transparent; }
+    /* Detections: dashed magenta over the same dark keyline the teal truth boxes get. */
+    #tiles .boxes .found-boxes rect { stroke: var(--detect-box); stroke-width: 2; stroke-dasharray: 5 3; }
     #tiles .specimen[data-lost="true"] .frame { border-color: var(--bad); }
-    #tiles .boxes { position: absolute; inset: 0; width: 100%; height: 100%; }
-    #tiles .truth-boxes rect { fill: none; stroke: var(--truth-box); stroke-width: 1; vector-effect: non-scaling-stroke; }
-    #tiles .found-boxes rect { fill: none; stroke: var(--detect-box); stroke-width: 2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
-    #tiles figcaption { display: flex; flex-direction: column; font-size: var(--step--2); line-height: 1.3; }
-    #tiles .truth { font-weight: 600; }
-    #tiles .verdict { color: var(--muted); }
     #tiles .specimen[data-lost="true"] .verdict { color: var(--bad); }
     #tiles .was { color: var(--muted); }
     #tiles .was:empty { display: none; }
-    #tiles .credit { font-size: var(--step--2); color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* The whole tile is the link to the source photo, so the tap target is the photo, not a 12px line of text. */
-    #tiles .credit::after { content: ""; position: absolute; inset: 0; }
-    /* The hidden "(opens in a new tab)" would otherwise sit past the clipped credit line, off the page's right edge. */
-    #tiles .credit .visually-hidden { left: 0; top: 0; }
-    #tiles .specimen:hover .credit { text-decoration: underline; }
-    @supports selector(:has(*)) {
-      #tiles .specimen:has(.credit:focus-visible) { outline: 2px solid var(--magenta); outline-offset: 2px; }
-      #tiles .credit:focus-visible { outline: none; }
-    }
 
-    /* Runs table */
-    #runs table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
-    #runs th, #runs td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--rule); }
-    #runs th { font-weight: 600; }
-    #runs td:first-child { min-width: 10em; }
-    #runs .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    #runs tr[aria-current="true"] td { background: var(--teal-wash); }
-    #runs td.c-healthy { color: var(--good); }
-    #runs td.c-emaciated { color: var(--warn); }
-    #runs td.c-skeleton { color: var(--bad); }
-
-    /* Touch: every injected control gets a 44px target. */
+    /* Touch: the credit links get a full tap target, even mid-sentence. */
     @media (pointer: coarse), (max-width: 640px) {
-      #recipe button, #recipe .field select, #recipe .seg span { min-height: var(--tap); }
-      #recipe .remove { padding-inline: var(--space-3); }
-      #recipe input[type="range"] { height: var(--tap); }
+      .coop .about a { display: inline-flex; align-items: center; min-height: var(--tap); }
     }
     @media (max-width: 640px) {
-      #tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       #recipe .stage { grid-template-columns: 8.5em minmax(0, 1fr) 2.75em; gap: 0 var(--space-2); }
     }
   </style>
 
   <script>
-    import { DetectorEngine, missingSupport, NoWebGL, type Boot, type Ready, type Result } from "../../lib/detector/client";
+    import { DetectorEngine, missingSupport, NoWebGL, NoWorker, type Boot, type Ready, type Result } from "../../lib/detector/client";
     import { YoloRecipeEditor } from "../../lib/ui/yolorecipe";
     import { Detections } from "../../lib/ui/detections";
     import { detectorCondition } from "../../lib/detector/score";
-    import { describe, nativeRecipe, QUICK } from "../../lib/detector/recipe";
+    import { describe, isNative, nativeRecipe, sameRecipe, PRESETS, QUICK, type DetectorRecipe } from "../../lib/detector/recipe";
     import { sheetUrl } from "../../lib/detector/files";
-    import { mascotSVG, DODO } from "../../lib/ui/mascot";
+    import { mascotSVG, speciesNote, CONDITION_WORD, DODO, type Condition } from "../../lib/ui/mascot";
+    import { birdFor } from "../../lib/ui/birds";
+    import { bindLifeListCount, cageHref, sight } from "../../lib/ui/coopbirds";
 
     const $ = (id: string) => document.getElementById(id)!;
     const STORE = "pigeon.coop.yolo.runs";
+    const CAGE = `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}coop/yolo/`;
     const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
     const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
     const size = (b: number) => (b >= 1e6 ? `${(b / 1e6).toFixed(2)} MB` : `${Math.round(b / 1e3)} KB`);
@@ -306,10 +158,25 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
     const secs = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
     const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
-    interface Run { label: string; ap: number; kept: number; bytes: number; macs: number; condition: string }
+    interface Run { label: string; ap: number; kept: number; bytes: number; macs: number; condition: Condition }
     let runs: Run[] = [];
-    try { runs = JSON.parse(localStorage.getItem(STORE) ?? "[]"); } catch {}
+    let canStore = true;
+    try {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORE) ?? "[]");
+        runs = Array.isArray(saved) ? saved.filter((a) => a && typeof a.label === "string" && a.condition in CONDITION_WORD) : [];
+      } catch (err) {
+        if (!(err instanceof SyntaxError)) throw err; // a damaged list starts over
+      }
+      localStorage.setItem(STORE, JSON.stringify(runs)); // also proves this browser lets the page write
+    } catch {
+      canStore = false;
+    }
     const save = () => { try { localStorage.setItem(STORE, JSON.stringify(runs.slice(-100))); } catch {} };
+    $("store-note").hidden = canStore;
+
+    const lifeCount = document.getElementById("life-count");
+    if (lifeCount) bindLifeListCount(lifeCount);
 
     const bar = $("bar");
     const status = (text: string, state: "busy" | "ok" | "error" = "busy") => {
@@ -342,27 +209,35 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
       }
     }
 
-    function failLoad(err: unknown, cantRun = false) {
+    /**
+     * "browser": a missing API (Workers, OffscreenCanvas); only another browser helps, so there's no Reload button.
+     * "setting": WebGL is off, perhaps with hardware acceleration; turning it on and reloading can help.
+     * "load": a download or the engine itself failed; a reload can help.
+     */
+    function failLoad(err: unknown, kind: "browser" | "setting" | "load" = "load") {
       const cond = $("bird-condition");
       cond.dataset.c = "error";
-      cond.textContent = cantRun ? "Can't run in this browser" : "Couldn't load";
-      $("bird-note").textContent = cantRun
-        ? `YOLOv8n needs WebGL 2 in a background worker to run on your graphics chip, but ${errText(err)}. Turn on hardware acceleration in your browser's settings, or open this page in a recent Chrome, Edge, Firefox or Safari (17 or newer), then reload.`
-        : `The detector stopped: ${errText(err)}. Check your connection and reload. If it keeps failing, try a recent Chrome, Edge, Firefox or Safari.`;
-      $("retry").hidden = false;
+      cond.textContent = kind === "load" ? "Couldn't load" : "Can't run in this browser";
+      $("bird-note").textContent =
+        kind === "browser"
+          ? `YOLOv8n can't run here: ${errText(err)}. Open this page in a current Chrome, Edge, Firefox or Safari (17 or newer).`
+          : kind === "setting"
+            ? `YOLOv8n needs WebGL 2 in a background worker to run on your graphics chip, but ${errText(err)}. Turn on hardware acceleration in your browser's settings and reload, or open this page in a current Chrome, Edge, Firefox or Safari (17 or newer).`
+            : `The detector stopped: ${errText(err)}. Check your connection and reload. If it keeps failing, try a current Chrome, Edge, Firefox or Safari.`;
+      $("retry").hidden = kind === "browser";
       for (const id of ["metrics", "basis", "rule", "work"]) $(id).hidden = true;
       bar.style.width = "0";
-      status(cantRun ? "Can't start in this browser" : "Engine stopped", "error");
+      status(kind === "load" ? "Engine stopped" : "Can't start in this browser", "error");
       announce(`The detector couldn't start: ${errText(err)}`);
       return null;
     }
     $("retry").addEventListener("click", () => location.reload());
 
     const unsupported = missingSupport();
-    if (unsupported) failLoad(new Error(unsupported), true);
+    if (unsupported) failLoad(new Error(unsupported.reason), unsupported.setting ? "setting" : "browser");
     else {
       const engine = new DetectorEngine(onBoot);
-      const ready = await engine.ready.catch((err) => failLoad(err, err instanceof NoWebGL));
+      const ready = await engine.ready.catch((err) => failLoad(err, err instanceof NoWebGL ? "setting" : err instanceof NoWorker ? "browser" : "load"));
       if (ready) {
         try { start(engine, ready); } catch (err) { failLoad(err); }
       }
@@ -374,6 +249,7 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
       tiles.update(native.previews, native.previews);
       let shownSpecies = "";
       let current: Run | null = null;
+      const warned = { blocked: false };
 
       function delta(el: HTMLElement, v: number, ref: number) {
         const d = v - ref;
@@ -383,8 +259,8 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
 
       type Shown = Pick<Result, "ap" | "nativeAp" | "cost" | "n" | "final">;
       // Quick results come from the first 100 photos: marked with ≈ until the full score lands.
-      // Returns the one-line summary that is announced for a full result.
-      function show(r: Shown): string {
+      // Returns the bird drawn and the one-line summary that is announced for a full result.
+      function show(r: Shown) {
         const est = r.final ? "" : "≈ ";
         const { condition, starve, kept } = detectorCondition(r.ap, r.nativeAp);
         const ratio = native.cost.bytes / r.cost.bytes;
@@ -413,20 +289,18 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
         shownSpecies = key;
         const cond = $("bird-condition");
         cond.dataset.c = condition;
-        const words = condition === "healthy" ? "Healthy · still finds the birds" : condition === "emaciated" ? `Starving · ${Math.round(starve * 100)}% of the way to bones` : "Skeleton · broken";
+        const word = CONDITION_WORD[condition];
+        const words = condition === "healthy" ? `${word} · still finds the birds` : condition === "emaciated" ? `${word} · ${Math.round(starve * 100)}% of the way to a skeleton` : `${word} · lost the birds`;
         cond.textContent = r.final ? words : `Early read · ${words}`;
         const name = m.dodo ? DODO.name : m.species.name;
         $("bird-name").textContent = name;
         $("bird-latin").textContent = m.dodo ? DODO.latin : `${m.species.latin} · about ${m.species.grams} g`;
         $("bird-note").textContent = m.dodo
-          ? "You broke YOLOv8n without making it much smaller. Impressive."
+          ? DODO.note
           : condition === "skeleton"
             ? "This recipe broke YOLOv8n: it has lost most of the birds."
-            : m.species.id === "pigeon"
-              ? "Native weight, or close to it: less than 1.8 times smaller."
-              : m.species.note;
-        const plain = condition === "healthy" ? "healthy" : condition === "emaciated" ? "starving" : "skeleton";
-        return `Scored: bird AP ${r.ap.toFixed(3)}, ${Math.round(kept * 100)}% of native, ${size(r.cost.bytes)}, ${name}, ${plain}`;
+            : speciesNote(m.species, ratio);
+        return { ratio, kept, summary: `Scored: bird AP ${r.ap.toFixed(3)}, ${Math.round(kept * 100)}% of native, ${size(r.cost.bytes)}, ${name}, ${word.toLowerCase()}` };
       }
 
       function drawRuns() {
@@ -435,9 +309,9 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
           return;
         }
         const rows = [...runs].reverse().map((a) => `<tr${current && a.label === current.label ? ' aria-current="true"' : ""}>
-          <td>${esc(a.label)}</td><td class="num">${a.ap.toFixed(3)}</td><td class="num c-${a.condition}">${(a.kept * 100).toFixed(1)}%</td>
-          <td class="num">${size(a.bytes)}</td><td class="num">${gmacs(a.macs)}</td></tr>`).join("");
-        $("runs").innerHTML = `<table><thead><tr><th scope="col">Recipe</th><th scope="col" class="num">Bird AP@50</th><th scope="col" class="num">AP kept</th><th scope="col" class="num">Size</th><th scope="col" class="num">Compute</th></tr></thead><tbody>${rows}</tbody></table>`;
+          <td>${esc(a.label)}</td><td class="num">${a.ap.toFixed(3)}</td><td class="num">${(a.kept * 100).toFixed(1)}%</td>
+          <td class="num">${size(a.bytes)}</td><td class="num">${gmacs(a.macs)}</td><td class="c-${a.condition}">${CONDITION_WORD[a.condition]}</td></tr>`).join("");
+        $("runs").innerHTML = `<table><thead><tr><th scope="col">Recipe</th><th scope="col" class="num">Bird AP@50</th><th scope="col" class="num">AP kept</th><th scope="col" class="num">Size</th><th scope="col" class="num">Compute</th><th scope="col">Condition</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
       function record(r: Shown, label: string) {
@@ -449,9 +323,14 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
         drawRuns();
       }
 
+      const nativeShown: Shown = { ap: native.ap, nativeAp: native.ap, cost: native.cost, n: ready.n, final: true };
+      let lastFinal: Shown = nativeShown; // what the board falls back to when a run fails
+      const presetOf = (r: DetectorRecipe) => PRESETS.find((p) => sameRecipe(p.recipe, r))?.id ?? null;
+
       const reset = $("reset") as HTMLButtonElement, clear = $("clear") as HTMLButtonElement;
       const editor = new YoloRecipeEditor($("recipe"), ready.stages, (recipe, label) => {
         reset.disabled = label === describe(nativeRecipe());
+        let estimated = false;
         bar.style.width = "0";
         status(`Applying the recipe, then scoring on ${QUICK} photos…`);
         engine.evaluate(recipe, {
@@ -459,33 +338,41 @@ const keepPct = (v: number) => `${Math.round(v * 100)}%`;
             bar.style.width = `${(done / total) * 100}%`;
             status(final ? `Quick estimate shown · confirming on all ${total}… ${done}/${total}` : `Scoring on ${total} photos… ${done}/${total}`);
           },
-          onQuick: (r) => show(r),
+          onQuick: (r) => { estimated = true; show(r); },
           onFull: (r) => {
-            const summary = show(r);
+            const shown = show(r);
+            lastFinal = r;
             if (r.previews) tiles.update(r.previews, native.previews);
-            status(r.ran === 0
-              ? `Scored on all ${r.n} photos · this recipe's detections were kept from earlier in this visit`
-              : `Scored on all ${r.n} photos · ${secs(r.ms.quantize)} to round the weights, ${secs(r.ms.infer)} to score`, "ok");
-            announce(summary);
             record(r, label);
+            // Native YOLOv8n is the reference, not a bird anyone hatched, so it never goes on the life list.
+            const life = isNative(recipe) ? { said: "", announce: false } : sight({
+              bird: birdFor(shown.ratio, shown.kept), model: "yolov8n", modelName: "YOLOv8n", recipe: label, href: cageHref(CAGE, presetOf(recipe)),
+            }, warned);
+            const ran = r.ran === 0
+              ? `Scored on all ${r.n} photos · this recipe's detections were kept from earlier in this visit`
+              : `Scored on all ${r.n} photos · ${secs(r.ms.quantize)} to round the weights, ${secs(r.ms.infer)} to score`;
+            status(life.said ? `${ran} · ${life.said}` : ran, "ok");
+            announce(life.announce ? `${shown.summary}. ${life.said}` : shown.summary);
           },
           onError: (message) => {
+            // Put the board back on the last run that finished, so every number on it is one that was measured in full.
             bar.style.width = "0";
-            $("metrics").classList.add("estimate");
-            status(`Scoring failed (${message}). The numbers below are from the last run that finished. Change the recipe to try again, or reload the page.`, "error");
-            announce(`Scoring failed: ${message}`);
+            show(lastFinal);
+            status(estimated
+              ? `Scoring failed on all ${ready.n} photos (${message}), so the quick estimate was dropped. The numbers below are from your last finished run. Change the recipe, or reload the page, to try again.`
+              : `Scoring failed (${message}). The numbers below are from your last finished run. Change the recipe, or reload the page, to try again.`, "error");
+            announce(`Scoring failed: ${message}. The board shows your last finished run again.`);
           },
         });
       });
 
-      const nativeShown: Shown = { ap: native.ap, nativeAp: native.ap, cost: native.cost, n: ready.n, final: true };
-      const summary = show(nativeShown);
+      const summary = show(nativeShown).summary;
       record(nativeShown, describe(nativeRecipe()));
       status(`Scored native YOLOv8n on all ${ready.n} photos in ${(ready.ms / 1000).toFixed(1)} s · ready`, "ok");
 
       reset.addEventListener("click", () => { editor.load(nativeRecipe()); reset.disabled = true; editor.focusFirst(); });
-      clear.disabled = false;
       clear.addEventListener("click", () => { runs = current ? [current] : []; save(); drawRuns(); });
+      clear.disabled = false;
 
       // ?preset=<id> loads a preset as if its button were pressed; unknown ids are ignored.
       const wanted = new URLSearchParams(location.search).get("preset");
