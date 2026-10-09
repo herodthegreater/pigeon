@@ -45,6 +45,23 @@ describe("lab runs", () => {
     expect(r.best?.label).toBe("4-bit, group 16");
   });
 
+  it("hatches birds only for models that got smaller, once each", () => {
+    const r = labBirds({
+      metric: "acc",
+      rows: [
+        { label: "fp32", acc: 0.91, kbits: 100, ref: true },
+        { label: "rank 128", acc: 0.91, kbits: 100 }, // same size: no bird
+        { label: "bigger", acc: 0.9, kbits: 103 }, // grew: no bird
+        { label: "4-bit", acc: 0.9, kbits: 16 },
+        { label: "chosen: 4-bit", acc: 0.9, kbits: 16 }, // the same model again
+      ],
+    });
+    if (!r.bird) throw new Error("expected birds");
+    expect(r.birds.map((b) => b.label)).toEqual(["4-bit"]);
+    const none = labBirds({ rows: [{ label: "fp32", acc: 0.9, kbits: 10, ref: true }, { label: "same", acc: 0.9, kbits: 10 }] });
+    expect(none).toEqual({ bird: false, reason: "No model in this run is smaller than fp32, so there's no bird." });
+  });
+
   it("says why when there's no bird", () => {
     expect(labBirds({ rows: [], bird: false, bird_reason: "Same size." })).toEqual({ bird: false, reason: "Same size." });
     expect(labBirds({ rows: [{ label: "a", acc: 0.5, kbits: 10 }] }).bird).toBe(false);
@@ -81,6 +98,20 @@ describe("the life list", () => {
     expect([...best.keys()]).toEqual(["swift", "swallow"]);
     expect(clearLifeList()).toBe(true);
     expect(readLifeList().sightings).toEqual([]);
+  });
+
+  it("never trims a species' best sighting, however old", () => {
+    recordSighting(s({ recipe: "the one healthy hummingbird", ...birdFor(20, 0.99) }), "2026-01-01T00:00:00Z");
+    for (let i = 0; i < 420; i++) recordSighting(s({ recipe: `swift ${i}`, ...birdFor(4, 0.7) }));
+    const list = readLifeList().sightings;
+    expect(list.length).toBe(400);
+    expect(list.some((x) => x.recipe === "the one healthy hummingbird")).toBe(true);
+  });
+
+  it("treats a recipe key as the identity when there is one", () => {
+    recordSighting(s({ recipe: "cut L12, L15, L16 and 3 more", recipeKey: "a" }));
+    recordSighting(s({ recipe: "cut L12, L15, L16 and 3 more", recipeKey: "b" }));
+    expect(readLifeList().sightings).toHaveLength(2);
   });
 
   it("reports blocked storage instead of pretending", () => {

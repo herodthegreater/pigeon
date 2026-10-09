@@ -10,13 +10,20 @@
  * birder keeps one: each species counts once, at its best sighting.
  */
 
-import { conditionOf, speciesFor, type Condition } from "./mascot";
+import { BROKEN, WORKS, conditionOf, speciesFor, type Condition } from "./mascot";
 
 export const HEALTHY_KEEP = 0.95;
 export const SKELETON_KEEP = 0.6;
 
 /** The rule in words, for captions. */
-export const KEEP_RULE = `A bird stays healthy while its model keeps at least ${HEALTHY_KEEP * 100}% of the reference's score, and turns to bones at ${SKELETON_KEEP * 100}% or less.`;
+const pct = (x: number) => Math.round(x * 100);
+export const KEEP_RULE = `A bird stays healthy while its model keeps at least ${pct(HEALTHY_KEEP)}% of the reference's score, and turns to bones at ${pct(SKELETON_KEEP)}% or less.`;
+
+/** Pigeon in the Coop is graded by its own documented line (mascot.ts WORKS and BROKEN). */
+export const PIGEON_RULE = `Pigeon in the Coop has its own line: healthy at ${pct(WORKS.accuracy)}% accuracy or more with ${pct(WORKS.pointing)}% pointing or more, bones at ${pct(BROKEN.accuracy)}% accuracy or less, or ${pct(BROKEN.pointing)}% pointing or less.`;
+
+/** Which rule graded a sighting. */
+export type BirdRule = "keep" | "pigeon";
 
 /** Condition and starvation (0 healthy .. 1 bones) from the fraction of the reference's score kept. */
 export function keptCondition(kept: number): { condition: Condition; starve: number } {
@@ -75,9 +82,22 @@ export function labBirds(run: LabRun):
   if (!ref || !(Number(ref.kbits) > 0) || !(score(ref) > 0)) {
     return { bird: false, reason: "This run has no reference model to measure against, so there's no bird." };
   }
+  // Only models that really got smaller hatch a bird (DESIGN.md: "every place a model gets
+  // smaller"), and a row that repeats an earlier model (same storage, same score) isn't a new bird.
+  const seen = new Set<string>();
   const birds: LabBird[] = run.rows
     .filter((r) => r !== ref && r.model !== false && Number(r.kbits) > 0 && Number.isFinite(score(r)))
+    .filter((r) => Number(ref.kbits) / Number(r.kbits) > 1)
+    .filter((r) => {
+      const key = `${r.kbits}|${score(r)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .map((r) => ({ ...birdFor(Number(ref.kbits) / Number(r.kbits), score(r) / score(ref)), label: String(r.label ?? ""), kbits: Number(r.kbits) }));
+  if (!birds.length) {
+    return { bird: false, reason: `No model in this run is smaller than ${String(ref.label ?? "the reference")}, so there's no bird.` };
+  }
   return { bird: true, reference: String(ref.label ?? "the reference"), birds, best: bestBird(birds) };
 }
 
@@ -95,7 +115,10 @@ export interface Sighting extends Bird {
   model: string; // "pigeon", "yolov8n", or "lab:<method id>"
   modelName: string; // what a reader calls it: "Pigeon", "YOLOv8n", "Post-training quantization"
   recipe: string; // what was done, in the site's words
+  recipeKey?: string; // a recipe's full identity when the label is shortened for reading
   href: string; // where to try it again
+  rule?: BirdRule; // which rule graded the condition ("keep" when absent)
+  pointing?: number; // Pigeon only: its pointing score, part of its rule
   when: string; // ISO timestamp
 }
 
@@ -122,7 +145,8 @@ export function recordSighting(s: Omit<Sighting, "when">, when = new Date().toIS
   const { ok, sightings } = readLifeList();
   if (!ok) return { ok: false, firstHealthy: false };
   const firstHealthy = s.condition === "healthy" && !sightings.some((x) => x.species === s.species && x.condition === "healthy");
-  const next = [...sightings.filter((x) => !(x.model === s.model && x.recipe === s.recipe)), { ...s, when }].slice(-MAX);
+  const same = (x: Omit<Sighting, "when">) => x.model === s.model && (x.recipeKey ?? x.recipe) === (s.recipeKey ?? s.recipe);
+  const next = trim([...sightings.filter((x) => !same(x)), { ...s, when }]);
   try {
     localStorage.setItem(KEY, JSON.stringify(next));
   } catch {
@@ -130,6 +154,18 @@ export function recordSighting(s: Omit<Sighting, "when">, when = new Date().toIS
   }
   dispatchEvent(new CustomEvent(LIFE_LIST_EVENT, { detail: next }));
   return { ok: true, firstHealthy };
+}
+
+/** Keep the list under MAX by dropping the oldest sightings, but never a species' best one. */
+function trim(list: Sighting[]): Sighting[] {
+  if (list.length <= MAX) return list;
+  const keep = new Set(bestBySpecies(list).values());
+  const out = [...list];
+  for (let i = 0; i < out.length && out.length > MAX; ) {
+    if (keep.has(out[i])) i++;
+    else out.splice(i, 1);
+  }
+  return out;
 }
 
 export function clearLifeList(): boolean {
