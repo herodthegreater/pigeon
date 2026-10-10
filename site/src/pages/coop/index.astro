@@ -305,7 +305,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
             const { m } = shown;
             const life = !hatches(shown.ratio) ? { said: "", announce: false } : sight({
               bird: { ratio: shown.ratio, kept: r.score.accuracy / base.score.accuracy, condition: m.condition, starve: m.starve, species: m.dodo ? "dodo" : m.species.id, name: shown.name },
-              model: "pigeon", modelName: "Pigeon", recipe: label, href: cageHref(CAGE, linkQuery(recipe)), rule: "pigeon", pointing: r.score.pointing,
+              model: "pigeon", modelName: "Pigeon", recipe: label, href: cageHref(CAGE, linkQuery(recipe)), rule: "pigeon", pointing: r.score.pointing, accuracy: r.score.accuracy,
             }, warned);
             status(`Scored on all ${r.score.n} photos · ${Math.round(r.ms.infer)} ms${life.said ? ` · ${life.said}` : ""}`, "ok");
             announce(life.announce ? `${shown.summary}. ${life.said}` : shown.summary);

@@ -119,6 +119,7 @@ export interface Sighting extends Bird {
   href: string; // where to try it again
   rule?: BirdRule; // which rule graded the condition ("keep" when absent)
   pointing?: number; // Pigeon only: its pointing score, part of its rule
+  accuracy?: number; // Pigeon only: its accuracy, the other half of its rule
   when: string; // ISO timestamp
 }
 

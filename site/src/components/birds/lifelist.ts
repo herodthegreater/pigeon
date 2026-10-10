@@ -64,7 +64,7 @@ const whole = (v: number) => `${Math.round(v * 100)}%`;
  * less was starved by accuracy, which its starvation then gives exactly.
  */
 export function pigeonAccuracy(s: Sighting): string | null {
-  const saved = num((s as Sighting & { accuracy?: unknown }).accuracy);
+  const saved = num(s.accuracy);
   if (Number.isFinite(saved)) return `accuracy ${pct(saved)}`;
   const pointing = num(s.pointing);
   if (!Number.isFinite(pointing)) return null;

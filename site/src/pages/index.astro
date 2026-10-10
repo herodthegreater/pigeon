@@ -2,7 +2,8 @@
 import { course } from "../components/school/course";
 import Base from "../layouts/Base.astro";
 import "../styles/page.css";
-import { BROKEN, mascotSVG, SPECIES, WORKS_LINE } from "../lib/ui/mascot";
+import { mascotSVG, SPECIES, WORKS_LINE } from "../lib/ui/mascot";
+import { BROKEN_LINE } from "../lib/ui/coopbirds";
 import { PRESETS } from "../lib/ui/recipe";
 import { meta, methods, lessons, experiments, FAMILY_ORDER } from "../lib/lab/data";
 import { labRedirectScript } from "../lib/ui/labroutes";
@@ -24,8 +25,6 @@ const chapters = course();
 const COURSE_CHAPTERS = chapters.length;
 const UNFINISHED = chapters.filter((c) => c.gap).length;
 
-// Pigeon's skeleton line, said beside its healthy line (WORKS_LINE), from the same numbers the bird is drawn by.
-const BONES_LINE = `${Math.round(BROKEN.accuracy * 100)}% accuracy or less, or ${Math.round(BROKEN.pointing * 100)}% pointing or less`;
 
 const and = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
@@ -92,7 +91,7 @@ const redirect = labRedirectScript(
           </li>
         </ol>
         <figcaption>
-          <p>The key to sizes: how much smaller a model gets decides which bird it becomes. Pigeon stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and it is bones at {BONES_LINE}.</p>
+          <p>The key to sizes: how much smaller a model gets decides which bird it becomes. Pigeon stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and it is bones at {BROKEN_LINE}.</p>
           <p>
             The smallest healthy Pigeon on record is a {reachedName}: the {mixed.name} preset, {RECORDED.kb} KB, {RECORDED.ratio.toFixed(2)} times smaller, with {RECORDED.accuracy}% accuracy and {RECORDED.pointing}% pointing (recorded in the lab's notes, not measured on this page).
             No recipe on record keeps it healthy at {unreached[0].minRatio} times smaller or more, where the {unreached[0].name} starts. That probably takes retraining, which the Coop's tools never do;
