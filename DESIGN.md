@@ -49,10 +49,11 @@ Labels are sentence case. No uppercase-with-tracking labels.
 
 ## Motif
 
-The birds. Species tracks size (rock pigeon, mourning dove, common swift, barn swallow, ruby-throated hummingbird; a dodo for breaking a model without making it smaller), condition tracks accuracy (healthy, starving, skeleton). Every place a model gets smaller should end in a bird.
+The birds. Species tracks size (rock pigeon, mourning dove, common swift, barn swallow, ruby-throated hummingbird; a dodo for breaking a model without making it smaller), condition tracks accuracy (healthy, starving, skeleton). Every place a model gets smaller should end in a bird, wherever the page knows the model's storage and has a reference to measure it against; where it doesn't, there is no bird rather than a guessed one.
 
 - **One rule for every model** (`site/src/lib/ui/birds.ts`): the species comes from the size ratio (the reference's storage over this model's), the condition from the score kept (this model's over the reference's): healthy at 95% or more, bones at 60% or less, starving in between. Pigeon in the Coop keeps its documented "still works" line (90% accuracy, 75% pointing), which lands in the same place. The rule is always shown where a bird is.
 - **The life list**: every bird someone hatches (in the Coop's two cages or from a Field Guide run) is saved in their browser, the way a birder keeps a life list; each species counts once, at its best sighting. Only real, measured runs count.
+- **Recorded results**: an experiment page ends in a key of the birds its table hatches, one drawing per kind of bird, measured against that experiment's teacher. Storage is the table's kbits column, or 32 bits a parameter for a dense fp32 net (`lab/compress.py` `storage_bits`); a pruned or quantized row without kbits gets none. These birds are the lab's, so they never go on a reader's life list.
 - **Pigeon the guide**: Pigeon delivers hints and warnings as small margin notes, drawn in the condition that fits the message. It carries information or it isn't there; never more than one per view, never animated.
 
 ## Mood and references *(inferred)*

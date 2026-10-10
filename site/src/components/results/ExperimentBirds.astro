@@ -46,11 +46,16 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 )}
 
 <style>
-  /* A compact key, ruled like the run box's specimen lines: a small drawing and its words. */
-  .exp-birds { display: flex; flex-direction: column; gap: var(--space-3); max-width: var(--measure); }
+  /* A compact key, ruled like the run box's specimen lines: a small drawing and its words,
+     in as many columns as the page has room for, so a long key stays short. */
+  .exp-birds { display: flex; flex-direction: column; gap: var(--space-3); }
   .exp-birds > h2 { font-size: var(--step-2); }
+  .intro, .fine { max-width: var(--measure); }
   .intro { font-size: var(--step--1); }
-  .key { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+  .key {
+    list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule);
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); column-gap: var(--space-5);
+  }
   .key li {
     display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--space-3); align-items: center;
     padding-block: var(--space-2); border-bottom: 1px solid var(--rule);
