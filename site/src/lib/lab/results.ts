@@ -89,6 +89,42 @@ export function settingsText(params: Record<string, unknown>, labels: Record<str
     .join(", ");
 }
 
+/*
+ * What a run does while the status line counts seconds. The method data has no field that
+ * says whether a run trains, so the runs that don't are listed here, from lab/methods.py:
+ * each loads a model the site ships (lab/models), rounds or prunes its weights, and scores
+ * it (lab/tests/test_quotes.py checks most of them for that reason). Keep this in step with
+ * the run_* functions there.
+ */
+/** Runs that only round a shipped model's weights. */
+const ROUNDS_ONLY = new Set(["ptq", "rtn", "gptq", "awq"]);
+/** Runs that train nothing but do more than round weights: SmoothQuant also rounds activations, the rest prune or drop layers. */
+const NO_TRAINING = new Set(["smoothquant", "wanda", "sparsegpt", "block_influence"]);
+/** Runs that train only to recover what the cut lost: with that setting off, they train nothing. */
+const RECOVERY_OFF: Record<string, (p: Record<string, unknown>) => boolean> = {
+  magnitude_pruning: (p) => p.recovery === "none",
+  layer_dropping: (p) => p.recovery === "none",
+  low_rank: (p) => p.recovery === "none",
+  weight_sharing: (p) => p.finetune === false,
+};
+
+/** The status word for a run in progress: "Training" only for a run that trains. */
+export function runActivity(method: string, params: Record<string, unknown> = {}): "Training" | "Rounding the weights" | "Running" {
+  if (ROUNDS_ONLY.has(method)) return "Rounding the weights";
+  if (NO_TRAINING.has(method) || RECOVERY_OFF[method]?.(params)) return "Running";
+  return "Training";
+}
+
+/** The run box's line before a first run, true of what this method's run does. */
+export function idleLine(method: string): string {
+  const what = ROUNDS_ONLY.has(method)
+    ? "A run loads the lab's trained model, rounds its weights and scores the result on the lab's toy problem, here in your browser. Nothing is trained."
+    : NO_TRAINING.has(method)
+      ? "A run loads the lab's trained model, compresses it and scores the result on the lab's toy problem, here in your browser. Nothing is trained."
+      : "A run builds or loads real models on the lab's toy problem, compresses them and scores them, here in your browser.";
+  return `${what} The first run downloads Python (about 20 MB); most runs then take 5 to 60 seconds. Every model a run makes smaller ends in a bird.`;
+}
+
 /** Extra columns a run can carry, in the order the table shows them. Storage is what a run's birds are sized by. */
 const EXTRA = ["kbits", "params", "fidelity", "sparsity"];
 
