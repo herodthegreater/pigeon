@@ -42,7 +42,7 @@ From `low_rank` (KD rows: 1,500 steps, mean of 2 seeds). For comparison, the sam
 
 (Teacher: 140,052 params, 0.9139 accuracy.) Rank 128 is the teacher itself, since no layer passes the break-even guard, yet KD "recovery" lifts it to 0.9194. Recovery is also extra training, so compare recovered rows with each other. Down to rank 16 (18% of the parameters), the factorized net recovers to about the teacher's accuracy. Without recovery, error compounds quickly: rank 16 alone keeps only 0.4197. Per parameter, the two methods trade places. Around 40k parameters SVD is slightly ahead (0.9197 at 41,812 vs 0.9152 at 37,268). Around 10-13k, neuron pruning is clearly ahead (0.8928 at 10,452 vs 0.7354 at 13,364). A rank-8 bottleneck squeezes every layer through 8 numbers, while a 3x64 net keeps 64 ReLUs per layer.
 
-Page runs (500 recovery steps): rank 16 goes from 0.4010 to 0.8953, rank 4 from 0.0724 to 0.2728, and rank 128 from 0.9150 to 0.9192.
+Page runs (500 recovery steps): rank 16 goes from 0.4010 to 0.8953, rank 4 from 0.0724 to 0.2728, and rank 128 from 0.9150 to 0.9192. Rank 128 starts at 0.9150 here, not the table's 0.9139: the experiment's teacher scored 0.9139, and the copy the Run button loads, trained again with the same recipe, scores 0.9150.
 
 The toy's matrices are small; in large models many layers are closer to low rank.
 

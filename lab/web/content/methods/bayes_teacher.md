@@ -58,7 +58,7 @@ This page's runs (1000 steps, seed 0; labels only, KD from trained teacher, KD f
 
 ## Try this
 
-- Set **student width** to 128. Compare the posterior row with the trained teacher's own accuracy in the teacher row, 0.9150.
+- Set **student width** to 128. Compare the posterior row with the trained teacher's own accuracy in the teacher row, 0.9150. That is the copy the Run button loads, trained again with the same recipe; the experiment above used an earlier training, which scored 0.9139.
 - Set **student width** to 8, then 16. See how much of the gap between labels and posterior survives when the student is tiny.
 - At **student width** 64, the gap between "KD from trained teacher" and "KD from exact posterior" is what a better teacher could buy at this size.
 

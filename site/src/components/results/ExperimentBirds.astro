@@ -1,0 +1,70 @@
+---
+/**
+ * The birds an experiment's table hatches (DESIGN.md: Motif), as a key under
+ * the table: one small drawing for each kind of bird, named, with the model it
+ * is drawn for. Nothing renders when the data can't support an honest bird
+ * (birds.ts says when). These are recorded results, so they are never saved
+ * to a life list.
+ */
+import { KEEP_RULE } from "../../lib/ui/birds";
+import { drawBird } from "../birds/draw";
+import { CONDITION_WORD } from "../birds/format";
+import { experimentBirds, keyWords, type ExperimentLike } from "./birds";
+
+interface Props {
+  exp: ExperimentLike;
+}
+const { exp } = Astro.props;
+const birds = experimentBirds(exp);
+const words = birds ? keyWords(birds) : null;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+---
+{words && (
+  <section class="exp-birds" aria-labelledby="birds">
+    <h2 id="birds">Birds in this experiment</h2>
+    <p class="intro">{words.intro}</p>
+    <ul class="key">
+      {words.entries.map((k) => (
+        <li>
+          <span class="mini" set:html={drawBird(k.ratio, k.starve, { decorative: true, prefix: "exp" })} />
+          <span class="key-text">
+            <span class="key-bird">{k.name}, <span class={`c-${k.condition}`}>{CONDITION_WORD[k.condition]}</span></span>
+            <span class="key-row">{k.label}</span>
+            <span class="key-nums num">{k.nums}</span>
+            <span class="key-count">{k.count}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+    <p class="fine">{words.reference} Species follows how many times smaller a model is. {KEEP_RULE}</p>
+    {words.skipped && <p class="fine">{words.skipped}</p>}
+    <p class="fine">
+      These are the lab's recorded results, so they aren't added to anyone's life list. Birds you hatch yourself, in the Coop or
+      from a Field Guide run, are saved to your <a href={`${base}life-list/`}>life list</a>.
+    </p>
+  </section>
+)}
+
+<style>
+  /* A compact key, ruled like the run box's specimen lines: a small drawing and its words. */
+  .exp-birds { display: flex; flex-direction: column; gap: var(--space-3); max-width: var(--measure); }
+  .exp-birds > h2 { font-size: var(--step-2); }
+  .intro { font-size: var(--step--1); }
+  .key { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+  .key li {
+    display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--space-3); align-items: center;
+    padding-block: var(--space-2); border-bottom: 1px solid var(--rule);
+  }
+  .mini :global(svg) { display: block; width: 100%; height: auto; }
+  .key-text { display: flex; flex-direction: column; font-size: var(--step--1); line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+  .key-bird { font-weight: 600; }
+  .key-nums, .key-count { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+  .c-healthy { color: var(--good); }
+  .c-emaciated { color: var(--warn); }
+  .c-skeleton { color: var(--bad); }
+  .fine { font-size: var(--step--1); color: var(--muted); }
+  /* The link sits inside a sentence: padding grows its tap area to 44px without spreading the lines apart. */
+  @media (pointer: coarse), (max-width: 640px) {
+    .fine a { padding-block: calc((var(--tap) - 1em) / 2); }
+  }
+</style>
