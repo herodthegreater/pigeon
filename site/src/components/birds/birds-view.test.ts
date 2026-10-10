@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { birdFor, type Sighting } from "../../lib/ui/birds";
 import { drawBird, uniqueIds } from "./draw";
 import { CONDITION_LABEL, CONDITION_WORD, keptPhrase, ratioPhrase, ratioShort } from "./format";
-import { KEY, RULES, countLine, entryHTML, newestFirst, ruleOf, rowHTML, safeHref, scoreParts, summarize } from "./lifelist";
+import { KEY, RULES, countLine, entryHTML, newestFirst, pigeonAccuracy, ruleOf, rowHTML, safeHref, scoreParts, summarize } from "./lifelist";
 import { firstHealthyLine, noBirdLine, recipeOf, runBirds, runHref } from "./runbirds";
 import { KEEP_RULE, PIGEON_RULE } from "../../lib/ui/birds";
-import { CONDITION_WORD as MASCOT_WORD } from "../../lib/ui/mascot";
+import { CONDITION_WORD as MASCOT_WORD, conditionOf, starvation } from "../../lib/ui/mascot";
 
 describe("bird words", () => {
   it("says size and health in plain numbers", () => {
@@ -184,7 +184,8 @@ describe("the life list page", () => {
     // Pigeon in the Coop: graded by its accuracy-and-pointing line, so its row gives pointing too.
     const pigeon = s({ ...birdFor(1.36, 0.617), condition: "skeleton", starve: 1, model: "pigeon", modelName: "Pigeon", recipe: "30% pruned · all", rule: "pigeon", pointing: 0.696 });
     expect(ruleOf(pigeon)).toBe("pigeon");
-    expect(scoreParts(pigeon)).toEqual(["keeps 61.7% of its accuracy", "pointing 69.6%"]);
+    // Skeleton with pointing above 35%: its accuracy broke it, so it is at most 60%, never the 61.7% kept.
+    expect(scoreParts(pigeon)).toEqual(["accuracy 60% or less", "pointing 69.6%"]);
     expect(scoreParts({ ...pigeon, accuracy: 0.58 } as Sighting)).toEqual(["accuracy 58.0%", "pointing 69.6%"]);
     const row = rowHTML(pigeon);
     expect(row).toContain("pointing 69.6%");
@@ -192,6 +193,8 @@ describe("the life list page", () => {
     // A Pigeon sighting saved before sightings carried a rule was graded by Pigeon's line all the same.
     expect(ruleOf({ model: "pigeon" })).toBe("pigeon");
     expect(scoreParts({ ...pigeon, rule: undefined, pointing: undefined })).toEqual(["keeps 61.7% of its accuracy", "pointing not saved"]);
+    // Broken by pointing: its accuracy is unknown, so the share kept is said as a share.
+    expect(scoreParts({ ...pigeon, pointing: 0.3 })).toEqual(["keeps 61.7% of its accuracy", "pointing 30.0%"]);
     expect(ruleOf({ model: "yolov8n" })).toBe("keep");
 
     // The species entry says it too.
@@ -202,6 +205,20 @@ describe("the life list page", () => {
     expect(entryHTML(KEY.find((k) => k.id === "swift")!, summarize([lab]))).toContain("Graded by the share-kept rule");
     expect(RULES.keep.text).toBe(KEEP_RULE);
     expect(RULES.pigeon.text).toBe(PIGEON_RULE);
+  });
+
+  it("recovers Pigeon's accuracy from its line where the line pins it down, so no row contradicts it", () => {
+    const at = (accuracy: number, pointing: number) => {
+      const starve = starvation(accuracy, pointing);
+      return s({ ratio: 2, kept: accuracy / 0.94, starve, condition: conditionOf(starve), species: "dove", name: "Mourning Dove", model: "pigeon", modelName: "Pigeon", rule: "pigeon", pointing });
+    };
+    // 89.6% accuracy keeps 95.3% of 94.0%, yet Pigeon's line starves it: the row says 89.6%.
+    expect(scoreParts(at(0.896, 0.8))).toEqual(["accuracy 89.6%", "pointing 80.0%"]);
+    expect(scoreParts(at(0.75, 0.7))).toEqual(["accuracy 75.0%", "pointing 70.0%"]);
+    expect(scoreParts(at(0.93, 0.9))).toEqual(["accuracy 90% or more", "pointing 90.0%"]);
+    // Starved by pointing more than by accuracy: the accuracy isn't known, only its share.
+    expect(scoreParts(at(0.88, 0.5))[0]).toBe(`keeps ${(88 / 0.94).toFixed(1)}% of its accuracy`);
+    expect(pigeonAccuracy(at(0.58, 0.696))).toBe("accuracy 60% or less");
   });
 
   it("calls a legacy sighting that grew bigger, not the same size", () => {

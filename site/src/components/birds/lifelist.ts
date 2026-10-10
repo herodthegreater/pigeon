@@ -7,7 +7,7 @@
 
 import { esc } from "../../lib/lab/markdown";
 import { bestBySpecies, KEEP_RULE, PIGEON_RULE, type BirdRule, type Sighting } from "../../lib/ui/birds";
-import { DODO, SPECIES, type Condition } from "../../lib/ui/mascot";
+import { BROKEN, DODO, SPECIES, WORKS, type Condition } from "../../lib/ui/mascot";
 import { drawBird } from "./draw";
 import { CONDITION_WORD, dateText, pct, ratioShort } from "./format";
 
@@ -53,20 +53,42 @@ export const safeHref = (href: unknown): string | null =>
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
 
+const whole = (v: number) => `${Math.round(v * 100)}%`;
+
+/**
+ * Pigeon's accuracy, as Pigeon's line read it, or null when what was saved can't say. The
+ * Coop saves the share of accuracy kept, not the accuracy, but the line pins the accuracy
+ * down from what it did save (pointing, condition, starvation; mascot.ts starvation()):
+ * a healthy bird has at least 90%; a skeleton whose pointing is above 35% was broken by
+ * accuracy, so it has at most 60%; a starving bird whose pointing alone would starve it
+ * less was starved by accuracy, which its starvation then gives exactly.
+ */
+export function pigeonAccuracy(s: Sighting): string | null {
+  const saved = num((s as Sighting & { accuracy?: unknown }).accuracy);
+  if (Number.isFinite(saved)) return `accuracy ${pct(saved)}`;
+  const pointing = num(s.pointing);
+  if (!Number.isFinite(pointing)) return null;
+  if (s.condition === "healthy") return `accuracy ${whole(WORKS.accuracy)} or more`;
+  if (s.condition === "skeleton") return pointing > BROKEN.pointing ? `accuracy ${whole(BROKEN.accuracy)} or less` : null;
+  const byPointing = (WORKS.pointing - pointing) / (WORKS.pointing - BROKEN.pointing);
+  const starve = num(s.starve);
+  if (s.condition !== "emaciated" || !(starve > byPointing + 1e-9) || !(starve < 1)) return null;
+  return `accuracy ${pct(WORKS.accuracy - starve * (WORKS.accuracy - BROKEN.accuracy))}`;
+}
+
 /**
  * The numbers the sighting's rule read, in words. Share kept: "keeps 98.2%". Pigeon's line
- * reads accuracy and pointing: "accuracy 91.2%, pointing 88.0%" when the Coop saved Pigeon's
- * accuracy with the sighting; otherwise the share of its accuracy kept, said as a share so it
- * can't be read as the accuracy the line is drawn on.
+ * reads accuracy and pointing: "accuracy 89.6%, pointing 80.0%". Where the accuracy can't be
+ * known, the share of it kept is said as a share, so it can't be taken for the accuracy the
+ * line is drawn on.
  */
 export function scoreParts(s: Sighting): string[] {
   const kept = num(s.kept);
   const keeps = Number.isFinite(kept) ? `keeps ${pct(kept)}` : "share kept unknown";
   if (ruleOf(s) === "keep") return [keeps];
-  const accuracy = num((s as Sighting & { accuracy?: unknown }).accuracy);
   const pointing = num(s.pointing);
   return [
-    Number.isFinite(accuracy) ? `accuracy ${pct(accuracy)}` : Number.isFinite(kept) ? `${keeps} of its accuracy` : "accuracy unknown",
+    pigeonAccuracy(s) ?? (Number.isFinite(kept) ? `${keeps} of its accuracy` : "accuracy unknown"),
     Number.isFinite(pointing) ? `pointing ${pct(pointing)}` : "pointing not saved",
   ];
 }
