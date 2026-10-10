@@ -150,10 +150,22 @@ describe("the key's words", () => {
   })!;
   const w = keyWords(b);
 
-  it("say how many models and kinds of bird there are", () => {
-    expect(w.intro).toBe(
-      "The table's 2 smaller models hatch 2 kinds of bird.",
+  it("say how many models and kinds of bird there are, and which model a kind is drawn for", () => {
+    expect(w.intro).toBe("The table's 2 smaller models hatch 2 kinds of bird.");
+    const many = experimentBirds({
+      name: "size_ladder",
+      rows: [
+        { width: 32, method: "KD", params: 2132, acc: 0.89 },
+        { width: 32, method: "KD again", params: 2132, acc: 0.89 },
+        { width: 16, method: "KD", params: 820, acc: 0.88 },
+      ],
+      refs,
+    })!;
+    expect(keyWords(many).intro).toBe(
+      "The table's 2 smaller models hatch 1 kind of bird. Each kind is drawn once, for one model: the smallest if the bird is " +
+        "healthy or bones, the one that keeps the most if it's starving. Rows with the same size and score count as one model.",
     );
+    expect(keyWords(many).entries[0].count).toBe("Best of 2 models");
   });
 
   it("say 'scores' when a model beats the teacher and 'keeps' when it doesn't", () => {
