@@ -33,7 +33,12 @@ const places = [
     summary: `One write-up per compression method; ${runnable} of them run in your browser.`,
   },
   { href: `${base}results/`, name: "Results", aside: plural(experiments().length, "experiment", "experiments"), summary: "The lab's experiments, their figures and full tables." },
+  { href: `${base}life-list/`, name: "Life list", aside: "kept in your browser", summary: "Every bird you have hatched in the Coop and in Field Guide runs, each species at its best sighting." },
 ];
+// Every place but Home is one of the header's sections, so the count can't drift from the list.
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const sections = places.length - 1;
+const sectionsText = `${WORDS[sections] ?? sections} ${sections === 1 ? "section" : "sections"}`;
 ---
 <Base title="Page not found · Pigeon" description="There is no page at this address. The pages that do exist are listed here.">
   <main id="main" class="page lost">
@@ -43,7 +48,7 @@ const places = [
         <p class="lede">
           Nothing lives at <span class="path" data-path>this address</span>. It may have moved when the lab's pages
           became the Field Guide, Flight School and Results, or the address may have a typo. The home page and the
-          site's four sections are below.
+          site's {sectionsText} are below.
         </p>
       </div>
       {/* The page's one figure, a plate beside the heading. The drawing is described by its caption. */}

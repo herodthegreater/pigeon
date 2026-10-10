@@ -6,10 +6,27 @@
  */
 
 import { esc } from "../../lib/lab/markdown";
-import { bestBySpecies, type Sighting } from "../../lib/ui/birds";
+import { bestBySpecies, KEEP_RULE, PIGEON_RULE, type BirdRule, type Sighting } from "../../lib/ui/birds";
 import { DODO, SPECIES, type Condition } from "../../lib/ui/mascot";
 import { drawBird } from "./draw";
 import { CONDITION_WORD, dateText, pct, ratioShort } from "./format";
+
+/**
+ * The two rules a bird's condition can come from, by the names the page uses for them.
+ * Every sighting says which one graded it, and its numbers are the ones that rule reads,
+ * so no row can be checked against the wrong rule.
+ */
+export const RULES: Record<BirdRule, { name: string; inSentence: string; who: string; text: string }> = {
+  keep: { name: "Share kept", inSentence: "the share-kept rule", who: "YOLOv8n in the Coop and every Field Guide run", text: KEEP_RULE },
+  pigeon: { name: "Pigeon's line", inSentence: "Pigeon's line", who: "Pigeon in the Coop", text: PIGEON_RULE },
+};
+
+/**
+ * The rule that graded a sighting. A Pigeon sighting saved before sightings carried their
+ * rule was graded by Pigeon's line all the same: the Coop has always drawn Pigeon by it.
+ */
+export const ruleOf = (s: Pick<Sighting, "rule" | "model">): BirdRule =>
+  s.rule === "pigeon" || s.rule === "keep" ? s.rule : s.model === "pigeon" ? "pigeon" : "keep";
 
 export interface KeyEntry {
   id: string;
@@ -35,6 +52,24 @@ export const safeHref = (href: unknown): string | null =>
   typeof href === "string" && /^\/(?!\/)[^\s"'<>]*$/.test(href) ? href : null;
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
+
+/**
+ * The numbers the sighting's rule read, in words. Share kept: "keeps 98.2%". Pigeon's line
+ * reads accuracy and pointing: "accuracy 91.2%, pointing 88.0%" when the Coop saved Pigeon's
+ * accuracy with the sighting; otherwise the share of its accuracy kept, said as a share so it
+ * can't be read as the accuracy the line is drawn on.
+ */
+export function scoreParts(s: Sighting): string[] {
+  const kept = num(s.kept);
+  const keeps = Number.isFinite(kept) ? `keeps ${pct(kept)}` : "share kept unknown";
+  if (ruleOf(s) === "keep") return [keeps];
+  const accuracy = num((s as Sighting & { accuracy?: unknown }).accuracy);
+  const pointing = num(s.pointing);
+  return [
+    Number.isFinite(accuracy) ? `accuracy ${pct(accuracy)}` : Number.isFinite(kept) ? `${keeps} of its accuracy` : "accuracy unknown",
+    Number.isFinite(pointing) ? `pointing ${pct(pointing)}` : "pointing not saved",
+  ];
+}
 const condWord = (c: unknown) => CONDITION_WORD[c as Condition] ?? "condition unknown";
 const condClass = (c: unknown) => (c === "healthy" || c === "emaciated" || c === "skeleton" ? `c-${c}` : "");
 
@@ -79,13 +114,13 @@ export function entryHTML(k: KeyEntry, summary: Summary | null, prefix = "ll"): 
   </div></div>`;
   if (!summary || !best) return h;
   const state = k.id === "dodo" ? "Seen" : best.condition === "healthy" ? "Seen healthy" : `Best seen ${condWord(best.condition)}`;
-  const kept = Number.isFinite(num(best.kept)) ? `keeps ${pct(num(best.kept))}` : "share kept unknown";
   h += `<div class="sp-detail">
     <p class="sp-state ${condClass(best.condition)}">${state}, ${count} ${count === 1 ? "sighting" : "sightings"}</p>
     <p class="sp-best">
       <span class="sp-model">Best sighting: ${esc(best.modelName)}</span>
       <span class="sp-recipe">${esc(best.recipe)}</span>
-      <span class="sp-nums">${esc(ratioShort(num(best.ratio)))}, ${kept}, <time datetime="${esc(best.when)}">${esc(dateText(best.when))}</time></span>
+      <span class="sp-nums">${esc([ratioShort(num(best.ratio)), ...scoreParts(best)].join(", "))}, <time datetime="${esc(best.when)}">${esc(dateText(best.when))}</time></span>
+      <span class="sp-rule">Graded by ${esc(RULES[ruleOf(best)].inSentence)}</span>
     </p>`;
   const href = safeHref(best.href);
   if (href) h += `<p class="sp-again"><a href="${esc(href)}">Try this recipe again<span class="visually-hidden">: ${esc(k.name)} from ${esc(best.modelName)}</span></a></p>`;
@@ -107,6 +142,7 @@ export function rowHTML(s: Sighting): string {
     <td><span class="row-bird">${esc(s.name)}</span>, <span class="${condClass(s.condition)}">${esc(condWord(s.condition))}</span></td>
     <td class="row-model">${model}<span class="row-recipe">${esc(s.recipe)}</span></td>
     <td class="num">${esc(ratioShort(num(s.ratio)))}</td>
-    <td class="num">${Number.isFinite(num(s.kept)) ? pct(num(s.kept)) : ""}</td>
+    <td class="num score">${scoreParts(s).map((p) => `<span>${esc(p)}</span>`).join("")}</td>
+    <td class="rule">${esc(RULES[ruleOf(s)].name)}</td>
   </tr>`;
 }

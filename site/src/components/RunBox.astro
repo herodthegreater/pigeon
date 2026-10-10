@@ -7,6 +7,7 @@
  */
 import "../styles/prose.css";
 import { method, type Param } from "../lib/lab/data";
+import { idleLine } from "../lib/lab/results";
 
 interface Props { id: string; params: Param[] }
 const { id, params } = Astro.props;
@@ -67,21 +68,17 @@ const name = method(id).name;
   </form>
   <p class="run-status state"><span aria-live="polite" data-msg>Not run yet.</span><span data-tick></span></p>
   <div class="run-results" data-results>
-    <p class="run-idle">
-      A run trains and evaluates real models on the lab's toy problem, here in your browser. The first run
-      downloads Python (about 20 MB); most runs then take 5 to 60 seconds. Every model a run makes smaller
-      ends in a bird.
-    </p>
+    <p class="run-idle">{idleLine(id)}</p>
   </div>
   <noscript>
-    <p class="run-idle">Running needs JavaScript, which is turned off in this browser. Turn it on and reload the page to train these models here.</p>
+    <p class="run-idle">Running needs JavaScript, which is turned off in this browser. Turn it on and reload the page to run this method here.</p>
     <style is:inline>.runbox .run-form, .runbox .run-status, .runbox .run-results { display: none; }</style>
   </noscript>
 </section>
 
 <script>
   import { run, onStatus, isReady, stop as stopPython } from "../lib/lab/python";
-  import { resultView, settingsText } from "../lib/lab/results";
+  import { resultView, runActivity, settingsText } from "../lib/lab/results";
   import { esc } from "../lib/lab/markdown";
   import { recordSighting } from "../lib/ui/birds";
   import { firstHealthyLine, runBirds, runHref, type Saved } from "./birds/runbirds";
@@ -202,20 +199,22 @@ const name = method(id).name;
       out.replaceChildren();
       tick.textContent = "";
 
-      // Loading Python reports its own steps; once it is ready, count the training time.
+      // Loading Python reports its own steps; once it is ready, count the run's time, named for
+      // what the run does ("Training" only when it trains).
       let t0 = 0;
+      const doing = runActivity(mid, params);
       const showTick = () => { tick.textContent = `, ${Math.floor((performance.now() - t0) / 1000)} s so far`; };
-      const startTraining = () => {
+      const startRun = () => {
         if (t0) return;
         t0 = performance.now();
-        say("Training");
+        say(doing);
         showTick();
       };
-      const stop = onStatus((text) => (isReady() ? startTraining() : say(text)));
-      if (isReady()) startTraining();
+      const stop = onStatus((text) => (isReady() ? startRun() : say(text)));
+      if (isReady()) startRun();
       else say("Starting Python");
       const timer = setInterval(() => {
-        if (!t0 && isReady()) startTraining();
+        if (!t0 && isReady()) startRun();
         else if (t0) showTick();
       }, 1000);
 
@@ -316,14 +315,16 @@ const name = method(id).name;
 
   /* The run's birds: the best one on a plate, the rest as one ruled line each, like a specimen drawer. */
   .runbox .run-birds { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--rule); padding-top: var(--space-3); }
-  .runbox .run-birds h3 { font-size: var(--step-1); }
+  /* Three levels, three looks: the panel's serif h2, this sub-label in the body face (like .group > h3),
+     and the species name as the block's one serif line, a step below the h2. */
+  .runbox .run-birds h3 { font-family: var(--body); font-size: var(--step-0); font-weight: 600; }
   .runbox .no-bird { font-size: var(--step--1); color: var(--ink); }
   .runbox .best-bird { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
   .runbox .best-plate { background: var(--card); border: 1px solid var(--rule); padding: var(--space-2); max-width: 300px; }
   .runbox .best-plate svg, .runbox .mini svg { display: block; width: 100%; height: auto; }
   .runbox .best-bird figcaption { display: flex; flex-direction: column; gap: 2px; }
   .runbox .bird-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
-  .runbox .bird-species { font-family: var(--display); font-size: var(--step-1); font-weight: 600; line-height: 1.2; }
+  .runbox .bird-species { font-family: var(--display); font-size: var(--step-0); font-weight: 600; line-height: 1.2; }
   .runbox .bird-cond { font-size: var(--step--1); font-weight: 600; }
   .runbox .bird-latin { font-family: var(--display); font-style: italic; color: var(--magenta); font-size: var(--step--1); }
   .runbox .bird-row { font-size: var(--step--1); font-weight: 600; margin-top: var(--space-1); }

@@ -9,7 +9,7 @@ import { esc } from "../../lib/lab/markdown";
 import { KEEP_RULE, labBirds, type LabBird, type LabRun, type Sighting } from "../../lib/ui/birds";
 import { DODO, SPECIES } from "../../lib/ui/mascot";
 import { drawBird } from "./draw";
-import { andList, CONDITION_WORD, keptPhrase, pct, ratioPhrase, ratioShort } from "./format";
+import { andList, CONDITION_LABEL, CONDITION_WORD, keptPhrase, pct, ratioPhrase, ratioShort } from "./format";
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -58,7 +58,7 @@ export function runBirds(run: LabRun, info: RunInfo) {
     const none = !scored.bird || !scored.best;
     const head = `<h3 id="run-birds-title">${none ? "No birds from this run" : "Birds from this run"}</h3>`;
     if (!scored.bird) {
-      return `<section class="run-birds" aria-labelledby="run-birds-title">${head}<p class="no-bird">${esc(scored.reason)}</p></section>`;
+      return `<section class="run-birds" aria-labelledby="run-birds-title">${head}<p class="no-bird">${esc(noBirdLine(run, scored.reason))}</p></section>`;
     }
     const { birds, best } = scored;
     // The lab often labels the row "teacher 3x256 (reference)"; a sentence already says it's the reference.
@@ -72,7 +72,7 @@ export function runBirds(run: LabRun, info: RunInfo) {
     h += `<figure class="best-bird">
       <div class="best-plate">${drawBird(best.ratio, best.starve, { decorative: true, prefix: "run" })}</div>
       <figcaption>
-        <p class="bird-title"><span class="bird-species">${esc(best.name)}</span> <span class="bird-cond c-${best.condition}">${CONDITION_WORD[best.condition]}</span></p>
+        <p class="bird-title"><span class="bird-species">${esc(best.name)}</span> <span class="bird-cond c-${best.condition}">${CONDITION_LABEL[best.condition]}</span></p>
         ${latin(best) ? `<p class="bird-latin">${esc(latin(best))}</p>` : ""}
         <p class="bird-row">${esc(best.label)}</p>
         <p class="bird-nums">${esc(cap(ratioPhrase(best.ratio, reference)))}, ${esc(keptPhrase(best.kept, metric))}.</p>
@@ -105,6 +105,17 @@ export function runBirds(run: LabRun, info: RunInfo) {
   }
 
   return { scored, sightings, render };
+}
+
+/**
+ * Why a run has no bird, and what would hatch one. The lab's own reason (a method that
+ * never makes anything smaller) stands alone. When the method can shrink a model but these
+ * settings didn't (low-rank at full rank, adapters that outweigh what rounding saved), the
+ * reader is told what to change.
+ */
+export function noBirdLine(run: LabRun, reason: string): string {
+  const couldShrink = run.bird !== false && run.rows.some((r) => r.ref === true);
+  return couldShrink ? `${reason} Change a setting so the model stores fewer bits than the reference, then run it again.` : reason;
 }
 
 /** The status line's addition when a run hatches a species' first healthy bird. */

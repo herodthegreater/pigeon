@@ -2,7 +2,7 @@
 import { course } from "../components/school/course";
 import Base from "../layouts/Base.astro";
 import "../styles/page.css";
-import { mascotSVG, SPECIES, WORKS_LINE } from "../lib/ui/mascot";
+import { BROKEN, mascotSVG, SPECIES, WORKS_LINE } from "../lib/ui/mascot";
 import { PRESETS } from "../lib/ui/recipe";
 import { meta, methods, lessons, experiments, FAMILY_ORDER } from "../lib/lab/data";
 import { labRedirectScript } from "../lib/ui/labroutes";
@@ -23,6 +23,9 @@ const expGroups = new Set(exps.map((e) => e.group)).size;
 const chapters = course();
 const COURSE_CHAPTERS = chapters.length;
 const UNFINISHED = chapters.filter((c) => c.gap).length;
+
+// Pigeon's skeleton line, said beside its healthy line (WORKS_LINE), from the same numbers the bird is drawn by.
+const BONES_LINE = `${Math.round(BROKEN.accuracy * 100)}% accuracy or less, or ${Math.round(BROKEN.pointing * 100)}% pointing or less`;
 
 const and = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
@@ -69,7 +72,7 @@ const redirect = labRedirectScript(
 
     <section class="flagship" aria-labelledby="coop-title">
       <h2 id="coop-title">The Coop</h2>
-      <p class="intro">Where the shrinking happens. Stack quantization, pruning and palettes into a recipe. After every change Pigeon scores itself again on all {photos} photos and shows what it cost: accuracy, pointing, and the real size in bytes. The Coop's second cage holds <a href={`${base}coop/yolo/`}>YOLOv8n</a>, a real detector that draws a box around every bird it finds, to shrink the same way.</p>
+      <p class="intro">Where the shrinking happens. Stack quantization, pruning and palettes into a recipe. After every change Pigeon scores itself again on all {photos} photos and shows what it cost: accuracy, pointing, and the real size in bytes. The Coop's second cage holds <a href={`${base}coop/yolo/`}>YOLOv8n</a>, a real detector that draws a box around every bird it finds. Its tools are its own: one precision for all its weights, and a channel cut for each stage. It is scored on the same {photos} photos, and its health is the share of its bird-finding AP it keeps.</p>
 
       <figure class="ladder">
         <ol class="birds">
@@ -89,7 +92,7 @@ const redirect = labRedirectScript(
           </li>
         </ol>
         <figcaption>
-          <p>The key to sizes: how much smaller a model gets decides which bird it becomes. Pigeon stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and a broken model is bones.</p>
+          <p>The key to sizes: how much smaller a model gets decides which bird it becomes. Pigeon stays healthy while it keeps {WORKS_LINE} (its heatmap lands on the real bird). Below that it starves, and at {BONES_LINE} it is bones.</p>
           <p>
             The smallest healthy Pigeon on record is a {reachedName}: the {mixed.name} preset, {RECORDED.kb} KB, {RECORDED.ratio.toFixed(2)} times smaller, with {RECORDED.accuracy}% accuracy and {RECORDED.pointing}% pointing (recorded in the lab's notes, not measured on this page).
             No recipe on record keeps it healthy at {unreached[0].minRatio} times smaller or more, where the {unreached[0].name} starts. That probably takes retraining, which the Coop's tools never do;

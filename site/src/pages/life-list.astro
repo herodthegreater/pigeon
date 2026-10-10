@@ -7,10 +7,9 @@
 import Base from "../layouts/Base.astro";
 import "../styles/page.css";
 import "../styles/prose.css";
-import { KEEP_RULE } from "../lib/ui/birds";
 import { PRESETS } from "../lib/ui/recipe";
 import { methods } from "../lib/lab/data";
-import { KEY, entryHTML } from "../components/birds/lifelist";
+import { KEY, RULES, entryHTML } from "../components/birds/lifelist";
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 const preset = (id: string) => {
@@ -44,9 +43,18 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
     <section class="key" aria-labelledby="species-title">
       <h2 id="species-title">The six birds</h2>
       <p class="key-note">
-        A bird's species follows how many times smaller its model is than the model it was measured against. {KEEP_RULE}{" "}
-        A bird is drawn once you have seen it, in the best condition you have seen it in.
+        A bird's species follows how many times smaller its model is than the model it was measured against. Its
+        condition follows one of two rules, and every sighting below says which. A bird is drawn once you have seen it,
+        in the best condition you have seen it in.
       </p>
+      <dl class="rules">
+        {[RULES.keep, RULES.pigeon].map((r) => (
+          <div>
+            <dt>{r.name}<span class="rule-who">, for {r.who}</span></dt>
+            <dd>{r.text}</dd>
+          </div>
+        ))}
+      </dl>
       <ol class="species" data-species>
         {KEY.map((k) => <li class="sp" data-id={k.id} set:html={entryHTML(k, null, "srv")} />)}
       </ol>
@@ -59,7 +67,8 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
         <select id="ll-filter" data-filter><option value="">Every species</option></select>
         <p class="shown" aria-live="polite" data-shown></p>
       </div>
-      <div class="tablewrap" tabindex="0" role="region" aria-labelledby="sightings-title">
+      {/* The section is the one landmark; the scroll box is a named group, so it says what it holds when it takes focus. */}
+      <div class="tablewrap" tabindex="0" role="group" aria-label="Every sighting, as a table">
         <table class="ll-table">
           <thead>
             <tr>
@@ -67,13 +76,14 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
               <th scope="col">Bird</th>
               <th scope="col">Model and recipe</th>
               <th scope="col" class="num">Size</th>
-              <th scope="col" class="num">Kept</th>
+              <th scope="col" class="num">Score</th>
+              <th scope="col">Rule</th>
             </tr>
           </thead>
           <tbody data-rows></tbody>
         </table>
       </div>
-      <p class="table-note">Newest first. Size is how many times smaller than its reference the model is; kept is the share of the reference's score it keeps. The same recipe run again replaces its earlier sighting.</p>
+      <p class="table-note">Newest first. Size is how many times smaller (or bigger) than its reference the model is. Score is what the bird's rule reads: the share of the reference's score the model keeps, or for Pigeon's line, its accuracy and pointing. Rule names which of the two rules above graded the bird. The same recipe run again replaces its earlier sighting.</p>
 
       <div class="clear" data-clear>
         <button type="button" class="btn secondary" data-clear-start>Clear the life list</button>
@@ -221,6 +231,11 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
     .key { display: flex; flex-direction: column; gap: var(--space-3); border-top: 2px solid var(--ink); padding-top: var(--space-4); }
     .key > h2, .sightings > h2, .empty > h2 { font-size: var(--step-2); }
     .key-note { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
+    /* The two rules, each named the way the table's Rule column names it. */
+    .rules { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); max-width: var(--measure); font-size: var(--step--1); }
+    .rules dt { font-weight: 600; color: var(--ink); }
+    .rules .rule-who { font-weight: 400; color: var(--muted); }
+    .rules dd { margin: 0; color: var(--muted); }
 
     /* The key: six ruled entries, each drawing on its own plate, like a field guide's species pages. */
     .species {
@@ -242,6 +257,7 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
     .sp :global(.sp-best) { display: flex; flex-direction: column; font-size: var(--step--1); }
     .sp :global(.sp-recipe) { color: var(--muted); }
     .sp :global(.sp-nums) { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+    .sp :global(.sp-rule) { font-size: var(--step--2); color: var(--muted); }
     .sp :global(.sp-again) { font-size: var(--step--1); }
 
     :global(.lifelist .c-healthy) { color: var(--good); }
@@ -261,6 +277,9 @@ const guide = ["ptq", "magnitude_pruning"].map((id) => {
     .ll-table :global(.row-bird) { font-weight: 600; }
     .ll-table :global(.row-model) { min-width: 16ch; }
     .ll-table :global(.row-recipe) { display: block; color: var(--muted); }
+    /* Pigeon's line reads two numbers: one a line, so the column stays narrow. */
+    .ll-table :global(.score span) { display: block; }
+    .ll-table :global(.rule) { white-space: nowrap; color: var(--muted); }
     .table-note { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
 
     .clear { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--rule); align-items: flex-start; }
