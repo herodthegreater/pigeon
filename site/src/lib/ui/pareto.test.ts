@@ -29,5 +29,10 @@ describe("the run table and chart", () => {
   it("only counts a healthy, actually smaller run as the record", () => {
     expect(smallestWorking([full, int8, starving, mx], full.bytes)).toBe(int8);
     expect(smallestWorking([full, starving, mx], full.bytes)).toBeNull();
+    // A healthy run any smaller than the reference is compressed, as it is on the life list; the same size is not.
+    const headOnly: Attempt = { label: "INT8 per channel · Head", bytes: full.bytes - 9_000, accuracy: 0.94, pointing: 0.98 };
+    const zeroPrune: Attempt = { label: "0% pruned · all", bytes: full.bytes, accuracy: 0.94, pointing: 0.98 };
+    expect(smallestWorking([full, zeroPrune, starving], full.bytes)).toBeNull();
+    expect(smallestWorking([full, zeroPrune, headOnly, starving], full.bytes)).toBe(headOnly);
   });
 });

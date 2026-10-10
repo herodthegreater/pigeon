@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fixture from "./__fixtures__/torch_parity.json";
 import { convBits, fpGrid, nScales, quantize, rowsOf, type Clip, type Granularity, type Levels } from "./quant";
 import { ap50, detectorCondition, iou, matchCounts, nms, type Box, type Det } from "./score";
-import { describe as describeRecipe, keyOf, nativeRecipe, PRESETS } from "./recipe";
+import { describe as describeRecipe, keyOf, linkQuery, nativeRecipe, presetOf, PRESETS, recipeFromLink, type DetectorRecipe } from "./recipe";
 import { mascotSVG, SPECIES, speciesFor } from "../ui/mascot";
 
 const f32 = (a: number[]) => Float32Array.from(a);
@@ -139,5 +139,63 @@ describe("recipes", () => {
   });
   it("have unique preset ids", () => {
     expect(new Set(PRESETS.map((p) => p.id)).size).toBe(PRESETS.length);
+  });
+  it("name every cut, so two recipes never share a label", () => {
+    const neck = PRESETS.find((p) => p.id === "neck-20")!.recipe;
+    const raised = { ...neck, masks: { ...neck.masks, "model.19": 0.9, "model.21": 0.9 } };
+    expect(describeRecipe(neck)).toBe("Native fp16 · cut L12 20%, L15 20%, L16 20%, L18 20%, L19 20%, L21 20%");
+    expect(describeRecipe(raised)).toBe("Native fp16 · cut L12 20%, L15 20%, L16 20%, L18 20%, L19 90%, L21 90%");
+    expect(keyOf(raised)).not.toBe(keyOf(neck));
+  });
+  it("key a 1-bit recipe alike on either grid, which 1 bit doesn't use", () => {
+    expect(keyOf({ ...nativeRecipe(), bits: 1, levels: "fp" })).toBe(keyOf({ ...nativeRecipe(), bits: 1, levels: "int" }));
+    expect(keyOf({ ...nativeRecipe(), bits: 4, levels: "fp" })).not.toBe(keyOf({ ...nativeRecipe(), bits: 4, levels: "int" }));
+  });
+});
+
+describe("a YOLOv8n recipe in a link", () => {
+  const STAGES = ["model.0", "model.4", "model.12", "model.15", "model.16", "model.18", "model.19", "model.21"];
+  const read = (q: string) => recipeFromLink(new URLSearchParams(q), STAGES);
+  const back = (r: DetectorRecipe) => {
+    const got = read(linkQuery(r));
+    return got && "recipe" in got ? got.recipe : got;
+  };
+
+  it("reopens a preset by its id, and native with no query", () => {
+    for (const p of PRESETS) expect(linkQuery(p.recipe)).toBe(p.id === "native" ? "" : `preset=${p.id}`);
+    expect(read("preset=fp4-group")).toEqual({ recipe: PRESETS.find((p) => p.id === "fp4-group")!.recipe });
+    expect(read("")).toBeNull();
+    expect(read("utm_source=x")).toBeNull();
+  });
+
+  it("carries precision and every stage's cut, and brings back the same recipe", () => {
+    const r: DetectorRecipe = { bits: 6, granularity: "group", group: 64, levels: "fp", masks: { "model.21": 0.9, "model.4": 0.2, "model.16": 0.3, "model.12": 0.1 } };
+    expect(linkQuery(r)).toBe("bits=6&scale=group&group=64&grid=fp&cut=L4:20,L12:10,L16:30,L21:90");
+    expect(keyOf(back(r) as DetectorRecipe)).toBe(keyOf(r));
+    expect(presetOf(back(r) as DetectorRecipe)).toBeNull();
+    const cutOnly = { ...nativeRecipe(), masks: { "model.0": 0.5 } };
+    expect(linkQuery(cutOnly)).toBe("cut=L0:50");
+    expect(keyOf(back(cutOnly) as DetectorRecipe)).toBe(keyOf(cutOnly));
+    const oneBit = { ...nativeRecipe(), bits: 1, granularity: "tensor" as const };
+    expect(linkQuery(oneBit)).toBe("bits=1&scale=tensor");
+    expect(keyOf(back(oneBit) as DetectorRecipe)).toBe(keyOf(oneBit));
+  });
+
+  it("clamps every number to what the controls can set", () => {
+    expect(read("bits=12&scale=channel&grid=int")).toMatchObject({ recipe: { bits: 8 } });
+    expect(read("bits=40")).toMatchObject({ recipe: { bits: 16 } });
+    expect(read("bits=0")).toMatchObject({ recipe: { bits: 1 } });
+    expect(read("bits=4&scale=group&group=50")).toMatchObject({ recipe: { group: 64 } });
+    expect(read("cut=L4:95,L12:14,L16:0")).toMatchObject({ recipe: { masks: { "model.4": 0.9, "model.12": 0.1 } } });
+    expect((read("cut=L16:0") as { recipe: DetectorRecipe }).recipe.masks).toEqual({});
+  });
+
+  it("names what it couldn't read", () => {
+    expect(read("preset=int3")).toEqual({ error: 'there is no preset called "int3"' });
+    expect(read("bits=four")).toEqual({ error: '"four" is not a number of bits' });
+    expect(read("bits=4&scale=row")).toEqual({ error: '"row" is not a way to share scales' });
+    expect(read("bits=4&grid=log")).toEqual({ error: '"log" is not a grid' });
+    expect(read("cut=L4")).toEqual({ error: '"L4" is not a cut' });
+    expect(read("cut=L22:20")).toEqual({ error: "L22 has no channels to cut" });
   });
 });

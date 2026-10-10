@@ -6,6 +6,7 @@ import { experiment, experiments, methods } from "../../lib/lab/data";
 import { inline, slug } from "../../lib/lab/markdown";
 import Figures from "../../components/Figures.astro";
 import ResultTable from "../../components/results/ResultTable.astro";
+import ExperimentBirds from "../../components/results/ExperimentBirds.astro";
 
 export function getStaticPaths() {
   return experiments().map((e) => ({ params: { name: e.name } }));
@@ -46,6 +47,8 @@ const plain = (s: string) => s.replace(/\*([^*\n]+)\*/g, "$1");
     {e.notes && <p class="notes"><strong>Note:</strong> <Fragment set:html={inline(e.notes)} /></p>}
 
     <ResultTable title={e.title} rows={e.rows} refs={e.refs} seconds={e.seconds} />
+
+    <ExperimentBirds exp={e} />
   </main>
 </Base>
 

@@ -32,7 +32,8 @@
 .coop .condition[data-c="emaciated"] { color: var(--warn); }
 .coop .condition[data-c="skeleton"], .coop .condition[data-c="error"] { color: var(--bad); }
 
-.coop .board { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+/* The board is a size container: its metric tiles are laid out by the board's own width (see "metric tiles" below). */
+.coop .board { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; container: board / inline-size; }
 .coop .status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
 /* The bar drops to its own line when the status text fills a phone's width. */
 .coop .bar { flex: 1 1 120px; height: 3px; background: var(--sunk); max-width: 220px; }
@@ -49,6 +50,8 @@
   font-family: var(--display); font-size: var(--step-3); font-weight: 600; line-height: 1.1;
   display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2);
 }
+/* A number and its unit ("6.30 MB", "≈ 100.0%") never break apart; only the small delta beside it wraps below. */
+.coop .value > span:first-child { white-space: nowrap; }
 .coop .value small { font-family: var(--mono); font-size: var(--step--2); font-weight: 400; }
 .coop .value small.down { color: var(--bad); }
 .coop .value small.up { color: var(--good); }
@@ -58,9 +61,11 @@
 .coop .desc { font-size: var(--step--2); color: var(--muted); line-height: 1.35; }
 .coop .basis { font-size: var(--step--1); color: var(--muted); }
 .coop .basis:empty { display: none; }
-/* The score to beat, or the rule the bird follows: a ruled record line, like an entry in a field notebook. */
+/* The score to beat and the rule the bird follows: a ruled record, like an entry in a field notebook. */
 .coop .record { border-block: 1px solid var(--rule); padding-block: var(--space-3); }
 .coop .record strong { font-family: var(--display); font-size: var(--step-1); }
+.coop .record > p + p { margin-top: var(--space-2); }
+.coop .rule-line { font-size: var(--step--1); }
 
 /* ------------------------------------------------------------ recipe and results */
 
@@ -122,9 +127,9 @@
 #recipe .step-head h3 { font-size: var(--step-1); flex: 1; }
 #recipe .step-n { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
 #recipe .step-body { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
-/* Field labels read like the Field Guide's run box: semibold ink, the value in mono teal. */
+/* Field labels read like the Field Guide's run box: semibold ink, the value in mono ink. Teal is kept for what can be pressed. */
 #recipe .field { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: var(--step--1); font-weight: 600; }
-#recipe .field output { font-family: var(--mono); font-weight: 500; color: var(--teal); }
+#recipe .field output { font-family: var(--mono); font-weight: 500; }
 /* A short note under a control, saying what the chosen setting stores. */
 #recipe .note { font-size: var(--step--1); color: var(--muted); }
 #recipe select {
@@ -185,10 +190,30 @@
   .coop .hero, .coop .work { grid-template-columns: minmax(0, 1fr); }
   .coop .recipe-col { position: static; max-height: none; overflow: visible; }
 }
-@media (max-width: 640px) {
+/* Metric tiles: the biggest number size that fits the board. The widest value, "≈ 100.0%" during a quick estimate,
+   is 148px at --step-3 and 108px at --step-2, so four tiles in a row need a 725px board for --step-3 and 565px for
+   --step-2; two in a row need 363px for --step-3, and below that --step-2 with 12px side padding fits a 320px phone. */
+@container board (max-width: 724.98px) { .coop .value { font-size: var(--step-2); } }
+@container board (max-width: 564.98px) {
   .coop .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .coop .metric:nth-child(3) { border-left: 0; }
   .coop .metric:nth-child(n + 3) { border-top: 1px solid var(--rule); }
+  .coop .value { font-size: var(--step-3); }
+}
+@container board (max-width: 362.98px) {
+  .coop .metric { padding-inline: var(--space-3); }
+  .coop .value { font-size: var(--step-2); }
+}
+@supports not (container-type: inline-size) {
+  @media (max-width: 640px) {
+    .coop .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .coop .metric:nth-child(3) { border-left: 0; }
+    .coop .metric:nth-child(n + 3) { border-top: 1px solid var(--rule); }
+    .coop .metric { padding-inline: var(--space-3); }
+    .coop .value { font-size: var(--step-2); }
+  }
+}
+@media (max-width: 640px) {
   .coop .bird-card { grid-template-columns: minmax(0, 1fr); padding: var(--space-3); }
   .coop .specimens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -29,26 +29,30 @@ export const isNative = (r: DetectorRecipe) => r.bits >= 16 && !Object.values(r.
 
 export const granularityOf = (r: DetectorRecipe): Granularity => (r.granularity === "group" ? r.group : r.granularity);
 
-/** Normalized, so equal recipes share a cache entry whatever order their keys came in. */
+/**
+ * A recipe's identity, normalized so equal recipes share one key (and one cache entry) whatever
+ * order their cuts came in. 16 bits ignores the scale and the grid, and 1 bit has no float grid.
+ */
 export function keyOf(r: DetectorRecipe): string {
   const masks = Object.entries(r.masks).filter(([, v]) => v > 0).sort(([a], [b]) => a.localeCompare(b));
-  return r.bits >= 16 ? JSON.stringify([16, masks]) : JSON.stringify([r.bits, granularityOf(r), r.levels, masks]);
+  return r.bits >= 16 ? JSON.stringify([16, masks]) : JSON.stringify([r.bits, granularityOf(r), r.bits === 1 ? "int" : r.levels, masks]);
 }
 
 /** "L4" for "model.4": Ultralytics numbers the layers of the model in order. */
 export const layerName = (stage: string) => stage.replace("model.", "L");
 
-/** A short label for the runs table: "INT4 per channel · cut L4 20%, L6 10%". */
+/** The cuts in layer order, as [stage, fraction] pairs. */
+const cutsOf = (r: DetectorRecipe) =>
+  Object.entries(r.masks)
+    .filter(([, v]) => v > 0)
+    .sort(([a], [b]) => Number(a.split(".")[1]) - Number(b.split(".")[1]));
+
+/** The label for the runs table and the life list, naming every setting: "INT4 per channel · cut L4 20%, L6 10%". */
 export function describe(r: DetectorRecipe): string {
   const g = r.granularity === "group" ? `groups of ${r.group}` : r.granularity === "tensor" ? "one scale per tensor" : "per channel";
   const precision = r.bits >= 16 ? "Native fp16" : r.bits === 1 ? `1-bit, ${g}` : `${r.levels === "fp" ? "FP" : "INT"}${r.bits} ${g}`;
-  const cuts = Object.entries(r.masks)
-    .filter(([, v]) => v > 0)
-    .sort(([a], [b]) => Number(a.split(".")[1]) - Number(b.split(".")[1]))
-    .map(([s, v]) => `${layerName(s)} ${Math.round(v * 100)}%`);
-  if (!cuts.length) return precision;
-  const shown = cuts.length > 3 ? `${cuts.slice(0, 3).join(", ")} and ${cuts.length - 3} more` : cuts.join(", ");
-  return `${precision} · cut ${shown}`;
+  const cuts = cutsOf(r).map(([s, v]) => `${layerName(s)} ${Math.round(v * 100)}%`);
+  return cuts.length ? `${precision} · cut ${cuts.join(", ")}` : precision;
 }
 
 const NECK = ["model.12", "model.15", "model.16", "model.18", "model.19", "model.21"];
@@ -64,3 +68,81 @@ export const PRESETS: { id: string; name: string; hint: string; recipe: Detector
 ];
 
 export const sameRecipe = (a: DetectorRecipe, b: DetectorRecipe) => keyOf(a) === keyOf(b);
+
+/** The preset a recipe is, if any ("native" included). */
+export const presetOf = (r: DetectorRecipe) => PRESETS.find((p) => sameRecipe(p.recipe, r))?.id ?? null;
+
+/* ------------------------------------------------------------ the recipe in a link */
+
+const BITS = [1, 2, 3, 4, 5, 6, 7, 8, 16];
+const LINK_KEYS = ["bits", "scale", "group", "grid", "cut"];
+
+/**
+ * The query that reopens a recipe in the cage: "" for native, "preset=<id>" for a preset, and
+ * otherwise every setting, e.g. "bits=4&scale=group&group=32&grid=fp&cut=L4:20,L16:30".
+ */
+export function linkQuery(r: DetectorRecipe): string {
+  const preset = presetOf(r);
+  if (preset) return preset === "native" ? "" : `preset=${preset}`;
+  const q: string[] = [];
+  if (r.bits < 16) {
+    q.push(`bits=${r.bits}`, `scale=${r.granularity}`);
+    if (r.granularity === "group") q.push(`group=${r.group}`);
+    if (r.bits > 1) q.push(`grid=${r.levels}`);
+  }
+  const cuts = cutsOf(r).map(([s, v]) => `${layerName(s)}:${Math.round(v * 100)}`);
+  if (cuts.length) q.push(`cut=${cuts.join(",")}`);
+  return q.join("&");
+}
+
+export type FromLink = { recipe: DetectorRecipe } | { error: string } | null;
+
+const nearest = (v: number, options: readonly number[]) => options.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
+const number = (s: string) => (s.trim() ? Number(s) : NaN);
+
+/**
+ * The recipe a link carries: linkQuery's parameters, or ?preset=<id>. Every number is clamped to
+ * what the controls can set. `stages` are the stages that can be cut ("model.4"). Returns null when
+ * the link carries no recipe, and the reason in words when it can't be read.
+ */
+export function recipeFromLink(params: URLSearchParams, stages: string[]): FromLink {
+  if (!LINK_KEYS.some((k) => params.has(k))) {
+    const id = params.get("preset");
+    if (id === null) return null;
+    const p = PRESETS.find((x) => x.id === id);
+    return p ? { recipe: JSON.parse(JSON.stringify(p.recipe)) } : { error: `there is no preset called "${id}"` };
+  }
+  const r = nativeRecipe();
+  const bits = params.get("bits");
+  if (bits !== null) {
+    const n = number(bits);
+    if (!Number.isFinite(n)) return { error: `"${bits}" is not a number of bits` };
+    r.bits = n >= 16 ? 16 : nearest(Math.min(8, Math.max(1, n)), BITS);
+  }
+  const scale = params.get("scale");
+  if (scale !== null) {
+    if (scale !== "tensor" && scale !== "channel" && scale !== "group") return { error: `"${scale}" is not a way to share scales` };
+    r.granularity = scale;
+  }
+  const group = params.get("group");
+  if (group !== null) {
+    const n = number(group);
+    if (!Number.isFinite(n)) return { error: `"${group}" is not a group size` };
+    r.group = nearest(n, GROUP_SIZES);
+  }
+  const grid = params.get("grid");
+  if (grid !== null) {
+    if (grid !== "int" && grid !== "fp") return { error: `"${grid}" is not a grid` };
+    r.levels = grid;
+  }
+  for (const c of (params.get("cut") ?? "").split(",").filter((c) => c.trim())) {
+    const m = /^L(\d+):(\d+(?:\.\d+)?)$/.exec(c.trim());
+    if (!m) return { error: `"${c}" is not a cut` };
+    const stage = `model.${Number(m[1])}`;
+    if (!stages.includes(stage)) return { error: `L${Number(m[1])} has no channels to cut` };
+    const v = Math.min(MAX_MASK * 100, Math.max(0, Math.round(Number(m[2]) / 10) * 10)) / 100;
+    if (v > 0) r.masks[stage] = v;
+    else delete r.masks[stage];
+  }
+  return { recipe: r };
+}
