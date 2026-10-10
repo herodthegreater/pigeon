@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ALL_KINDS, type Recipe, type Step } from "../engine/pipeline";
-import { describeRecipe, linkQuery, MAX_LINK_STEPS, PRESETS, presetOf, recipeFromLink } from "./recipe";
+import { describeRecipe, linkQuery, MAX_STEPS, PRESETS, presetOf, recipeFromLink } from "./recipe";
 
 describe("a recipe's preset", () => {
   it("finds every preset by its steps, so a sighting links back with ?preset=", () => {
@@ -68,11 +68,16 @@ describe("a recipe in a link", () => {
     expect((read("steps=int.4.channel.ternary.all") as { recipe: Recipe }).recipe.steps[0]).not.toHaveProperty("ternary");
   });
 
+  it("loads a recipe as long as the editor lets anyone build", () => {
+    const steps: Step[] = Array.from({ length: MAX_STEPS }, (_, i) => ({ op: "prune", parts: [ALL_KINDS[i % ALL_KINDS.length]], method: "magnitude", amount: 0.05 }));
+    expect(back({ steps })).toEqual({ steps });
+  });
+
   it("names what it couldn't read, and loads nothing", () => {
     expect(read("preset=int3")).toEqual({ error: 'there is no preset called "int3"' });
     expect(read("steps=int.8.channel.wings")).toEqual({ error: 'step 1, "int.8.channel.wings", isn\'t a step the Coop can build' });
     expect(read("steps=prune.magnitude.lots.all")).toMatchObject({ error: expect.stringContaining("step 1") });
     expect(read("steps=float.fp6.none.all")).toMatchObject({ error: expect.stringContaining("step 1") });
-    expect(read(`steps=${Array(MAX_LINK_STEPS + 1).fill("cluster.16.all").join(",")}`)).toMatchObject({ error: expect.stringContaining(`at most ${MAX_LINK_STEPS}`) });
+    expect(read(`steps=${Array(MAX_STEPS + 1).fill("cluster.16.all").join(",")}`)).toMatchObject({ error: expect.stringContaining(`at most ${MAX_STEPS}`) });
   });
 });

@@ -68,8 +68,11 @@ export function presetOf(r: Recipe): string | null {
 const FORMATS = ["fp16", "bf16", "fp8_e4m3", "fp8_e5m2", "fp4_e2m1"] as const;
 const GROUP_SIZES = [16, 32, 64, 128];
 const MAX_PRUNE = { magnitude: 95, channels: 60 } as const; // the Remove slider's ends
-/** The most steps a link may stack: more than anyone builds by hand, few enough to score in reasonable time. */
-export const MAX_LINK_STEPS = 12;
+/**
+ * The most steps a recipe holds, in the editor and in a link: more than anyone builds by hand, few enough
+ * to score in reasonable time. The editor stops at the same number, so every recipe it builds has a link that loads.
+ */
+export const MAX_STEPS = 12;
 
 const partsText = (parts: Kind[]) => (parts.length === ALL.length ? "all" : parts.length ? ALL.filter((k) => parts.includes(k)).join("-") : "none");
 
@@ -164,7 +167,7 @@ export function recipeFromLink(params: URLSearchParams): FromLink {
     return p ? { recipe: clone(p.recipe), preset: p.id } : { error: `there is no preset called "${id}"` };
   }
   const parts = text.split(",").filter((t) => t.trim());
-  if (parts.length > MAX_LINK_STEPS) return { error: `it stacks ${parts.length} steps, and the Coop takes at most ${MAX_LINK_STEPS}` };
+  if (parts.length > MAX_STEPS) return { error: `it stacks ${parts.length} steps, and the Coop takes at most ${MAX_STEPS}` };
   const steps: Step[] = [];
   for (const [i, t] of parts.entries()) {
     const step = stepFrom(t.trim());
@@ -259,12 +262,13 @@ export class RecipeEditor {
   private render(focus: string | null = this.focusKey()) {
     const presets = PRESETS.map((p) => `<button type="button" class="preset" data-preset="${p.id}" aria-pressed="${p.id === this.active}" aria-describedby="preset-hint">${p.name}</button>`).join("");
     const steps = this.recipe.steps.map((s, i) => this.stepHTML(s, i)).join("");
+    const full = this.recipe.steps.length >= MAX_STEPS;
     this.root.innerHTML = `
       <div class="presets" role="group" aria-labelledby="presets-label"><span class="sub" id="presets-label">Presets</span><div class="preset-row">${presets}</div><p class="preset-hint" id="preset-hint">${presetHint(this.active)}</p></div>
       ${steps ? `<ol class="steps">${steps}</ol>` : `<p class="empty">No steps yet: this is the full-precision Pigeon. Add a step, or start from a preset.</p>`}
       <div class="add" role="group" aria-labelledby="add-label"><span class="sub" id="add-label">Add a step</span><div class="add-row">
-        ${(Object.keys(STEP_TITLES) as Step["op"][]).map((op) => `<button type="button" class="btn secondary add-btn" data-add="${op}">+ ${STEP_TITLES[op]}</button>`).join("")}
-      </div></div>`;
+        ${(Object.keys(STEP_TITLES) as Step["op"][]).map((op) => `<button type="button" class="btn secondary add-btn" data-add="${op}"${full ? ' disabled aria-describedby="add-full"' : ""}>+ ${STEP_TITLES[op]}</button>`).join("")}
+      </div>${full ? `<p class="note" id="add-full">A recipe holds at most ${MAX_STEPS} steps. Remove one to add another.</p>` : ""}</div>`;
     if (focus) this.root.querySelector<HTMLElement>(focus)?.focus();
   }
 
@@ -319,8 +323,9 @@ export class RecipeEditor {
 
   private onClick(e: Event) {
     const t = (e.target as HTMLElement).closest("button");
-    if (!t) return;
+    if (!t || t.disabled) return;
     if (t.dataset.preset) return void this.loadPreset(t.dataset.preset);
+    if (t.dataset.add && this.recipe.steps.length >= MAX_STEPS) return;
     this.active = null;
     if (t.dataset.add) {
       this.recipe.steps.push(newStep(t.dataset.add as Step["op"]));
