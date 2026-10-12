@@ -171,7 +171,7 @@ describe("the key's words", () => {
   it("say 'scores' when a model beats the teacher and 'keeps' when it doesn't", () => {
     expect(w.entries.map((e) => e.nums)).toEqual([
       "6.7× smaller, scores 100.7% of the teacher's accuracy",
-      "65.7× smaller, keeps 93.0% of the teacher's accuracy",
+      "65.6× smaller, keeps 93.0% of the teacher's accuracy",
     ]);
     expect(w.entries.map((e) => e.count)).toEqual(["The only model of its kind", "The only model of its kind"]);
   });

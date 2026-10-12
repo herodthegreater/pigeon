@@ -46,7 +46,7 @@ const nav: [Section, string, string, string][] = [
       </nav>
       <label class="theme">
         <span>Theme</span>
-        <select id="theme">
+        <select id="theme" autocomplete="off">
           <option value="system">System</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
@@ -115,7 +115,9 @@ const nav: [Section, string, string, string][] = [
         select.value = v;
       };
       sync();
-      addEventListener("pageshow", (e) => { if ((e as PageTransitionEvent).persisted) sync(); });
+      // Every pageshow: a page restored from the back/forward cache, or one Back reloaded (autocomplete="off" keeps
+      // the browser from restoring the select's old value over this).
+      addEventListener("pageshow", sync);
       addEventListener("storage", (e) => { if (e.key === KEY || e.key === null) sync(); });
       select.addEventListener("change", () => {
         const v = select.value;

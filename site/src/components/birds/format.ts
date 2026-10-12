@@ -18,6 +18,8 @@ export const CONDITION_WORD = Object.fromEntries(
  * (ratio = the reference's storage / this model's). Only an exact 1 is the same size: a model
  * that changed at all gets the digits it takes to show it (1.03), so a model 3% bigger never
  * reads as "the same size" or "1.0 times". `n` is null for a change under 0.1%.
+ * Shrinkage is cut, never rounded up, so a model 1.77 times smaller reads "1.7", not the 1.8
+ * a dove needs: the number never claims a bird the model hasn't reached.
  */
 function times(ratio: number): { way: "same" } | { way: "smaller" | "bigger"; n: string | null } | null {
   if (!(ratio > 0) || !Number.isFinite(ratio)) return null;
@@ -25,7 +27,8 @@ function times(ratio: number): { way: "same" } | { way: "smaller" | "bigger"; n:
   const way = ratio > 1 ? "smaller" : "bigger";
   const x = ratio > 1 ? ratio : 1 / ratio;
   for (const digits of [1, 2, 3]) {
-    const n = x.toFixed(digits);
+    const f = 10 ** digits;
+    const n = way === "smaller" ? (Math.floor(x * f + 1e-9) / f).toFixed(digits) : x.toFixed(digits);
     if (!/^1\.0+$/.test(n)) return { way, n };
   }
   return { way, n: null };

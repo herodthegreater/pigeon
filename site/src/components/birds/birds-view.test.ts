@@ -74,7 +74,7 @@ describe("a run's birds", () => {
     expect(r.sightings[1]).toMatchObject({ model: "lab:ptq", modelName: "Post-training quantization", name: "Barn Swallow", condition: "healthy", href: "/pigeon/guide/ptq/#run" });
     const h = r.render({ ok: true, firstHealthy: ["Barn Swallow"] });
     expect(h.match(/<svg/g)).toHaveLength(3); // one drawing per model row, the reference has none
-    expect(h).toContain("7.7 times smaller than fp32, keeps 98.2% of its accuracy.");
+    expect(h).toContain("7.6 times smaller than fp32, keeps 98.2% of its accuracy.");
     expect(h).toContain("A bird stays healthy while its model keeps at least 95%");
     expect(h).toContain('href="/pigeon/life-list/"');
   });
@@ -89,7 +89,7 @@ describe("a run's birds", () => {
       ],
     };
     const h = runBirds(kd, info).render({ ok: true, firstHealthy: [] });
-    expect(h).toContain("7.4 times smaller than teacher 3x256, keeps 98.9% of its accuracy.");
+    expect(h).toContain("7.3 times smaller than teacher 3x256, keeps 98.9% of its accuracy.");
     expect(h).toContain("Measured against teacher 3x256, this run's reference.");
     expect(h).toContain("Both birds are saved");
   });
@@ -240,5 +240,17 @@ describe("the life list page", () => {
     const same = "2026-10-09T10:00:00.000Z";
     const run = newestFirst([s({ recipe: "old", when: "2026-10-08T00:00:00Z" }), s({ recipe: "a", when: same }), s({ recipe: "b", when: same })]);
     expect(run.map((x) => x.recipe)).toEqual(["b", "a", "old"]);
+  });
+});
+
+describe("ratio wording never claims a bird the model hasn't reached (final review)", () => {
+  it("cuts shrinkage instead of rounding it up to a species threshold", () => {
+    expect(ratioShort(1.7669)).toBe("1.7× smaller"); // still a rock pigeon; a dove needs 1.8
+    expect(ratioShort(1.8)).toBe("1.8× smaller");
+    expect(ratioShort(1.2508)).toBe("1.2× smaller"); // a dodo needs under 1.3
+    expect(ratioShort(6.21)).toBe("6.2× smaller");
+    expect(ratioShort(1.0004)).toBe("under 0.1% smaller");
+    expect(ratioShort(1)).toBe("same size");
+    expect(ratioShort(68.224 / 70.272)).toBe("1.03× bigger"); // QLoRA at rank 12 grew 3%
   });
 });
