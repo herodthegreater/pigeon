@@ -30,9 +30,35 @@ const nav: [Section, string, string, string][] = [
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" />
     <!-- Without JavaScript the theme control can't do anything, so it isn't shown; the page follows the system. -->
     <noscript><style>.theme { display: none !important; }</style></noscript>
-    <!-- Apply a remembered theme before first paint, so a dark choice never flashes light. -->
+    <!-- The theme, all in the head so it works the moment the control exists: a remembered choice is
+         applied before first paint (no flash), a pick is caught by one listener on the document (no dead
+         moment while the page's other scripts load), and the control is kept in step with the page on
+         load, on Back (bfcache or reload) and when another tab changes it. With site storage blocked
+         nothing can be remembered, so the page follows whatever the control shows. -->
     <script is:inline>
-      try { const t = localStorage.getItem("pigeon.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+      (function () {
+        var KEY = "pigeon.theme", root = document.documentElement;
+        var BLOCKED = {};
+        function read() { try { return localStorage.getItem(KEY); } catch (e) { return BLOCKED; } }
+        function apply(v) { if (v === "light" || v === "dark") root.dataset.theme = v; else delete root.dataset.theme; }
+        function sync() {
+          var sel = document.getElementById("theme"), s = read();
+          var v = s === BLOCKED ? (sel ? sel.value : "system") : s === "light" || s === "dark" ? s : "system";
+          apply(v);
+          if (sel) sel.value = v;
+        }
+        var first = read();
+        if (first === "light" || first === "dark") apply(first);
+        document.addEventListener("change", function (e) {
+          var t = e.target;
+          if (!t || t.id !== "theme") return;
+          apply(t.value);
+          try { t.value === "system" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, t.value); } catch (err) {}
+        });
+        addEventListener("pageshow", sync);
+        addEventListener("storage", function (e) { if (e.key === KEY || e.key === null) sync(); });
+        window.pigeonThemeSync = sync;
+      })();
     </script>
   </head>
   <body>
@@ -51,6 +77,8 @@ const nav: [Section, string, string, string][] = [
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
+        <!-- Show the remembered choice as soon as the control is parsed, not after the page's scripts. -->
+        <script is:inline>window.pigeonThemeSync && window.pigeonThemeSync();</script>
       </label>
     </header>
     <slot />
@@ -102,30 +130,5 @@ const nav: [Section, string, string, string][] = [
         }
       }
     </style>
-    <script>
-      const select = document.getElementById("theme") as HTMLSelectElement;
-      const KEY = "pigeon.theme";
-      // Apply the stored choice: at load, on a page restored with Back (bfcache), and when another tab changes it.
-      const sync = () => {
-        let stored: string | null = null;
-        // Storage blocked: nothing was saved to sync to, so keep whatever the page shows now (a choice made this visit).
-        try { stored = localStorage.getItem(KEY); } catch { return; }
-        const v = stored === "light" || stored === "dark" ? stored : "system";
-        if (v === "system") delete document.documentElement.dataset.theme;
-        else document.documentElement.dataset.theme = v;
-        select.value = v;
-      };
-      sync();
-      // Every pageshow: a page restored from the back/forward cache, or one Back reloaded (autocomplete="off" keeps
-      // the browser from restoring the select's old value over this).
-      addEventListener("pageshow", sync);
-      addEventListener("storage", (e) => { if (e.key === KEY || e.key === null) sync(); });
-      select.addEventListener("change", () => {
-        const v = select.value;
-        if (v === "system") delete document.documentElement.dataset.theme;
-        else document.documentElement.dataset.theme = v;
-        try { v === "system" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, v); } catch {}
-      });
-    </script>
   </body>
 </html>

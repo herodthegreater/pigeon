@@ -158,7 +158,12 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         // 2:4 runs (the old pipeline skipped a 2:4 step left at amount 0, so "2:4 · all" could mean nothing was pruned).
         const unknowable = (label: string) =>
           / (MX|NV)\/\d+/.test(label) || /\b(FP16|BF16|FP8 E4M3|FP8 E5M2|FP4 E2M1) ·/.test(label) || /(^|\s)2:4 ·/.test(label);
-        if (localStorage.getItem(STORE) === null) localStorage.setItem(STORE, JSON.stringify(runs(old).filter((a) => !unknowable(a.label))));
+        // Kept runs get today's label wording (steps joined with ", then "; a step on no layers says so), so
+        // running the same recipe again replaces them instead of adding a twin.
+        const relabel = (label: string) => label.split(" → ").map((step) => step.replace(/ · $/, " · no layers")).join(", then ");
+        if (localStorage.getItem(STORE) === null) {
+          localStorage.setItem(STORE, JSON.stringify(runs(old).filter((a) => !unknowable(a.label)).map((a) => ({ ...a, label: relabel(a.label) }))));
+        }
         localStorage.removeItem(OLD_STORE);
       }
       attempts = runs(localStorage.getItem(STORE));
