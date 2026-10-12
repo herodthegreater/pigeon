@@ -34,16 +34,19 @@ const nav: [Section, string, string, string][] = [
          applied before first paint (no flash), a pick is caught by one listener on the document (no dead
          moment while the page's other scripts load), and the control is kept in step with the page on
          load, on Back (bfcache or reload) and when another tab changes it. With site storage blocked
-         nothing can be remembered, so the page follows whatever the control shows. -->
+         nothing can be remembered, so the page follows whatever the control shows, and a pick storage
+         refused to save holds for this visit. An inline call right after the control shows the remembered
+         choice as soon as the control is parsed. -->
     <script is:inline>
       (function () {
         var KEY = "pigeon.theme", root = document.documentElement;
         var BLOCKED = {};
+        var picked = null; // a pick this visit that storage refused to save
         function read() { try { return localStorage.getItem(KEY); } catch (e) { return BLOCKED; } }
         function apply(v) { if (v === "light" || v === "dark") root.dataset.theme = v; else delete root.dataset.theme; }
         function sync() {
           var sel = document.getElementById("theme"), s = read();
-          var v = s === BLOCKED ? (sel ? sel.value : "system") : s === "light" || s === "dark" ? s : "system";
+          var v = picked !== null ? picked : s === BLOCKED ? (sel ? sel.value : "system") : s === "light" || s === "dark" ? s : "system";
           apply(v);
           if (sel) sel.value = v;
         }
@@ -53,7 +56,7 @@ const nav: [Section, string, string, string][] = [
           var t = e.target;
           if (!t || t.id !== "theme") return;
           apply(t.value);
-          try { t.value === "system" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, t.value); } catch (err) {}
+          try { t.value === "system" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, t.value); picked = null; } catch (err) { picked = t.value; }
         });
         addEventListener("pageshow", sync);
         addEventListener("storage", function (e) { if (e.key === KEY || e.key === null) sync(); });
@@ -76,9 +79,7 @@ const nav: [Section, string, string, string][] = [
           <option value="system">System</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
-        </select>
-        <!-- Show the remembered choice as soon as the control is parsed, not after the page's scripts. -->
-        <script is:inline>window.pigeonThemeSync && window.pigeonThemeSync();</script>
+        </select><script is:inline>window.pigeonThemeSync && window.pigeonThemeSync();</script>
       </label>
     </header>
     <slot />
