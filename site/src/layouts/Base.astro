@@ -108,7 +108,8 @@ const nav: [Section, string, string, string][] = [
       // Apply the stored choice: at load, on a page restored with Back (bfcache), and when another tab changes it.
       const sync = () => {
         let stored: string | null = null;
-        try { stored = localStorage.getItem(KEY); } catch {}
+        // Storage blocked: nothing was saved to sync to, so keep whatever the page shows now (a choice made this visit).
+        try { stored = localStorage.getItem(KEY); } catch { return; }
         const v = stored === "light" || stored === "dark" ? stored : "system";
         if (v === "system") delete document.documentElement.dataset.theme;
         else document.documentElement.dataset.theme = v;
