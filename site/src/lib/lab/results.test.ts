@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { idleLine, runActivity } from "./results";
+import { idleLine, runActivity, SAME_SIZE } from "./results";
 
 const LAB = new URL("../../data/lab/", import.meta.url);
 const methods: { id: string; status: string }[] = JSON.parse(readFileSync(new URL("methods.json", LAB), "utf8"));
@@ -37,6 +37,17 @@ describe("what a run says it is doing", () => {
     expect(idleLine("ptq")).toMatch(/^A run loads the lab's trained model, rounds its weights .* Nothing is trained\./);
     expect(idleLine("wanda")).toContain("Nothing is trained.");
     expect(idleLine("kd")).not.toContain("Nothing is trained");
-    for (const id of runnable) expect(idleLine(id)).toContain("Every model a run makes smaller ends in a bird.");
+    for (const id of [...runnable].filter((m) => !SAME_SIZE.has(m))) expect(idleLine(id)).toContain("Every model a run makes smaller ends in a bird.");
+  });
+});
+
+describe("idle line for methods that don't shrink anything (final review)", () => {
+  it("never says a same-size method compresses, and says it hatches no bird", () => {
+    for (const id of ["born_again", "overparameterize", "small_tricks"]) {
+      const line = idleLine(id);
+      expect(line).not.toMatch(/compress/);
+      expect(line).toMatch(/hatches no bird/);
+    }
+    expect(idleLine("ptq")).toMatch(/rounds its weights/);
   });
 });

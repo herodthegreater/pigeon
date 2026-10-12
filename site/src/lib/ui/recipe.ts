@@ -43,7 +43,8 @@ export function describeStep(s: Step): string {
       return `${s.ternary ? "ternary" : `INT${s.bits}`} ${g}${s.symmetric ? "" : " asym"} · ${parts}`;
     }
     case "float": {
-      const sc = s.scaling.kind === "mx" ? ` MX/${s.scaling.block}` : s.scaling.kind === "nv" ? ` NV/${s.scaling.block}` : "";
+      // Every scaling is named except a plain cast, so two different recipes never share a label.
+      const sc = s.scaling.kind === "mx" ? ` MX/${s.scaling.block}` : s.scaling.kind === "nv" ? ` NV/${s.scaling.block}` : s.scaling.kind === "tensor" ? " one scale" : "";
       return `${s.format.toUpperCase().replace("_", " ")}${sc} · ${parts}`;
     }
     case "prune":
@@ -57,10 +58,15 @@ export function describeRecipe(r: Recipe): string {
   return r.steps.length ? r.steps.map(describeStep).join(", then ") : "Full precision";
 }
 
-/** The preset a recipe matches, if any: the label covers every setting a step has, so equal labels are equal recipes. */
+/** A recipe's identity: every setting of every step, the same text its link carries. Equal keys are equal recipes. */
+export function recipeKey(r: Recipe): string {
+  return r.steps.map(stepText).join(",");
+}
+
+/** The preset a recipe matches, if any, compared setting by setting (not by label). */
 export function presetOf(r: Recipe): string | null {
-  const label = describeRecipe(r);
-  return PRESETS.find((p) => describeRecipe(p.recipe) === label)?.id ?? null;
+  const key = recipeKey(r);
+  return PRESETS.find((p) => recipeKey(p.recipe) === key)?.id ?? null;
 }
 
 /* ------------------------------------------------------------ the recipe in a link */

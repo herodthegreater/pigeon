@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ALL_KINDS, type Recipe, type Step } from "../engine/pipeline";
-import { describeRecipe, linkQuery, MAX_STEPS, PRESETS, presetOf, recipeFromLink } from "./recipe";
+import { describeRecipe, linkQuery, MAX_STEPS, PRESETS, presetOf, recipeFromLink, recipeKey } from "./recipe";
 
 describe("a recipe's preset", () => {
   it("finds every preset by its steps, so a sighting links back with ?preset=", () => {
@@ -79,5 +79,26 @@ describe("a recipe in a link", () => {
     expect(read("steps=prune.magnitude.lots.all")).toMatchObject({ error: expect.stringContaining("step 1") });
     expect(read("steps=float.fp6.none.all")).toMatchObject({ error: expect.stringContaining("step 1") });
     expect(read(`steps=${Array(MAX_STEPS + 1).fill("cluster.16.all").join(",")}`)).toMatchObject({ error: expect.stringContaining(`at most ${MAX_STEPS}`) });
+  });
+});
+
+describe("recipe identity (final review)", () => {
+  const fp = (kind: "none" | "tensor") => ({ steps: [{ op: "float" as const, parts: [...ALL_KINDS], format: "fp16" as const, scaling: { kind } }] });
+
+  it("names per-tensor scaling, so a plain cast and a scaled cast never share a label", () => {
+    expect(describeRecipe(fp("none"))).toBe("FP16 · all");
+    expect(describeRecipe(fp("tensor"))).toBe("FP16 one scale · all");
+  });
+
+  it("matches presets setting by setting, and links reopen the exact recipe", () => {
+    expect(presetOf(fp("none"))).toBe("fp16");
+    expect(presetOf(fp("tensor"))).toBeNull();
+    expect(recipeKey(fp("none"))).not.toBe(recipeKey(fp("tensor")));
+    const q = linkQuery(fp("tensor"));
+    expect(q).toBe("steps=float.fp16.tensor.all");
+    const back = recipeFromLink(new URLSearchParams(q));
+    if (!back || "error" in back) throw new Error("link didn't load");
+    expect(recipeKey(back.recipe)).toBe(recipeKey(fp("tensor")));
+    expect(back.preset).toBeNull();
   });
 });

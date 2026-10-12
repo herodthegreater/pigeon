@@ -14,6 +14,7 @@ import { CONDITION_WORD, conditionOf, starvation, WORKS, type Condition } from "
 
 export interface Attempt {
   label: string;
+  key?: string; // the recipe's identity (recipeKey); runs saved before it existed match by label
   bytes: number;
   accuracy: number;
   pointing: number;

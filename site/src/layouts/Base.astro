@@ -105,9 +105,18 @@ const nav: [Section, string, string, string][] = [
     <script>
       const select = document.getElementById("theme") as HTMLSelectElement;
       const KEY = "pigeon.theme";
-      let stored: string | null = null;
-      try { stored = localStorage.getItem(KEY); } catch {}
-      select.value = stored === "light" || stored === "dark" ? stored : "system";
+      // Apply the stored choice: at load, on a page restored with Back (bfcache), and when another tab changes it.
+      const sync = () => {
+        let stored: string | null = null;
+        try { stored = localStorage.getItem(KEY); } catch {}
+        const v = stored === "light" || stored === "dark" ? stored : "system";
+        if (v === "system") delete document.documentElement.dataset.theme;
+        else document.documentElement.dataset.theme = v;
+        select.value = v;
+      };
+      sync();
+      addEventListener("pageshow", (e) => { if ((e as PageTransitionEvent).persisted) sync(); });
+      addEventListener("storage", (e) => { if (e.key === KEY || e.key === null) sync(); });
       select.addEventListener("change", () => {
         const v = select.value;
         if (v === "system") delete document.documentElement.dataset.theme;

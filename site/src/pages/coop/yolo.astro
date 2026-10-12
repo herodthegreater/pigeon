@@ -145,6 +145,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
     import { mascotSVG, speciesNote, CONDITION_WORD, DODO, type Condition } from "../../lib/ui/mascot";
     import { birdFor } from "../../lib/ui/birds";
     import { bindLifeListCount, birdDrawer, cageHref, hatches, sight } from "../../lib/ui/coopbirds";
+    import { ratioShort } from "../../components/birds/format";
 
     const $ = (id: string) => document.getElementById(id)!;
     const STORE = "pigeon.coop.yolo.runs";
@@ -273,7 +274,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         delta($("m-ap-d"), r.ap, r.nativeAp);
         $("m-kept").textContent = `${est}${(kept * 100).toFixed(1)}%`;
         $("m-size").textContent = size(r.cost.bytes);
-        $("m-ratio").textContent = `${ratio.toFixed(2)}× smaller`;
+        $("m-ratio").textContent = ratioShort(ratio);
         $("m-ratio").className = "flat";
         const cut = r.cost.macs < native.cost.macs ? ", cut channels left out" : "";
         $("m-size-desc").textContent = r.cost.effBits < 16 ? `${r.cost.effBits.toFixed(2)} bits per weight, scales included${cut}` : cut ? `16 bits per weight${cut}` : "16 bits per weight, as shipped";

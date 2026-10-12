@@ -34,7 +34,7 @@
 
 /* The board is a size container: its metric tiles are laid out by the board's own width (see "metric tiles" below). */
 .coop .board { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; container: board / inline-size; }
-.coop .status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-family: var(--mono); font-size: var(--step--1); color: var(--muted); }
+.coop .status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-family: var(--mono); font-size: var(--step--1); font-weight: 400; color: var(--muted); }
 /* The bar drops to its own line when the status text fills a phone's width. */
 .coop .bar { flex: 1 1 120px; height: 3px; background: var(--sunk); max-width: 220px; }
 .coop .bar span { display: block; height: 100%; width: 0; background: var(--teal); transition: width 0.15s; }

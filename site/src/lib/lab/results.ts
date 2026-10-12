@@ -115,8 +115,17 @@ export function runActivity(method: string, params: Record<string, unknown> = {}
   return "Training";
 }
 
+/**
+ * Methods whose runs never make a model smaller: the lab says so with an unconditional
+ * bird_reason (lab/methods.py: born_again, overparameterize, small_tricks).
+ */
+export const SAME_SIZE = new Set(["born_again", "overparameterize", "small_tricks"]);
+
 /** The run box's line before a first run, true of what this method's run does. */
 export function idleLine(method: string): string {
+  if (SAME_SIZE.has(method)) {
+    return "A run trains real models on the lab's toy problem and scores them, here in your browser. It changes how a model is trained, not its size, so it hatches no bird. The first run downloads Python (about 20 MB); most runs then take 5 to 60 seconds.";
+  }
   const what = ROUNDS_ONLY.has(method)
     ? "A run loads the lab's trained model, rounds its weights and scores the result on the lab's toy problem, here in your browser. Nothing is trained."
     : NO_TRAINING.has(method)

@@ -126,7 +126,8 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
   <script>
     import { Engine, QUICK, Unsupported, type Ready } from "../../lib/engine/client";
     import type { Result } from "../../lib/engine/worker";
-    import { RecipeEditor, linkQuery, recipeFromLink } from "../../lib/ui/recipe";
+    import { RecipeEditor, linkQuery, recipeFromLink, recipeKey } from "../../lib/ui/recipe";
+    import { ratioShort } from "../../components/birds/format";
     import { mascotSVG, speciesNote, CONDITION_WORD, DODO } from "../../lib/ui/mascot";
     import { paretoSVG, paretoTable, smallestWorking, formatSize, type Attempt } from "../../lib/ui/pareto";
     import { Specimens, esc } from "../../lib/ui/specimens";
@@ -218,7 +219,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
       const base = baseline;
       const sheet = (s: number) => `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}testset/sheet-${s}.webp`;
       const specimens = new Specimens($("specimens"), images, sheet, 10);
-      let current: Attempt = { label: "Full precision", bytes: base.totalBytes, accuracy: base.score.accuracy, pointing: base.score.pointing };
+      let current: Attempt = { label: "Full precision", key: "", bytes: base.totalBytes, accuracy: base.score.accuracy, pointing: base.score.pointing };
       let lastFinal: Result = base; // what the board falls back to when a run fails
       const drawBird = birdDrawer($("bird"));
       const warned = { blocked: false };
@@ -241,7 +242,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         $("m-pt").textContent = est + pct(s.pointing); delta($("m-pt-d"), s.pointing, base.score.pointing);
         $("m-ag").textContent = est + pct(s.agreement);
         $("m-size").textContent = formatSize(r.totalBytes);
-        $("m-ratio").textContent = `${ratio.toFixed(2)}× smaller`;
+        $("m-ratio").textContent = ratioShort(ratio);
         $("m-ratio").className = "flat";
         const m = mascotSVG({ ratio, accuracy: s.accuracy, pointing: s.pointing });
         drawBird(m.dodo ? "dodo" : m.species.id, m.svg);
@@ -277,7 +278,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
         $("pareto-table").innerHTML = paretoTable(attempts, current);
         const best = smallestWorking(attempts, base.totalBytes);
         $("best").innerHTML = best
-          ? `Smallest healthy Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${(base.totalBytes / best.bytes).toFixed(2)}× smaller, ${pct(best.accuracy)} accurate): <em>${esc(best.label)}</em>`
+          ? `Smallest healthy Pigeon so far: <strong>${formatSize(best.bytes)}</strong> (${ratioShort(base.totalBytes / best.bytes)}, ${pct(best.accuracy)} accurate): <em>${esc(best.label)}</em>`
           : "No healthy compressed Pigeon yet.";
       }
 
@@ -294,8 +295,9 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
           onFull: (r) => {
             const shown = show(r, true);
             lastFinal = r;
-            current = { label, bytes: r.totalBytes, accuracy: r.score.accuracy, pointing: r.score.pointing };
-            const dup = attempts.findIndex((a) => a.label === label);
+            const key = recipeKey(recipe);
+            current = { label, key, bytes: r.totalBytes, accuracy: r.score.accuracy, pointing: r.score.pointing };
+            const dup = attempts.findIndex((a) => (a.key ? a.key === key : a.label === label));
             if (dup >= 0) attempts.splice(dup, 1);
             attempts.push(current);
             save();
@@ -305,7 +307,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
             const { m } = shown;
             const life = !hatches(shown.ratio) ? { said: "", announce: false } : sight({
               bird: { ratio: shown.ratio, kept: r.score.accuracy / base.score.accuracy, condition: m.condition, starve: m.starve, species: m.dodo ? "dodo" : m.species.id, name: shown.name },
-              model: "pigeon", modelName: "Pigeon", recipe: label, href: cageHref(CAGE, linkQuery(recipe)), rule: "pigeon", pointing: r.score.pointing, accuracy: r.score.accuracy,
+              model: "pigeon", modelName: "Pigeon", recipe: label, recipeKey: key, href: cageHref(CAGE, linkQuery(recipe)), rule: "pigeon", pointing: r.score.pointing, accuracy: r.score.accuracy,
             }, warned);
             status(`Scored on all ${r.score.n} photos · ${Math.round(r.ms.infer)} ms${life.said ? ` · ${life.said}` : ""}`, "ok");
             announce(life.announce ? `${shown.summary}. ${life.said}` : shown.summary);
@@ -323,7 +325,7 @@ const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/s
       });
 
       const summary = show(base, true).summary;
-      if (!attempts.some((a) => a.label === current.label)) attempts.push(current);
+      if (!attempts.some((a) => (a.key !== undefined ? a.key === current.key : a.label === current.label))) attempts.push(current);
       redrawChart();
       status(`Scored on all ${base.score.n} photos · ready`, "ok");
 
