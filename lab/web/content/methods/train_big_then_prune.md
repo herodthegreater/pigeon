@@ -5,16 +5,15 @@ To get a width-16 network you can train width 16, or train something much wider,
 ## How it works
 
 1. Train a network of two hidden layers of width `start` from scratch on labels.
-2. Score its neurons with the Taylor criterion, $\sum \lvert a \cdot \partial L / \partial a \rvert$ over examples (see Structured pruning).
-3. Keep the top `target` neurons in each hidden layer.
-4. Recover for half the original training budget, either on labels or by distilling from the unpruned wide net.
-5. Baseline: train two hidden layers of width `target` directly for the same total number of steps.
-
-The score of step 2, for neuron $j$ with activation $a_j(x)$ on probe example $x$:
+2. Score its neurons with the Taylor criterion (see Structured pruning). For neuron $j$ with activation $a_j(x)$ on probe example $x$:
 
 $$
 S_j = \sum_x \left\lvert a_j(x) \, \frac{\partial L}{\partial a_j(x)} \right\rvert
 $$
+
+3. Keep the top `target` neurons in each hidden layer.
+4. Recover for half the original training budget, either on labels or by distilling from the unpruned wide net.
+5. Baseline: train two hidden layers of width `target` directly for the same total number of steps.
 
 ## The code, line by line
 

@@ -5,24 +5,22 @@ A classifier's teacher gives one probability vector per image. A detector like Y
 ## How it works
 
 1. Run teacher and student on the same batch at the same input size so their grids line up.
-2. Class term: YOLOv8 scores each class with an independent sigmoid, not a softmax, so use binary cross-entropy against the teacher's sigmoid scores, weighted per cell by the teacher's top score $w$.
-3. Box term: YOLOv8 predicts each box edge as a distribution over 16 bins (its DFL head). On cells where $w$ is high, match the student's bin distribution to the teacher's with KL divergence at temperature $T$.
-4. Feature term: at the three neck outputs, a $1 \times 1$ conv adapter maps student features to the teacher's width, then mean-squared error, ideally masked to foreground.
-5. $\mathcal{L} = \mathcal{L}_{\text{det}} + \mathcal{L}_{\text{cls}} + \mathcal{L}_{\text{box}} + \mathcal{L}_{\text{feat}}$, with $\mathcal{L}_{\text{det}}$ the usual loss on the labels and each distillation term with its own weight.
-
-Written out, with $\sigma$ the sigmoid, $z^t_{ik}$ and $z^s_{ik}$ the teacher's and student's logits for class $k$ at cell $i$, the teacher's confidence and the class term are
+2. Class term: YOLOv8 scores each class with an independent sigmoid, not a softmax, so use binary cross-entropy against the teacher's sigmoid scores, weighted per cell by the teacher's top score $w$. With $\sigma$ the sigmoid and $z^t_{ik}$, $z^s_{ik}$ the teacher's and student's logits for class $k$ at cell $i$:
 
 $$
 w_i = \max_k \sigma(z^t_{ik}), \qquad \mathcal{L}_{\text{cls}} = \frac{\sum_i w_i \sum_k \operatorname{BCE}\!\left(\sigma(z^s_{ik}), \sigma(z^t_{ik})\right)}{\sum_i w_i}
 $$
 
-where $\operatorname{BCE}(p, q) = -q \log p - (1 - q) \log (1 - p)$ scores the student's $p$ against the teacher's $q$. With $b^t_{ie}$ and $b^s_{ie}$ the 16 bin logits for box edge $e$ of cell $i$, and $F$ the set of foreground cells ($w_i > 0.25$ in the sketch below), the box term is
+where $\operatorname{BCE}(p, q) = -q \log p - (1 - q) \log (1 - p)$ scores the student's $p$ against the teacher's $q$.
+
+3. Box term: YOLOv8 predicts each box edge as a distribution over 16 bins (its DFL head). On cells where $w$ is high, match the student's bin distribution to the teacher's with KL divergence at temperature $T$. With $b^t_{ie}$, $b^s_{ie}$ the 16 bin logits for edge $e$ of cell $i$, and $F$ the foreground cells ($w_i > 0.25$ in the sketch below):
 
 $$
 \mathcal{L}_{\text{box}} = \frac{T^2}{\lvert F \rvert} \sum_{i \in F} \sum_{e=1}^{4} \KL\!\left(\softmax(b^t_{ie} / T) \,\Big\|\, \softmax(b^s_{ie} / T)\right)
 $$
 
-and with adapters $g_j$ and neck features $\phi^s_j$, $\phi^t_j$ at the three outputs $j$, the total is
+4. Feature term: at the three neck outputs, a $1 \times 1$ conv adapter maps student features to the teacher's width, then mean-squared error, ideally masked to foreground.
+5. $\mathcal{L} = \mathcal{L}_{\text{det}} + \mathcal{L}_{\text{cls}} + \mathcal{L}_{\text{box}} + \mathcal{L}_{\text{feat}}$, with $\mathcal{L}_{\text{det}}$ the usual loss on the labels and each distillation term with its own weight. With adapters $g_j$ and neck features $\phi^s_j$, $\phi^t_j$ at outputs $j$:
 
 $$
 \mathcal{L} = \mathcal{L}_{\text{det}} + \lambda_{\text{cls}} \mathcal{L}_{\text{cls}} + \lambda_{\text{box}} \mathcal{L}_{\text{box}} + \lambda_{\text{feat}} \sum_{j} \operatorname{MSE}\!\left(g_j(\phi^s_j), \phi^t_j\right)

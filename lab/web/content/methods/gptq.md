@@ -16,13 +16,15 @@ $$
 
 $H$ is the same for every row, so rows are independent and share one $H$.
 
-**OBS step.** Force coordinate $j$ to its quantized value. The forced change is $\delta_j = -e$ with $e = w_j - \operatorname{quant}(w_j)$. Choose the other coordinates of $\delta$ to minimize $\tfrac{1}{2} \delta H \delta^\top$. The Lagrangian is
+**OBS step.** Force coordinate $j$ to its quantized value. The forced change is $\delta_j = -e$ with $e = w_j - \operatorname{quant}(w_j)$. Choose the other coordinates of $\delta$ to minimize $\tfrac{1}{2} \delta H \delta^\top$:
+
+1. Lagrangian:
 
 $$
-\mathcal{L}(\delta, \lambda) = \tfrac{1}{2}\, \delta H \delta^\top + \lambda\, (\delta_j + e).
+\mathcal{L}(\delta, \lambda) = \tfrac{1}{2}\, \delta H \delta^\top + \lambda\, (\delta_j + e)
 $$
 
-Setting the gradient to zero, with $\mathbf{e}_j$ the $j$-th unit vector:
+2. Setting the gradient to zero ($\mathbf{e}_j$ is the $j$-th unit vector) gives $\delta$ up to $\lambda$:
 
 $$
 \begin{aligned}
@@ -31,13 +33,13 @@ $$
 \end{aligned}
 $$
 
-The constraint $\delta_j = -e$ fixes $\lambda$:
+3. The constraint $\delta_j = -e$ gives $\lambda$:
 
 $$
-\delta_j = -\lambda\, [H^{-1}]_{jj} = -e \quad\Longrightarrow\quad \lambda = \frac{e}{[H^{-1}]_{jj}}.
+\delta_j = -\lambda\, [H^{-1}]_{jj} = -e \quad\Longrightarrow\quad \lambda = \frac{e}{[H^{-1}]_{jj}}
 $$
 
-So the update and the error it costs are
+4. So the update, and the amount $\Delta E$ the error grows by, are
 
 $$
 \begin{aligned}
@@ -55,7 +57,7 @@ $$
 **GPTQ's two tricks.**
 
 1. Use the same column order ($0, 1, 2, \dots$) for every row. Then the sequence of $H_F^{-1}$ matrices is shared by all rows and computed once per layer, not once per row.
-2. Successive Gaussian elimination is a Cholesky factorization. Let $U$ be the upper Cholesky factor of $H^{-1}$ ($H^{-1} = U^\top U$). Row $j$ of $U$ is row $j$ of $H_F^{-1}$ (with $F = \{j, \dots, d-1\}$) divided by $\sqrt{[H_F^{-1}]_{jj}}$. Substitute $[H_F^{-1}]_{jj} = U_{jj}^2$ and $[H_F^{-1}]_{j,\,j+1:} = U_{jj}\, U_{j,\,j+1:}$ into the OBS update:
+2. Successive Gaussian elimination is a Cholesky factorization. Let $U$ be the upper Cholesky factor of $H^{-1}$ ($H^{-1} = U^\top U$). Row $j$ of $U$ is row $j$ of $H_F^{-1}$ (with $F = \{j, \dots, d-1\}$) divided by $\sqrt{[H_F^{-1}]_{jj}}$. Substitute $[H_F^{-1}]_{jj} = U_{jj}^2$ and $[H_F^{-1}]_{j,\,j+1:} = U_{jj}\, U_{j,\,j+1:}$ into step 4:
 
 $$
 \begin{aligned}

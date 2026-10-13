@@ -7,18 +7,19 @@ Quantizing a weight matrix means storing each weight as a small integer times a 
 For a linear layer $y = Wx$ with $W$ shaped (out, in), and a bit width $b$:
 
 1. Compute the largest representable integer: $q_{\max} = 2^{b-1} - 1$. At 4 bits that is 7, at 3 bits 3, at 2 bits 1.
-2. For each output row $r$ (or each run of $g$ consecutive input columns within the row, if you use groups), set the scale $s_r = \max_c \lvert W_{rc} \rvert / q_{\max}$.
-3. Replace each weight $w$ with $s_r \cdot \clip(\round(w / s_r), -q_{\max}, q_{\max})$.
+2. For each output row $r$ (or each run of $g$ consecutive input columns within the row, if you use groups), set the scale from the largest weight:
+
+$$
+s_r = \frac{\max_c \lvert W_{rc} \rvert}{q_{\max}}
+$$
+
+3. Replace each weight $W_{rc}$ with its rounded value:
+
+$$
+\hat W_{rc} = s_r \cdot \clip\!\left( \round\!\left( \frac{W_{rc}}{s_r} \right),\, -q_{\max},\, q_{\max} \right)
+$$
+
 4. Store the integers and one scale per row (or per group).
-
-Written out for row $r$ and input column $c$, steps 2 and 3 are
-
-$$
-\begin{aligned}
-s_r &= \frac{\max_c \lvert W_{rc} \rvert}{q_{\max}}, \\
-\hat W_{rc} &= s_r \cdot \clip\!\left( \round\!\left( \frac{W_{rc}}{s_r} \right),\, -q_{\max},\, q_{\max} \right).
-\end{aligned}
-$$
 
 This is *symmetric* quantization: levels centered on zero, no zero-point offset. At 2 bits, $q_{\max} = 1$ leaves three levels, $\{-s_r, 0, +s_r\}$: "2-bit" here is really ternary, by design and the same as `harness/quant.py`. One of the four codes is unused; real 2-bit formats add a zero point to use all four.
 

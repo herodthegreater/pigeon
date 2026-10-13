@@ -5,22 +5,20 @@ Ordinary importance scores ask which neurons matter for everything the network d
 ## How it works
 
 1. Group the 20 classes, each grouping a $C \times K$ 0/1 matrix $G$. Scoring uses `binary` (bird | rest). The head uses `supers` (bird | 3 siblings | 4 other superclasses).
-2. Score each hidden neuron with the Taylor criterion, the sum over examples of $\lvert a \cdot \partial L / \partial a \rvert$, where $L$ is the negative log-probability of the example's true group.
-3. Keep the top $w$ neurons per layer (structured pruning).
-4. Collapse the 20-way output layer to $K$ outputs, each the mean of its member classes' weights.
-5. Recover with grouped knowledge distillation (KD): the teacher's probabilities summed into the same $K$ groups.
-
-The grouped loss of step 2, for an example of class $y$ in group $g(y)$ with logits $z$:
+2. Score each hidden neuron with the Taylor criterion, the sum over examples of $\lvert a \cdot \partial L / \partial a \rvert$, where $L$ is the negative log-probability of the example's true group. For an example of class $y$ in group $g(y)$ with logits $z$:
 
 $$
 q = \softmax(z) \, G, \qquad L = -\log q_{g(y)}
 $$
 
-Step 4, with $g_k$ the set of classes in group $k$, gives output $k$ the average of its members' weight columns (and biases):
+3. Keep the top $w$ neurons per layer (structured pruning).
+4. Collapse the 20-way output layer to $K$ outputs, each the mean of its member classes' weights (and biases). With $g_k$ the set of classes in group $k$:
 
 $$
 W'_{:,k} = \frac{1}{\lvert g_k \rvert} \sum_{c \in g_k} W_{:,c}
 $$
+
+5. Recover with grouped knowledge distillation (KD): the teacher's probabilities summed into the same $K$ groups.
 
 ## The code, line by line
 

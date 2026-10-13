@@ -5,28 +5,24 @@ Distillation needs inputs to show the teacher. When the training images are gone
 ## How it works
 
 1. Make a batch $x$ of random images a trainable tensor; pick target classes $y$.
-2. Run the frozen teacher $f$ in eval mode. At each BN layer $l$, hook its input and take the per-channel batch mean $\mu_l(x)$ and variance $\sigma_l^2(x)$.
-3. Loss: the cross-entropy of the teacher's prediction $f(x)$ against $y$, plus the BN statistics term, a total-variation prior and an L2 prior, written out below. TV, total variation, sums differences between neighbouring pixels and keeps images smooth.
-4. Update only $x$ with Adam for a few thousand steps, randomly jittering and flipping it each step.
-5. Repeat for many batches, then distill the student on the synthetic pool.
-
-For the input $a_l$ of BN layer $l$, a batch of $B$ feature maps of size $H \times W$ indexed by $b, h, w$, the batch statistics of channel $c$ are
+2. Run the frozen teacher $f$ in eval mode. At each BN layer $l$, hook its input $a_l$ and take the per-channel batch mean $\mu_l(x)$ and variance $\sigma_l^2(x)$. For a batch of $B$ feature maps of size $H \times W$ indexed by $b, h, w$, channel $c$ gives
 
 $$
 \mu_{l,c}(x) = \frac{1}{BHW} \sum_{b,h,w} a_{l,bchw}, \qquad \sigma_{l,c}^2(x) = \frac{1}{BHW} \sum_{b,h,w} \left( a_{l,bchw} - \mu_{l,c}(x) \right)^2
 $$
 
-The BN statistics term compares them with the layer's running mean $\hat{\mu}_l$ and running variance $\hat{\sigma}_l^2$, the training-set averages it stored:
+3. Loss: the cross-entropy of the teacher's prediction $f(x)$ against $y$, plus a BN statistics term that compares the batch statistics with the layer's running mean $\hat{\mu}_l$ and variance $\hat{\sigma}_l^2$, plus a total-variation prior and an L2 prior. TV, total variation, sums differences between neighbouring pixels and keeps images smooth.
 
 $$
 \mathcal{R}_{\text{BN}}(x) = \sum_l \left( \lVert \mu_l(x) - \hat{\mu}_l \rVert_2 + \lVert \sigma_l^2(x) - \hat{\sigma}_l^2 \rVert_2 \right)
 $$
 
-The whole loss is
-
 $$
 \mathcal{L}(x) = \operatorname{CE}(f(x), y) + \alpha_{\text{bn}} \, \mathcal{R}_{\text{BN}}(x) + \alpha_{\text{tv}} \operatorname{TV}(x) + \alpha_{\text{l2}} \lVert x \rVert_2^2
 $$
+
+4. Update only $x$ with Adam for a few thousand steps, randomly jittering and flipping it each step.
+5. Repeat for many batches, then distill the student on the synthetic pool.
 
 ```python
 x = torch.randn(B, 3, H, W, requires_grad=True)

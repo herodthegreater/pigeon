@@ -16,23 +16,21 @@ It is best for the weights, not the outputs, so recovery still helps.
 
 ## How it works
 
-1. For each layer, check that factorizing saves parameters: $r(m + n) < mn$.
+1. For each layer, check that factorizing saves parameters. That sets a break-even rank:
+
+$$
+r(m + n) < mn \iff r < \frac{mn}{m + n}
+$$
+
 2. Compute the SVD $W = U \Sigma V^\top$.
-3. Keep the top $r$: $A = U_r \Sigma_r^{1/2}$ and $B = \Sigma_r^{1/2} V_r^\top$. Splitting $\Sigma_r^{1/2}$ between them keeps the two factors at similar scales.
+3. Keep the top $r$ and split $\Sigma_r^{1/2}$ between the two factors, which keeps them at similar scales. Their product is exactly the truncation $W_r$:
+
+$$
+A = U_r \Sigma_r^{1/2}, \qquad B = \Sigma_r^{1/2} V_r^\top, \qquad AB = U_r \Sigma_r V_r^\top = W_r
+$$
+
 4. Replace the layer by two layers, $x \mapsto xA \mapsto (xA)B + b$, with no nonlinearity in between.
 5. Recover with knowledge distillation (KD) from the original net.
-
-Step 1 is a break-even rank,
-
-$$
-r(m + n) < mn \iff r < \frac{mn}{m + n},
-$$
-
-and step 3 splits the truncation so that its product is exactly $W_r$:
-
-$$
-A = U_r \Sigma_r^{1/2}, \qquad B = \Sigma_r^{1/2} V_r^\top, \qquad AB = U_r \Sigma_r V_r^\top = W_r .
-$$
 
 ## The code, line by line
 

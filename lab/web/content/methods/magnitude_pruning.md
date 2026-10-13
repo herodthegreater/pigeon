@@ -6,22 +6,20 @@ Many weights in a trained network are close to zero. Magnitude pruning treats $\
 
 1. Pick a *sparsity* $s$, the fraction of all weights to remove (0.9 keeps 1 in 10).
 2. Rank weights by $\lvert w \rvert$. A *global* ranking puts every layer in one list. A *per-layer* ranking removes the same fraction from each layer.
-3. Let $k = s \cdot N$, where $N$ is the number of weights. The threshold $\tau$ (`thr` in the code) is the $k$-th smallest $\lvert w \rvert$. The *mask* $M$ is a 0/1 array shaped like $W$.
-4. Use $W \odot M$ from now on, and multiply the gradient by $M$ too, so dead weights stay dead.
-5. Recover with labels or *knowledge distillation* (KD), where the pruned net learns to match the unpruned net's output probabilities.
-6. Gradual variant: repeat steps 2-5 with a rising $s$.
-
-Steps 3 and 4 in symbols: the mask keeps every weight above the threshold,
+3. Let $k = s \cdot N$, where $N$ is the number of weights. The threshold $\tau$ (`thr` in the code) is the $k$-th smallest $\lvert w \rvert$. The *mask* $M$ is a 0/1 array shaped like $W$ that keeps every weight above the threshold:
 
 $$
 M_{ij} = \begin{cases} 1 & \lvert w_{ij} \rvert > \tau \\ 0 & \text{otherwise} \end{cases}
 $$
 
-and both the weights and their gradients are multiplied by it elementwise,
+4. Use $W \odot M$ from now on, and multiply the gradient by $M$ too, so dead weights stay dead:
 
 $$
 W \leftarrow W \odot M, \qquad \nabla_W L \leftarrow \nabla_W L \odot M .
 $$
+
+5. Recover with labels or *knowledge distillation* (KD), where the pruned net learns to match the unpruned net's output probabilities.
+6. Gradual variant: repeat steps 2-5 with a rising $s$.
 
 ```python
 mags = concat(|W_i| for every layer)          # already-pruned weights count as 0

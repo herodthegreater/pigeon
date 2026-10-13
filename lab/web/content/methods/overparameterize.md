@@ -7,17 +7,16 @@ A small network is hard to train well. Gradient descent on few parameters gets s
 1. Take the target architecture, say $12 \to 16 \to 16 \to 20$.
 2. Replace every layer $a \to b$ by two, $a \to E \to b$ with $E = e \cdot \max(a, b)$ for expansion factor $e$, and no activation after the first (a *linear* layer).
 3. Train this expanded network normally.
-4. Collapse each pair (derivation below). The new weight is $W_1 W_2$ and the new bias is $b_1 W_2 + b_2$.
-5. Deploy the collapsed network. Its outputs are identical to the trained expanded one, up to float rounding.
-
-With no nonlinearity between the factors, the pair is one affine map:
+4. Collapse each pair. With no nonlinearity between the factors, the pair is one affine map, with weight $W_1 W_2$ and bias $b_1 W_2 + b_2$:
 
 $$
 \begin{aligned}
 (h W_1 + b_1) W_2 + b_2 &= h W_1 W_2 + b_1 W_2 + b_2 \\
-&= h \, (W_1 W_2) + (b_1 W_2 + b_2).
+&= h \, (W_1 W_2) + (b_1 W_2 + b_2)
 \end{aligned}
 $$
+
+5. Deploy the collapsed network. Its outputs are identical to the trained expanded one, up to float rounding.
 
 ## The code, line by line
 

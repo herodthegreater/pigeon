@@ -5,11 +5,7 @@ Unstructured pruning leaves zeros that still get stored and multiplied. Structur
 ## How it works
 
 1. Run the trained net on a probe batch (2,000 training examples here).
-2. Score every hidden neuron. `l1` is the sum of $\lvert w \rvert$ over its incoming weights. `act` is its mean $\lvert a \rvert$, where $a$ is the activation. `taylor` is the sum over examples of $\lvert a \cdot \partial L / \partial a \rvert$, where $\partial L / \partial a$ is the loss gradient with respect to the activation: a first-order estimate of the loss change if $a$ were zeroed. `random` is a control.
-3. In every hidden layer, keep the $k$ best neurons and delete the rest.
-4. Recover by training the smaller net, with labels or by distilling from the original.
-
-For neuron $j$ with incoming weights $W_{:,j}$ and activation $a_j(x)$ on probe example $x$, out of $n$ examples, the three scores are
+2. Score every hidden neuron. `l1` is the sum of $\lvert w \rvert$ over its incoming weights. `act` is its mean $\lvert a \rvert$, where $a$ is the activation. `taylor` is the sum over examples of $\lvert a \cdot \partial L / \partial a \rvert$, where $\partial L / \partial a$ is the loss gradient with respect to the activation: a first-order estimate of the loss change if $a$ were zeroed. `random` is a control. For neuron $j$ with incoming weights $W_{:,j}$ and activation $a_j(x)$ on probe example $x$, out of $n$ examples:
 
 $$
 \begin{aligned}
@@ -18,6 +14,9 @@ S_j^{\text{act}} &= \frac{1}{n} \sum_x \lvert a_j(x) \rvert \\
 S_j^{\text{taylor}} &= \sum_x \left\lvert a_j(x) \, \frac{\partial L}{\partial a_j(x)} \right\rvert
 \end{aligned}
 $$
+
+3. In every hidden layer, keep the $k$ best neurons and delete the rest.
+4. Recover by training the smaller net, with labels or by distilling from the original.
 
 The Taylor score comes from a first-order expansion of the loss around the current activation. Setting $a$ to zero changes the loss by about
 

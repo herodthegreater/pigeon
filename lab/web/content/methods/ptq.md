@@ -4,23 +4,16 @@ A trained network stores 32-bit floats but rarely needs that much precision. *Po
 
 ## How it works
 
-1. Flatten the weight matrix and cut it into groups of $g$ consecutive values (or keep one group for the whole tensor).
+1. Flatten the weight matrix and cut it into groups of $g$ consecutive values $w_1, \dots, w_g$ (or keep one group for the whole tensor).
 2. For $b \ge 2$ bits, symmetric quantization uses the integers $-q_{\max}, \dots, q_{\max}$ with $q_{\max} = 2^{b-1} - 1$. For 4 bits that is $-7, \dots, 7$: 15 levels.
-3. Per group: scale $s = \max \lvert w \rvert / q_{\max}$, then $q = \clip(\round(w / s), -q_{\max}, q_{\max})$.
-4. The stored model is $q$ ($b$ bits each) plus one scale per group. The weight used at inference is $\hat w = q \cdot s$.
-5. For $b = 1$ there are just two levels: $\hat w = \sign(w) \cdot \operatorname{mean} \lvert w \rvert$ per group.
-
-For a group of weights $w_1, \dots, w_g$ and $b \ge 2$ bits:
+3. Per group, set the scale from the largest weight, then round each weight to the nearest level:
 
 $$
-q_{\max} = 2^{b-1} - 1, \qquad s = \frac{\max_i \lvert w_i \rvert}{q_{\max}}
+s = \frac{\max_i \lvert w_i \rvert}{q_{\max}}, \qquad q_i = \clip\!\left( \round\!\left( \frac{w_i}{s} \right), -q_{\max}, q_{\max} \right)
 $$
 
-$$
-q_i = \clip\!\left( \round\!\left( \frac{w_i}{s} \right), -q_{\max}, q_{\max} \right), \qquad \hat w_i = s \, q_i
-$$
-
-For $b = 1$ the scale is the group's mean magnitude instead:
+4. The stored model is $q$ ($b$ bits each) plus one scale per group. The weight used at inference is $\hat w_i = s \, q_i$.
+5. For $b = 1$ there are just two levels, plus or minus the group's mean magnitude:
 
 $$
 \hat w_i = \sign(w_i) \cdot \frac{1}{g} \sum_{j=1}^{g} \lvert w_j \rvert
@@ -42,7 +35,7 @@ For 1 bit, `scale = np.maximum(np.abs(g).mean(1, keepdims=True), 1e-12)` and `q 
 
 `quantize` in `lab/compress.py` copies the net, sets `net.qbits, net.qgroup`, and bakes the result in with `net.W = [net.eff(i) for i in range(net.n_layers)]`, since `MLP.eff` applies `fake_quantize` when `qbits` is set. Clearing `qbits` leaves an ordinary float MLP whose weights lie on the grid.
 
-One consequence is easy to miss. At 2 bits, $q_{\max} = 1$, so $s = \max \lvert w \rvert$, the levels are only $\{-s, 0, +s\}$, and every weight smaller than half the group maximum ($\lvert w \rvert < s/2$) becomes zero. The `params` column counts nonzero weights and shows this directly.
+One consequence is easy to miss. At 2 bits, $q_{\max} = 1$, so $s = \max \lvert w \rvert$, the levels are only $\lbrace -s, 0, +s \rbrace$, and every weight smaller than half the group maximum ($\lvert w \rvert < s/2$) becomes zero. The `params` column counts nonzero weights and shows this directly.
 
 ## What the simulations show
 

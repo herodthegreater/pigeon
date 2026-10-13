@@ -11,15 +11,14 @@ $$
 1. Start from a trained full-precision network $W$.
 2. Each training step, compute $\hat W = Q(W)$, where $Q$ is the same rounding rule PTQ uses (here symmetric, per group of 16).
 3. Forward pass with $\hat W$, loss on labels or on the teacher's outputs (*knowledge distillation*, KD).
-4. Backward pass: compute $\partial L / \partial \hat W$ as usual, then update $W$ with it. This is the STE.
+4. Backward pass: compute $\partial L / \partial \hat W$ as usual, then update $W$ with it, at learning rate $\eta$. This is the STE.
+
+$$
+W \leftarrow W - \eta \, \frac{\partial L}{\partial \hat W}
+$$
+
 5. Small updates pile up in $W$ until a weight crosses a rounding boundary and jumps to the next level.
 6. Ship $Q(W)$. The full-precision copy is thrown away.
-
-One training step, with learning rate $\eta$:
-
-$$
-\hat W = Q(W), \qquad W \leftarrow W - \eta \, \frac{\partial L}{\partial \hat W}
-$$
 
 ```python
 for X, target in data:

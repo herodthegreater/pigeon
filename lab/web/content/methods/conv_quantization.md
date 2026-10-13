@@ -8,13 +8,12 @@ Quantization stores each weight in fewer bits, for example as an 8-bit integer i
 2. Flatten the weight tensor and cut it into groups of `group_size` consecutive values, or use one group for the whole tensor (*per-tensor*).
 3. For each group, the scale is $s = \max_i \lvert w_i \rvert / q_{\max}$, where $q_{\max} = 2^{b-1} - 1$ for $b$ bits (127 at 8 bits, 7 at 4 bits).
 4. $q = \clip(\round(w / s), -q_{\max}, q_{\max})$ is the integer a real file would store, and $\hat{w} = q \cdot s$ is the float the model uses.
-5. At 1 bit there is no zero level: $\hat{w}_i = \sign(w_i) \cdot \frac{1}{n} \sum_j \lvert w_j \rvert$ over the group's $n$ weights.
-
-In one line, for a group at $b \ge 2$ bits:
 
 $$
 \hat{w} = s \cdot \clip\!\left(\round\!\left(\frac{w}{s}\right), -q_{\max}, q_{\max}\right), \qquad s = \frac{\max_i \lvert w_i \rvert}{q_{\max}}, \qquad q_{\max} = 2^{b-1} - 1
 $$
+
+5. At 1 bit there is no zero level: $\hat{w}_i = \sign(w_i) \cdot \frac{1}{n} \sum_j \lvert w_j \rvert$ over the group's $n$ weights.
 
 Example at 4 bits, one group $w = (0.50, -0.20, 0.03)$: $s = 0.5 / 7 \approx 0.0714$, $q = (7, -3, 0)$, $\hat{w} = (0.50, -0.214, 0.0)$. The 0.03 vanished: the largest weight sets the step for the whole group.
 

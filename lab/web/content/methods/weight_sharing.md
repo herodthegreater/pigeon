@@ -6,23 +6,22 @@ Uniform quantization spaces its levels evenly between $-\max \lvert w \rvert$ an
 
 1. Take each layer's weights as a 1-D list (skipping pruned zeros).
 2. Initialise $k$ centroids evenly spaced from the smallest to the largest value (*linear init*).
-3. Repeat: assign each weight to its nearest centroid, move each centroid to its weights' mean (Lloyd's algorithm).
-4. Replace each weight by its centroid.
+3. Repeat: assign each weight to its nearest centroid, move each centroid to its weights' mean (Lloyd's algorithm). With $S_j$ the set of weights assigned to centroid $j$:
+
+$$
+a_i = \argmin_j \, \lvert w_i - c_j \rvert, \qquad c_j \leftarrow \frac{1}{\lvert S_j \rvert} \sum_{i \in S_j} w_i, \quad S_j = \{ i : a_i = j \}
+$$
+
+4. Replace each weight by its centroid, $\hat w_i = c_{a_i}$.
 5. Optionally fine-tune and snap the weights back to a codebook.
 
-k-means looks for the codebook that minimizes the squared error of the snapped weights,
+Each Lloyd iteration never raises the squared error of the snapped weights, the quantity k-means minimizes:
 
 $$
-\min_{c_1, \dots, c_k} \sum_i \min_j \, (w_i - c_j)^2 ,
+\min_{c_1, \dots, c_k} \sum_i \min_j \, (w_i - c_j)^2
 $$
 
-and each Lloyd iteration in step 3 alternates two moves: assign every weight to its nearest centroid, then move every centroid to the mean of the set $S_j$ of weights assigned to it,
-
-$$
-a_i = \argmin_j \, \lvert w_i - c_j \rvert, \qquad c_j \leftarrow \frac{1}{\lvert S_j \rvert} \sum_{i \in S_j} w_i, \quad S_j = \{ i : a_i = j \}.
-$$
-
-Step 4 sets $\hat w_i = c_{a_i}$, so a layer of $N$ weights is stored as $N$ indices of $\lceil \log_2 k \rceil$ bits plus $k$ floats.
+A layer of $N$ weights is then stored as $N$ indices of $\lceil \log_2 k \rceil$ bits plus $k$ floats.
 
 ```python
 c = linspace(v.min(), v.max(), k)
@@ -54,9 +53,9 @@ From `weight_sharing`, at equal bits per weight (accuracy on 20 classes; the stu
 | 4 (16) | 0.8998 | 0.9088 | 0.9213 | 0.7229 | 0.7839 | 0.7844 |
 | 5 (32) | 0.9134 | 0.9129 | 0.9200 | 0.8132 | 0.8153 | 0.8268 |
 
-At the same storage, a learned codebook beats the uniform grid at 2, 3 and 4 bits on both models. At 2 bits, uniform symmetric is ternary, $\{-s, 0, +s\}$ with $s$ the largest weight, so most weights round to zero (teacher 0.0707), while 4 k-means values keep 0.8487. At 1 bit both have two levels and score alike; at 5 bits both are near lossless. The student, with less spare capacity, loses more at every width: at 3 bits its k-means accuracy is 0.6453 against 0.8281 in fp32, while the teacher keeps 0.9039 against 0.9139. KD fine-tuning with re-snapping helps the teacher at every $k$, ending above fp32 from 8 values up, which is partly just extra training on 28,000 inputs. For the student it adds at most 0.0224.
+At the same storage, a learned codebook beats the uniform grid at 2, 3 and 4 bits on both models. At 2 bits, uniform symmetric is ternary, $\lbrace -s, 0, +s \rbrace$ with $s$ the largest weight, so most weights round to zero (teacher 0.0707), while 4 k-means values keep 0.8487. At 1 bit both have two levels and score alike; at 5 bits both are near lossless. The student, with less spare capacity, loses more at every width: at 3 bits its k-means accuracy is 0.6453 against 0.8281 in fp32, while the teacher keeps 0.9039 against 0.9139. KD fine-tuning with re-snapping helps the teacher at every $k$, ending above fp32 from 8 values up, which is partly just extra training on 28,000 inputs. For the student it adds at most 0.0224.
 
-Page runs at the defaults ($k = 4$, fine-tune on): uniform 2-bit 0.0562, k-means 0.8534, after KD and re-snap 0.8718. At $k = 2$: uniform 1-bit 0.4015, k-means 0.4494, after KD and re-snap 0.4586. Symmetric 2-bit is ternary, $\{-s, 0, +s\}$, which is why it scores below 1-bit sign quantization.
+Page runs at the defaults ($k = 4$, fine-tune on): uniform 2-bit 0.0562, k-means 0.8534, after KD and re-snap 0.8718. At $k = 2$: uniform 1-bit 0.4015, k-means 0.4494, after KD and re-snap 0.4586. Symmetric 2-bit is ternary, $\lbrace -s, 0, +s \rbrace$, which is why it scores below 1-bit sign quantization.
 
 ## When it breaks
 
@@ -70,7 +69,7 @@ Page runs at the defaults ($k = 4$, fine-tune on): uniform 2-bit 0.0562, k-means
 
 - Set **values per layer** to 4 with **fine-tune + re-snap** off, then 8, then 16. The page's uniform row gets an extra bit. Watch k-means lose its lead as $k$ grows.
 - At **values per layer** 2 and 16, toggle **fine-tune + re-snap** and compare what the KD row adds.
-- Set **values per layer** to 3. The uniform row reads 2-bit: the page rounds $\log_2 3$ up to $\lceil \log_2 3 \rceil = 2$ bits, which for symmetric rounding is also 3 levels, $\{-s, 0, +s\}$. Same level count, almost the same storage (k-means adds a 3-value codebook per layer): compare where the two put their levels.
+- Set **values per layer** to 3. The uniform row reads 2-bit: the page rounds $\log_2 3$ up to $\lceil \log_2 3 \rceil = 2$ bits, which for symmetric rounding is also 3 levels, $\lbrace -s, 0, +s \rbrace$. Same level count, almost the same storage (k-means adds a 3-value codebook per layer): compare where the two put their levels.
 
 ## Going further
 

@@ -6,16 +6,15 @@ When a pruned network recovers well, is that because its trained weights were go
 
 1. Initialise a network, save its weights $W_0$, train it, and also save an early snapshot $W_k$ (the *rewind point*).
 2. Prune the trained net by magnitude to get a 0/1 mask $M$.
-3. Reset to the masked init (rewind to init) or the masked snapshot (late rewinding).
+3. Reset, keeping the mask and throwing away the trained values: rewind to init, or to the early snapshot (late rewinding).
+
+$$
+W \leftarrow W_0 \odot M \quad \text{(rewind to init)}, \qquad W \leftarrow W_k \odot M \quad \text{(late rewinding)}
+$$
+
 4. Retrain with the mask fixed.
 5. Repeat steps 2-4, pruning more each round (*iterative magnitude pruning*).
 6. Controls at the same sparsity: the ticket mask with a new random init, and a random mask on the original init.
-
-The reset in step 3 keeps the mask and throws away the trained values:
-
-$$
-W \leftarrow W_0 \odot M \quad \text{(rewind to init)}, \qquad W \leftarrow W_k \odot M \quad \text{(late rewinding)}.
-$$
 
 ## The code, line by line
 

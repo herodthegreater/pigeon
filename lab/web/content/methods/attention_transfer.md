@@ -5,17 +5,14 @@ A conv layer's output is a feature map of shape $C \times H \times W$: $C$ chann
 ## How it works
 
 1. Pick layer pairs, one in the teacher and one in the student, with the same $H \times W$, for example the end of each resolution stage.
-2. For a feature map $A$ (batch $B \times C \times H \times W$): $Q = \sum_c A_{:,c}^2$, shape $B \times H \times W$. Flatten to $B \times HW$ and normalize each row: $q = Q / \lVert Q \rVert_2$.
-3. Pair loss: $\lVert q_S - q_T \rVert_2^2$, averaged over the batch.
-4. Total: the task loss plus $\beta$ times the sum of the pair losses. Normalized maps differ by small amounts, so $\beta$ (`beta`) must be large enough for this term to matter next to the task loss.
-
-For one image, the normalized attention map of a $C \times H \times W$ feature map $A$ is
+2. For a feature map $A$ (batch $B \times C \times H \times W$): $Q = \sum_c A_{:,c}^2$, shape $B \times H \times W$. Flatten to $B \times HW$ and normalize each row: $q = Q / \lVert Q \rVert_2$. For one image, the normalized attention map is
 
 $$
 Q_{hw} = \sum_{c=1}^{C} A_{chw}^2, \qquad q = \frac{\operatorname{vec}(Q)}{\lVert \operatorname{vec}(Q) \rVert_2} \in \R^{HW}
 $$
 
-and the training loss over the chosen layer pairs $j$ is
+3. Pair loss: $\lVert q_S - q_T \rVert_2^2$, averaged over the batch.
+4. Total: the task loss plus $\beta$ times the sum of the pair losses over the chosen layer pairs $j$. Normalized maps differ by small amounts, so $\beta$ (`beta`) must be large enough for this term to matter next to the task loss.
 
 $$
 \mathcal{L} = \mathcal{L}_{\text{task}} + \beta \sum_{j} \left\lVert q_S^{(j)} - q_T^{(j)} \right\rVert_2^2

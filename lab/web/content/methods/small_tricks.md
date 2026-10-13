@@ -4,24 +4,25 @@ Most training tricks were invented for big networks that *overfit*: they memoris
 
 ## How it works
 
-1. **Label smoothing** with $\varepsilon = 0.1$: mix the one-hot target with the uniform distribution over the $C$ classes, so the model is never pushed to put 100% on one class.
-2. **Mixup**: pair each example with a random partner, draw $\lambda \sim \operatorname{Beta}(1, 1)$ (uniform on $[0, 1]$), and train on the blend of the two inputs with the same blend of their targets.
-3. **EMA**: after every optimizer step, update a shadow copy $\bar W$ of the weights with decay $d$ close to 1. At the end, replace $W$ by $\bar W$.
-4. **Longer**: the same cosine learning-rate schedule stretched over 4x the steps.
-
-The three rules, with $e_y$ the one-hot vector for label $y$ and $\mathbf{1}$ the all-ones vector:
+1. **Label smoothing** with $\varepsilon = 0.1$: mix the one-hot target $e_y$ with the uniform distribution over the $C$ classes ($\mathbf{1}$ is the all-ones vector), so the model is never pushed to put 100% on one class.
 
 $$
 y^{\text{smooth}} = (1 - \varepsilon) \, e_y + \frac{\varepsilon}{C} \, \mathbf{1}
 $$
 
+2. **Mixup**: pair each example with a random partner, draw $\lambda \sim \operatorname{Beta}(1, 1)$ (uniform on $[0, 1]$), and train on the blend of the two inputs with the same blend of their targets.
+
 $$
 \tilde x = \lambda x_a + (1 - \lambda) x_b, \qquad \tilde y = \lambda y_a + (1 - \lambda) y_b
 $$
 
+3. **EMA**: after every optimizer step, update a shadow copy $\bar W$ of the weights with decay $d$ close to 1. At the end, replace $W$ by $\bar W$.
+
 $$
 \bar W \leftarrow d \, \bar W + (1 - d) \, W
 $$
+
+4. **Longer**: the same cosine learning-rate schedule stretched over 4x the steps.
 
 ## The code, line by line
 

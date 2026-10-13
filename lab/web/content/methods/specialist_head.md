@@ -6,22 +6,19 @@ A generalist spends capacity telling 20 classes apart. If you only need "bird or
 
 1. Group the 20 classes into $K$ outputs, written as a $20 \times K$ 0/1 matrix $G$ with one 1 per row. Output 0 is always the bird alone. `binary` ($K = 2$) is bird | rest. `siblings` ($K = 5$) is bird | each of its 3 siblings | rest. `supers` ($K = 8$) is bird | each sibling | each of the 4 other superclasses.
 2. Build a student with a $K$-wide output layer.
-3. Distill: compute the teacher's probabilities $p_t$ over 20 classes at temperature $T$ (here $T = 1$), sum them into groups $q_t$, and train the student's $K$ outputs to match $q_t$ with the usual KD loss.
-4. Score by average precision (AP) of output 0 on the test set, the same single-class ranking measure the YOLOv8n cockpit uses for birds.
-
-Step 3 in symbols, with teacher logits $z_t$ and student logits $z_s$. The grouped teacher target adds up the probabilities of the classes in each group,
+3. Distill: compute the teacher's probabilities $p_t$ over 20 classes at temperature $T$ (here $T = 1$) from its logits $z_t$, and sum them into groups $q_t$, adding up the probabilities of the classes in each group:
 
 $$
-p_t = \softmax(z_t / T), \qquad q_t = p_t \, G, \qquad (q_t)_k = \sum_{c \,:\, G_{ck} = 1} (p_t)_c ,
+p_t = \softmax(z_t / T), \qquad q_t = p_t \, G, \qquad (q_t)_k = \sum_{c \,:\, G_{ck} = 1} (p_t)_c
 $$
 
-and the student's $K$ outputs are trained on
+Then train the student's $K$ outputs, with logits $z_s$, to match $q_t$ with the usual KD loss:
 
 $$
-L = T^2 \, \KL(q_t \,\|\, p_s), \qquad p_s = \softmax(z_s / T).
+L = T^2 \, \KL(q_t \,\|\, p_s), \qquad p_s = \softmax(z_s / T)
 $$
 
-For step 4, sort the test examples by output 0, most bird-like first. With $\operatorname{pos}_k = 1$ if the $k$-th example is a bird and $N_+$ birds in all, AP averages the precision at the rank of each bird:
+4. Score by average precision (AP) of output 0 on the test set, the same single-class ranking measure the YOLOv8n cockpit uses for birds. Sort the test examples by output 0, most bird-like first. With $\operatorname{pos}_k = 1$ if the $k$-th example is a bird and $N_+$ birds in all, AP averages the precision at the rank of each bird:
 
 $$
 \text{AP} = \frac{1}{N_+} \sum_{k=1}^{N} \operatorname{pos}_k \cdot \frac{1}{k} \sum_{j=1}^{k} \operatorname{pos}_j
