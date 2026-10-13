@@ -70,3 +70,11 @@ describe.skipIf(!existsSync(DATA))("math in the lab's content", () => {
     expect(bad, bad.map((e) => `${e.tex}\n  ${e.message}`).join("\n")).toEqual([]);
   });
 });
+
+describe("lists around display math", () => {
+  it("a numbered list resumes at its own number after an equation", () => {
+    const h = md("1. first\n2. second\n\n$$\na = b\n$$\n\n3. third");
+    expect(h).toContain("<ol><li>first</li><li>second</li></ol>");
+    expect(h).toContain('<ol start="3"><li>third</li></ol>');
+  });
+});

@@ -169,7 +169,10 @@ function md(src, toc) {
         while (i < L.length && /^\s{2,}\S/.test(L[i]) && !re.test(L[i])) item += " " + L[i++].trim();
         items.push(`<li>${inline(item)}</li>`);
       }
-      h += ordered ? `<ol>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`;
+      // an ordered list keeps its first number, so a list that resumes after a display
+      // equation ("3.") continues at 3 instead of starting over
+      const start = ordered ? parseInt(l.trim(), 10) : 1;
+      h += ordered ? `<ol${start !== 1 ? ` start="${start}"` : ""}>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`;
     } else if (/^\|/.test(l)) {
       const rows = [];
       while (i < L.length && /^\|/.test(L[i])) rows.push(L[i++]);

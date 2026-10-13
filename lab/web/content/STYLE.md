@@ -67,8 +67,11 @@ Math is LaTeX, typeset by KaTeX when the site builds
   dollars: `$ x $` is not math.
 - **Display**: a `$$` block on lines of its own, with a blank line before and
   after, for any equation the reader should stop on: definitions, update
-  rules, every step of a derivation. Put one equation per block, or align a
-  derivation with `\begin{aligned} ... \end{aligned}` and `&=`.
+  rules, every step of a derivation. Put one equation per block (two side by
+  side, joined by `\qquad`, don't fit a phone: stack them in `aligned` instead), or align a
+  derivation with `\begin{aligned} ... \end{aligned}` and `&=`. A display can
+  sit between the steps of a numbered list: end the list, add the `$$` block,
+  and resume with the next number ("3.") — the list continues at 3.
 
       $$
       \KL(p \,\|\, q) = \sum_c p_c \log \frac{p_c}{q_c}
