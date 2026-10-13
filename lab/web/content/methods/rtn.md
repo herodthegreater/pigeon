@@ -4,14 +4,27 @@ Quantizing a weight matrix means storing each weight as a small integer times a 
 
 ## How it works
 
-For a linear layer `y = W x` with `W` shaped (out, in), and a bit width `b`:
+For a linear layer $y = Wx$ with $W$ shaped (out, in), and a bit width $b$:
 
-1. Compute the largest representable integer: `qmax = 2^(b-1) - 1`. At 4 bits that is 7, at 3 bits 3, at 2 bits 1.
-2. For each output row `r` (or each run of `g` consecutive input columns within the row, if you use groups), set `scale = max|W[r, :]| / qmax`.
-3. Replace each weight with `clip(round(w / scale), -qmax, qmax) * scale`.
+1. Compute the largest representable integer: $q_{\max} = 2^{b-1} - 1$. At 4 bits that is 7, at 3 bits 3, at 2 bits 1.
+2. For each output row $r$ (or each run of $g$ consecutive input columns within the row, if you use groups), set the scale from the largest weight:
+
+$$
+s_r = \frac{\max_c \lvert W_{rc} \rvert}{q_{\max}}
+$$
+
+3. Replace each weight $W_{rc}$ with its rounded value: an integer $q_{rc}$ times the scale.
+
+$$
+\begin{aligned}
+q_{rc} &= \clip\!\left( \round\!\left( \frac{W_{rc}}{s_r} \right),\, -q_{\max},\, q_{\max} \right) \\
+\hat W_{rc} &= s_r \cdot q_{rc}
+\end{aligned}
+$$
+
 4. Store the integers and one scale per row (or per group).
 
-This is *symmetric* quantization: levels centered on zero, no zero-point offset. At 2 bits, `qmax = 1` leaves three levels, `{-scale, 0, +scale}`: "2-bit" here is really ternary, by design and the same as `harness/quant.py`. One of the four codes is unused; real 2-bit formats add a zero point to use all four.
+This is *symmetric* quantization: levels centered on zero, no zero-point offset. At 2 bits, $q_{\max} = 1$ leaves three levels, $\{-s_r, 0, +s_r\}$: "2-bit" here is really ternary, by design and the same as `harness/quant.py`. One of the four codes is unused; real 2-bit formats add a zero point to use all four.
 
 In a transformer, the same rule is applied to every `nn.Linear` inside every block: the query, key, value and output projections of attention, and the up, gate and down projections of the MLP. The token embedding and the output layer (`lm_head`) usually stay at 16 bits. RTN needs no calibration data.
 
@@ -19,10 +32,10 @@ In a transformer, the same rule is applied to every `nn.Linear` inside every blo
 
 `quant_rows(Wt, bits, group)` does all the work. `Wt` is the weight in the papers' (out, in) orientation; `apply_layerwise` transposes the MLP's stored (in, out) matrix before calling it.
 
-- `qmax = qmax_for(bits)` computes `(1 << (bits - 1)) - 1`, the formula in step 1.
+- `qmax = qmax_for(bits)` computes `(1 << (bits - 1)) - 1`, which is $2^{b-1} - 1$, the formula in step 1.
 - `g = group or din`: without a group size, one group spans the whole row, so there is one scale per output row.
 - `for c0 in range(0, din, g)` walks over column groups. `blk = Wt[:, c0:c0 + g]` is every row's slice of that group.
-- `scale = np.maximum(np.abs(blk).max(1, keepdims=True), 1e-12) / qmax` gives one scale per row of the block. The `1e-12` floor keeps an all-zero row from dividing by zero.
+- `scale = np.maximum(np.abs(blk).max(1, keepdims=True), 1e-12) / qmax` gives one scale per row of the block, $s_r = \max_c \lvert W_{rc} \rvert / q_{\max}$ over the group's columns. The `1e-12` floor keeps an all-zero row from dividing by zero.
 - `np.clip(np.round(blk / scale), -qmax, qmax) * scale` rounds, clips and maps back to real values. The function returns *dequantized* weights ("fake quantization"), so the network still runs in float and the accuracy loss is measured directly.
 
 `rtn(Wt, X, ...)` is a wrapper with the same signature as `gptq` and `awq`, so all three can be passed to `apply_layerwise`. `del X` says it plainly: RTN never looks at the data.

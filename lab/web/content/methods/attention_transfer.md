@@ -1,13 +1,25 @@
 ## The idea
 
-A conv layer's output is a feature map of shape C x H x W: C channels over an H x W grid. Attention transfer squashes it to one H x W map of where the network is active, by summing squared activations over channels. The student is trained to make its maps match the teacher's at a few chosen depths. The channel dimension is gone, so a narrow student can match a wide teacher without an extra projection layer.
+A conv layer's output is a feature map of shape $C \times H \times W$: $C$ channels over an $H \times W$ grid. Attention transfer squashes it to one $H \times W$ map of where the network is active, by summing squared activations over channels. The student is trained to make its maps match the teacher's at a few chosen depths. The channel dimension is gone, so a narrow student can match a wide teacher without an extra projection layer.
 
 ## How it works
 
-1. Pick layer pairs, one in the teacher and one in the student, with the same H x W, for example the end of each resolution stage.
-2. For a feature map `A` (batch B x C x H x W): `Q = sum over c of A[:, c]²`, shape B x H x W. Flatten to B x HW and normalize each row: `q = Q / ||Q||`.
-3. Pair loss: `||q_s - q_t||²`, averaged over the batch.
-4. Total: `L = task_loss + beta * Σ_pairs pair_loss`. Normalized maps differ by small amounts, so `beta` must be large enough for this term to matter next to the task loss.
+1. Pick layer pairs, one in the teacher and one in the student, with the same $H \times W$, for example the end of each resolution stage.
+2. For a feature map $A$ (batch $B \times C \times H \times W$): $Q = \sum_c A_{:,c}^2$, shape $B \times H \times W$. Flatten to $B \times HW$ and normalize each row: $q = Q / \lVert Q \rVert_2$. For one image, the normalized attention map is
+
+$$
+\begin{aligned}
+Q_{hw} &= \sum_{c=1}^{C} A_{chw}^2 \\
+q &= \frac{\operatorname{vec}(Q)}{\lVert \operatorname{vec}(Q) \rVert_2} \in \R^{HW}
+\end{aligned}
+$$
+
+3. Pair loss: $\lVert q_S - q_T \rVert_2^2$, averaged over the batch.
+4. Total: the task loss plus $\beta$ times the sum of the pair losses over the chosen layer pairs $j$. Normalized maps differ by small amounts, so $\beta$ (`beta`) must be large enough for this term to matter next to the task loss.
+
+$$
+\mathcal{L} = \mathcal{L}_{\text{task}} + \beta \sum_{j} \left\lVert q_S^{(j)} - q_T^{(j)} \right\rVert_2^2
+$$
 
 ```python
 def attention(f):                                  # f: B x C x H x W
@@ -22,7 +34,17 @@ for fs, ft in zip(student_feats, teacher_feats):   # captured with forward hooks
 
 ## The code, line by line
 
-`Hint` in lab/train.py is FitNets, an earlier feature-matching loss. `hs, ht = hid[self.s], b.t_hidden[self.t]` picks the student and teacher hidden layers. `r = hs @ self.P - ht` is the residual after a learned projection `P` (student width x teacher width). The loss is `self.w * (r ** 2).mean()`. `self.dP = self.w * hs.T @ (2 * r / n)` is its gradient for `P`, and `dh = self.w * (2 * r / n) @ self.P.T` is the gradient sent into the student layer, returned as `{self.s: dh}` with a zero logit gradient. Attention transfer replaces `hs @ self.P - ht` with `attention(hs) - attention(ht)` and drops `P`: nothing to learn, because the channel sum already removes the width mismatch.
+`Hint` in lab/train.py is FitNets, an earlier feature-matching loss. `hs, ht = hid[self.s], b.t_hidden[self.t]` picks the student and teacher hidden layers. `r = hs @ self.P - ht` is the residual $R = H_S P - H_T$ after a learned projection $P$ (student width $\times$ teacher width). The loss is `self.w * (r ** 2).mean()`. `self.dP = self.w * hs.T @ (2 * r / n)` is its gradient for $P$, and `dh = self.w * (2 * r / n) @ self.P.T` is the gradient sent into the student layer, returned as `{self.s: dh}` with a zero logit gradient. With weight $w$ and $n$ the number of entries of $R$:
+
+$$
+\begin{aligned}
+\mathcal{L}_{\text{hint}} &= \frac{w}{n} \lVert H_S P - H_T \rVert_F^2 \\
+\frac{\partial \mathcal{L}_{\text{hint}}}{\partial P} &= \frac{2w}{n} H_S^\top R \\
+\frac{\partial \mathcal{L}_{\text{hint}}}{\partial H_S} &= \frac{2w}{n} R P^\top
+\end{aligned}
+$$
+
+Attention transfer replaces `hs @ self.P - ht` with `attention(hs) - attention(ht)` and drops `P`: nothing to learn, because the channel sum already removes the width mismatch.
 
 ## What the simulations show
 

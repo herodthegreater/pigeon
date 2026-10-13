@@ -1,7 +1,9 @@
 """pigeon.harness -- the doubt-dial, retargeted to vision.
 
-`quant.py` is byte-identical to the LLM harness (fake-quantization is
-domain-agnostic). `model.py` adds Conv2d so it can carve a detector.
+`quant.py` comes from the LLM harness (fake-quantization is domain-agnostic);
+the one change since is that a 1-bit scale averages only the real weights of a
+short tail group, not its zero padding. `model.py` adds Conv2d so it can carve
+a detector.
 """
 
 from .quant import fake_quantize, quantization_error

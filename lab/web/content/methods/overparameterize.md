@@ -1,13 +1,21 @@
 ## The idea
 
-A small network is hard to train well. Gradient descent on few parameters gets stuck more easily than on many. The trick is to train a bigger network that is secretly the same small one. Write each weight matrix as a product of two matrices with a wide linear layer between them, `W = W1 W2`. A product of linear maps is still one linear map, so after training you multiply the factors back together and get a network of exactly the original shape. The expanded version can express nothing new. What changes is how gradient descent moves through the weights.
+A small network is hard to train well. Gradient descent on few parameters gets stuck more easily than on many. The trick is to train a bigger network that is secretly the same small one. Write each weight matrix as a product of two matrices with a wide linear layer between them, $W = W_1 W_2$. A product of linear maps is still one linear map, so after training you multiply the factors back together and get a network of exactly the original shape. The expanded version can express nothing new. What changes is how gradient descent moves through the weights.
 
 ## How it works
 
-1. Take the target architecture, say 12 → 16 → 16 → 20.
-2. Replace every layer `a → b` by two: `a → E → b` with `E = expand * max(a, b)`, and no activation after the first (a *linear* layer).
+1. Take the target architecture, say $12 \to 16 \to 16 \to 20$.
+2. Replace every layer $a \to b$ by two, $a \to E \to b$ with $E = e \cdot \max(a, b)$ for expansion factor $e$, and no activation after the first (a *linear* layer).
 3. Train this expanded network normally.
-4. Collapse each pair: `(h W1 + b1) W2 + b2 = h (W1 W2) + (b1 W2 + b2)`. The new weight is `W1 @ W2` and the new bias is `b1 @ W2 + b2`.
+4. Collapse each pair. With no nonlinearity between the factors, the pair is one affine map, with weight $W_1 W_2$ and bias $b_1 W_2 + b_2$:
+
+$$
+\begin{aligned}
+(h W_1 + b_1) W_2 + b_2 &= h W_1 W_2 + b_1 W_2 + b_2 \\
+&= h \, (W_1 W_2) + (b_1 W_2 + b_2)
+\end{aligned}
+$$
+
 5. Deploy the collapsed network. Its outputs are identical to the trained expanded one, up to float rounding.
 
 ## The code, line by line
@@ -48,4 +56,4 @@ The toy doesn't separate *why* it helps. Candidate reasons include the implicit 
 
 ## Going further
 
-ExpandNets applies this to CNNs by expanding a `k x k` conv into a `1 x 1`, a `k x k` and another `1 x 1`, all linear, and contracting after training. RepVGG trains parallel `3x3`, `1x1` and identity branches and merges them into one `3x3` conv for inference. The YOLOv8n cockpit already depends on the same algebra in its most common form: `server.py` fuses YOLOv8n when loading it, folding each batch-norm into the preceding conv (see Batch-norm folding). Training a specialist with expanded convs and contracting it before export could give a better small detector with the same deployed shape.
+ExpandNets applies this to CNNs by expanding a $k \times k$ conv into a $1 \times 1$, a $k \times k$ and another $1 \times 1$, all linear, and contracting after training. RepVGG trains parallel $3 \times 3$, $1 \times 1$ and identity branches and merges them into one $3 \times 3$ conv for inference. The YOLOv8n cockpit already depends on the same algebra in its most common form: `server.py` fuses YOLOv8n when loading it, folding each batch-norm into the preceding conv (see Batch-norm folding). Training a specialist with expanded convs and contracting it before export could give a better small detector with the same deployed shape.

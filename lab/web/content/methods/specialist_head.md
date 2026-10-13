@@ -4,10 +4,32 @@ A generalist spends capacity telling 20 classes apart. If you only need "bird or
 
 ## How it works
 
-1. Group the 20 classes into `K` outputs, written as a `20 x K` 0/1 matrix `G` with one 1 per row. Output 0 is always the bird alone. `binary` (K=2) is bird | rest. `siblings` (K=5) is bird | each of its 3 siblings | rest. `supers` (K=8) is bird | each sibling | each of the 4 other superclasses.
-2. Build a student with a `K`-wide output layer.
-3. Distill: compute the teacher's probabilities `p_t = softmax(z_t / T)` over 20 classes (here `T = 1`), sum them into groups `q_t = p_t @ G`, and train the student's `K` outputs to match `q_t` with the usual `T^2 * KL(q_t || p_s)` loss.
-4. Score by average precision (AP) of output 0 on the test set, the same single-class ranking measure the YOLOv8n cockpit uses for birds.
+1. Group the 20 classes into $K$ outputs, written as a $20 \times K$ 0/1 matrix $G$ with one 1 per row. Output 0 is always the bird alone. `binary` ($K = 2$) is bird | rest. `siblings` ($K = 5$) is bird | each of its 3 siblings | rest. `supers` ($K = 8$) is bird | each sibling | each of the 4 other superclasses.
+2. Build a student with a $K$-wide output layer.
+3. Distill: compute the teacher's probabilities $p_t$ over 20 classes at temperature $T$ (here $T = 1$) from its logits $z_t$, and sum them into groups $q_t$, adding up the probabilities of the classes in each group:
+
+$$
+\begin{aligned}
+p_t &= \softmax(z_t / T) \\
+q_t &= p_t \, G \\
+(q_t)_k &= \sum_{c \,:\, G_{ck} = 1} (p_t)_c
+\end{aligned}
+$$
+
+Then train the student's $K$ outputs, with logits $z_s$, to match $q_t$ with the usual KD loss:
+
+$$
+\begin{aligned}
+L &= T^2 \, \KL(q_t \,\|\, p_s) \\
+p_s &= \softmax(z_s / T)
+\end{aligned}
+$$
+
+4. Score by average precision (AP) of output 0 on the test set, the same single-class ranking measure the YOLOv8n cockpit uses for birds. Sort the test examples by output 0, most bird-like first. With $\operatorname{pos}_k = 1$ if the $k$-th example is a bird and $N_+$ birds in all, AP averages the precision at the rank of each bird:
+
+$$
+\text{AP} = \frac{1}{N_+} \sum_{k=1}^{N} \operatorname{pos}_k \cdot \frac{1}{k} \sum_{j=1}^{k} \operatorname{pos}_j
+$$
 
 ## The code, line by line
 
@@ -15,15 +37,15 @@ A generalist spends capacity telling 20 classes apart. If you only need "bird or
 
 `spec_distill` trains a student in that label space. By default `X` is `transfer_X(data())`: 8,000 labeled plus 20,000 unlabeled inputs, labels unused. `FixedSource(X, None, Gm.shape[1], teacher=t)` runs the teacher once and stores its logits. The loss is `KD(T=1, group=Gm)`.
 
-Inside `KD._teacher_probs` (`lab/train.py`), `p = softmax(tl, T)` softens the teacher, then `p = p @ self.G` sums each group's probabilities. Grouping happens *after* the temperature. At T=1 that makes no difference, but with `T > 1` a large group such as the 19-class "rest" would receive more mass than the teacher gives it. The student side is unchanged: `log_softmax(z, T)` over its `K` outputs and gradient `T * (ps - pt) / N`.
+Inside `KD._teacher_probs` (`lab/train.py`), `p = softmax(tl, T)` softens the teacher, then `p = p @ self.G` sums each group's probabilities. Grouping happens *after* the temperature. At $T = 1$ that makes no difference, but with $T > 1$ a large group such as the 19-class "rest" would receive more mass than the teacher gives it. The student side is unchanged: `log_softmax(z, T)` over its $K$ outputs and gradient `T * (ps - pt) / N`.
 
 `spec_eval` calls `evaluate(..., full_space=False)`, which reports only `target_ap` from output 0.
 
-`run_specialist_head` in `lab/methods.py` adds two comparison arms. "generalist" is a 20-way `2xW` student distilled normally with `distill` (KD over all 20 classes, also at T=1). "binary labels" trains the binary head with plain cross-entropy on `yb = (d.train.y != 0)`, where 0 means bird, with no teacher at all.
+`run_specialist_head` in `lab/methods.py` adds two comparison arms. "generalist" is a 20-way `2xW` student distilled normally with `distill` (KD over all 20 classes, also at $T = 1$). "binary labels" trains the binary head with plain cross-entropy on `yb = (d.train.y != 0)`, where 0 means bird, with no teacher at all.
 
 ## What the simulations show
 
-From `specialist_size` (bird AP, mean of 3 seeds; all KD at T=1; the teacher gets 0.9885 and the exact Bayes posterior 0.9992):
+From `specialist_size` (bird AP, mean of 3 seeds; all KD at $T = 1$; the teacher gets 0.9885 and the exact Bayes posterior 0.9992):
 
 | width | generalist 20-way, KD | binary, labels only | binary, KD | siblings head, KD | supers head, KD |
 |---|---|---|---|---|---|

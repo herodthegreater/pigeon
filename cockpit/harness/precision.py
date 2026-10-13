@@ -1,7 +1,7 @@
 """The precision lab -- the doubt-dial with the knobs real quantizers expose.
 
-`quant.py` is the minimal dial (bits + a flat group size) and stays byte-identical
-to the LLM harness. This module adds what you need to *experiment* with
+`quant.py` is the minimal dial (bits + a flat group size), from the LLM
+harness. This module adds what you need to *experiment* with
 precision instead of just watching it collapse:
 
 - **granularity** -- who shares a scale: the whole tensor, each output channel,
@@ -106,9 +106,13 @@ def _snap(rows: torch.Tensor, scale: torch.Tensor, bits: int, levels: str) -> to
     return torch.clamp(torch.round(rows / (scale / qmax)), -qmax, qmax) * (scale / qmax)
 
 
-def _quant_rows(rows: torch.Tensor, bits: int, levels: str, clip: str) -> torch.Tensor:
+def _quant_rows(rows: torch.Tensor, bits: int, levels: str, clip: str,
+                real: torch.Tensor | None = None) -> torch.Tensor:
+    """``real``: how many entries of each row are weights rather than the zero
+    padding `_rows` adds to a channel's short tail group (None: all of them)."""
     if bits == 1:  # binary: sign * mean|w| per row (no zero, no range to clip)
-        s = rows.abs().mean(1, keepdim=True)
+        n = real if real is not None else rows.shape[1]
+        s = rows.abs().sum(1, keepdim=True) / n
         return torch.where(rows >= 0, s, -s)
     amax = rows.abs().amax(1, keepdim=True).clamp_min(1e-12)
     if clip != "mse":
@@ -135,7 +139,12 @@ def quantize_weight(w: torch.Tensor, bits: int, granularity="channel",
     if levels == "fp" and bits not in FP_FORMATS:
         levels = "int"
     rows, pad = _rows(w.float(), granularity)
-    q = _quant_rows(rows, bits, levels, clip)
+    real = None
+    if pad:  # the last group of every output channel carries `pad` zeros
+        g = rows.shape[1]
+        real = torch.full((rows.shape[0], 1), float(g), device=rows.device)
+        real.view(w.shape[0], -1)[:, -1] = g - pad
+    q = _quant_rows(rows, bits, levels, clip, real)
     return _unrows(q, w, granularity, pad).to(w.dtype)
 
 
@@ -254,17 +263,20 @@ class QATConv2d(torch.nn.Conv2d):
     q_bits: int = 16
     q_granularity = "channel"
     q_levels: str = "int"
+    q_clip: str = "max"   # class default keeps checkpoints saved before clip was stored loading
 
     def forward(self, x):
         w = self.weight
         if self.q_bits < NATIVE_BITS:
-            wq = quantize_weight(w.detach(), self.q_bits, self.q_granularity, self.q_levels, "max")
+            # the same grid the recipe is scored on (cockpit_map), clip search included;
+            # clip="mse" searches 29 clip ratios per row, about 3x the forward time on CPU
+            wq = quantize_weight(w.detach(), self.q_bits, self.q_granularity, self.q_levels, self.q_clip)
             w = w + (wq - w).detach()
         return self._conv_forward(x, w, self.bias)
 
 
 def enable_qat(model, bits: int = 16, stage_bits: dict[str, int] | None = None,
-               granularity="channel", levels: str = "int") -> int:
+               granularity="channel", levels: str = "int", clip: str = "max") -> int:
     """Swap every quantizable Conv2d (in place, keeping its weights) for a
     QATConv2d at its recipe's bit-width. Use on the *unfused* training model.
 
@@ -283,6 +295,6 @@ def enable_qat(model, bits: int = 16, stage_bits: dict[str, int] | None = None,
         if b >= NATIVE_BITS:
             continue
         mod.__class__ = QATConv2d
-        mod.q_bits, mod.q_granularity, mod.q_levels = b, granularity, levels
+        mod.q_bits, mod.q_granularity, mod.q_levels, mod.q_clip = b, granularity, levels, clip
         n += 1
     return n

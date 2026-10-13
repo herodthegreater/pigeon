@@ -1,15 +1,24 @@
 ## The idea
 
-Post-training quantization rounds a finished network and hopes it copes. *Quantization-aware training* (QAT) lets the network adapt to the rounding. It trains with quantized weights in the forward pass, so the loss sees the real rounding error, while a full-precision copy of every weight collects the updates. Rounding has zero derivative almost everywhere. The *straight-through estimator* (STE) handles this by pretending rounding is the identity in the backward pass: the gradient computed for the rounded weight is applied directly to the full-precision weight.
+Post-training quantization rounds a finished network and hopes it copes. *Quantization-aware training* (QAT) lets the network adapt to the rounding. It trains with quantized weights in the forward pass, so the loss sees the real rounding error, while a full-precision copy of every weight collects the updates. Rounding has zero derivative almost everywhere. The *straight-through estimator* (STE) handles this by pretending rounding is the identity in the backward pass, $\partial \hat w / \partial w := 1$: the gradient computed for the rounded weight $\hat w$ is applied directly to the full-precision weight $w$,
+
+$$
+\frac{\partial L}{\partial w} \approx \frac{\partial L}{\partial \hat w}.
+$$
 
 ## How it works
 
-1. Start from a trained full-precision network `W`.
-2. Each training step, compute `w_hat = quantize(W)` with the same rule PTQ uses (here symmetric, per group of 16).
-3. Forward pass with `w_hat`, loss on labels or on the teacher's outputs (*knowledge distillation*, KD).
-4. Backward pass: compute `dL/dw_hat` as usual, then update `W -= lr * dL/dw_hat`. This is the STE.
-5. Small updates pile up in `W` until a weight crosses a rounding boundary and jumps to the next level.
-6. Ship `quantize(W)`. The full-precision copy is thrown away.
+1. Start from a trained full-precision network $W$.
+2. Each training step, compute $\hat W = Q(W)$, where $Q$ is the same rounding rule PTQ uses (here symmetric, per group of 16).
+3. Forward pass with $\hat W$, loss on labels or on the teacher's outputs (*knowledge distillation*, KD).
+4. Backward pass: compute $\partial L / \partial \hat W$ as usual, then update $W$ with it, at learning rate $\eta$. This is the STE.
+
+$$
+W \leftarrow W - \eta \, \frac{\partial L}{\partial \hat W}
+$$
+
+5. Small updates pile up in $W$ until a weight crosses a rounding boundary and jumps to the next level.
+6. Ship $Q(W)$. The full-precision copy is thrown away.
 
 ```python
 for X, target in data:
@@ -24,11 +33,11 @@ Nothing in `lab/nn.py` is QAT-specific. Two lines make it happen when `net.qbits
 
 `MLP.eff(i)` returns the weight the network actually uses. `w = self.W[i]`, then `w = w * self.masks[i]` if there is a mask, then `w = fake_quantize(w, self.qbits, self.qgroup)` if `qbits` is set. `self.W[i]` itself is never rounded. It is the full-precision copy.
 
-`MLP.forward` calls `w = self.eff(i)` for every layer and, when `cache=True`, stores it in `effs`. `MLP.backward` then works on the quantized network as it really ran. `gz` is the gradient at the layer's pre-activation, and `dW[i] = ins[i].T @ gz` is `dL/dw_hat`, the gradient with respect to the rounded weight. `g_in = gz @ effs[i].T` passes the gradient back through the rounded weights, exactly as the network ran. `fit` hands `dW + db` to `Adam` together with `net.params()`, which is `self.W + self.b`, the full-precision tensors. That pairing, gradient for `w_hat` applied to `W`, is the whole straight-through estimator.
+`MLP.forward` calls `w = self.eff(i)` for every layer and, when `cache=True`, stores it in `effs`. `MLP.backward` then works on the quantized network as it really ran. `gz` is the gradient at the layer's pre-activation, and `dW[i] = ins[i].T @ gz` is $\partial L / \partial \hat W_i = h_i^\top \, \partial L / \partial z_i$, the gradient with respect to the rounded weight, where $h_i$ is the layer's input and $z_i$ its pre-activation. `g_in = gz @ effs[i].T` is $(\partial L / \partial z_i) \, \hat W_i^\top$: it passes the gradient back through the rounded weights, exactly as the network ran. `fit` hands `dW + db` to `Adam` together with `net.params()`, which is `self.W + self.b`, the full-precision tensors. That pairing, gradient for $\hat W$ applied to $W$, is the whole straight-through estimator.
 
 The scale is recomputed from `W` on every forward pass, so it tracks the weights but is not learned, as it is in Learned Step Size Quantization (Esser et al.). No gradient is clipped: the scale comes from the group's largest weight, so no weight ever falls outside the grid.
 
-`run_qat` in `lab/methods.py` copies the model and sets `m.qbits, m.qgroup = p["bits"], 16`. It trains for `FT` = 500 steps at `FT_LR` = 3e-3, with `scratch` (labels) or `distill` (KD from the 3x256 teacher, at `distill`'s default temperature T=1). The returned net keeps `qbits` set, so it is evaluated through the quantizer, next to PTQ at the same bits and group size.
+`run_qat` in `lab/methods.py` copies the model and sets `m.qbits, m.qgroup = p["bits"], 16`. It trains for `FT` = 500 steps at `FT_LR` = 3e-3, with `scratch` (labels) or `distill` (KD from the 3x256 teacher, at `distill`'s default temperature $T = 1$). The returned net keeps `qbits` set, so it is evaluated through the quantizer, next to PTQ at the same bits and group size.
 
 ## What the simulations show
 
@@ -51,7 +60,7 @@ Page runs (500 steps): the default student at 2 bits goes from 0.1897 with PTQ t
 ## When it breaks
 
 - **No spare capacity.** QAT redistributes knowledge across coarser weights. A capacity-limited model has nowhere to put it.
-- **STE mismatch.** The gradient is for `w_hat`, but the step is taken on `W`. A weight sitting just inside a rounding boundary gets the same gradient as one in the middle of its bin, so training can oscillate between levels.
+- **STE mismatch.** The gradient is for $\hat W$, but the step is taken on $W$. A weight sitting just inside a rounding boundary gets the same gradient as one in the middle of its bin, so training can oscillate between levels.
 - **Fixed scales.** Recomputing `scale` from the max means one weight growing changes the grid for its whole group mid-training.
 - **Budget and learning rate.** Too high a rate destroys the pretrained solution, and too few steps leave rounding damage unrepaired.
 - **Weights only.** Activations stay in float here. Integer hardware also needs activation quantization, which QAT should simulate too.

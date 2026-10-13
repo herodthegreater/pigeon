@@ -5,21 +5,38 @@ Unstructured pruning leaves zeros that still get stored and multiplied. Structur
 ## How it works
 
 1. Run the trained net on a probe batch (2,000 training examples here).
-2. Score every hidden neuron. `l1` is the sum of `|w|` over its incoming weights. `act` is its mean `|activation|`. `taylor` is the sum over examples of `|a * dL/da|`, where `a` is the activation and `dL/da` the loss gradient with respect to it: a first-order estimate of the loss change if `a` were zeroed. `random` is a control.
-3. In every hidden layer, keep the `k` best neurons and delete the rest.
+2. Score every hidden neuron. `l1` is the sum of $\lvert w \rvert$ over its incoming weights. `act` is its mean $\lvert a \rvert$, where $a$ is the activation. `taylor` is the sum over examples of $\lvert a \cdot \partial L / \partial a \rvert$, where $\partial L / \partial a$ is the loss gradient with respect to the activation: a first-order estimate of the loss change if $a$ were zeroed. `random` is a control. For neuron $j$ with incoming weights $W_{:,j}$ and activation $a_j(x)$ on probe example $x$, out of $n$ examples:
+
+$$
+\begin{aligned}
+S_j^{\text{l1}} &= \sum_i \lvert W_{ij} \rvert \\
+S_j^{\text{act}} &= \frac{1}{n} \sum_x \lvert a_j(x) \rvert \\
+S_j^{\text{taylor}} &= \sum_x \left\lvert a_j(x) \, \frac{\partial L}{\partial a_j(x)} \right\rvert
+\end{aligned}
+$$
+
+3. In every hidden layer, keep the $k$ best neurons and delete the rest.
 4. Recover by training the smaller net, with labels or by distilling from the original.
+
+The Taylor score comes from a first-order expansion of the loss around the current activation. Setting $a$ to zero changes the loss by about
+
+$$
+L(a = 0) - L(a) \approx -\, a \, \frac{\partial L}{\partial a},
+$$
+
+and the score keeps the size of that change.
 
 ## The code, line by line
 
 `neuron_importance` in `lab/compress.py` returns one score array per hidden layer. For `l1`, `np.abs(net.W[i]).sum(0)` sums each column of `W[i]`, the weights going *into* each neuron. It never looks at data. The other criteria run `z, hid, cache = net.forward(X, cache=True)`, where `hid` holds each hidden layer's post-ReLU output, and `act` is `np.abs(h).mean(0)`.
 
-For `taylor`, `dz = (p - np.eye(...)[y]) / len(z)` is the gradient of mean cross-entropy with respect to the logits. `net.backward(cache, dz, hidden_grads=hg)` stores `dL/d(hidden[i])` in `hg[i]`, and the score is `np.abs(h * g).sum(0)`. Taking `abs` per example means a neuron that helps some examples and hurts others still scores high. The `group` branch is the task-aware variant (see Task-aware pruning).
+For `taylor`, `dz = (p - np.eye(...)[y]) / len(z)` is the gradient of mean cross-entropy with respect to the logits, $\partial L / \partial z = (p - e_y) / n$ with $e_y$ the one-hot label. `net.backward(cache, dz, hidden_grads=hg)` stores $\partial L / \partial h_i$ for hidden layer $i$ in `hg[i]`, and the score is `np.abs(h * g).sum(0)`. Taking `abs` per example means a neuron that helps some examples and hurts others still scores high. The `group` branch is the task-aware variant (see Task-aware pruning).
 
 `structured_prune` copies the net, takes `idx = np.argsort(-scores[i])[:k]` per hidden layer, and calls `net.keep_neurons(i, idx)`. Scores are computed once, on the unpruned net.
 
-`MLP.keep_neurons` in `lab/nn.py` does the surgery. `self.W[layer][:, idx]` keeps the chosen output columns, `self.b[layer][idx]` their biases, and `self.W[layer + 1][idx, :]` the matching input rows of the next layer, so shapes still line up. Masks are sliced the same way and `self.sizes[layer + 1] = len(idx)` records the new width. The first line refuses residual layers. On a stream `h + f(h)`, one neuron index is shared by every layer that adds into it, and that *dependency group* must be cut together.
+`MLP.keep_neurons` in `lab/nn.py` does the surgery. `self.W[layer][:, idx]` keeps the chosen output columns, `self.b[layer][idx]` their biases, and `self.W[layer + 1][idx, :]` the matching input rows of the next layer, so shapes still line up. Masks are sliced the same way and `self.sizes[layer + 1] = len(idx)` records the new width. The first line refuses residual layers. On a stream $h + f(h)$, one neuron index is shared by every layer that adds into it, and that *dependency group* must be cut together.
 
-`run_structured` in `lab/methods.py` prunes the 3x256 teacher to `[w] * 3`, recovers for `FT` = 500 steps, and compares with a fresh 3x`w` net distilled for 1,000 steps at the same learning rate.
+`run_structured` in `lab/methods.py` prunes the 3x256 teacher to `[w] * 3`, recovers for `FT` = 500 steps, and compares with a fresh $3 \times w$ net distilled for 1,000 steps at the same learning rate.
 
 ## What the simulations show
 
@@ -54,7 +71,7 @@ The toy can't show speed. On Apple's MPS, the cockpit saw a 30% channel cut redu
 - **The cliff is steep.** Never judge a structurally pruned model before fine-tuning it.
 - **Deep cuts lose to a fresh start.** At 16x the pruned weights end worse than a random init.
 - **Stale scores.** Scores come from the unpruned net, so cutting layer 1 changes what layer 2's neurons mean.
-- **Taylor at a minimum.** On a well-trained net `dL/da` is small and noisy.
+- **Taylor at a minimum.** On a well-trained net $\partial L / \partial a$ is small and noisy.
 - **Residual streams and concatenations** tie neurons across layers, and `keep_neurons` refuses them rather than guessing.
 
 ## Try this

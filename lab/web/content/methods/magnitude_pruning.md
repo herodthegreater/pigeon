@@ -1,15 +1,28 @@
 ## The idea
 
-Many weights in a trained network are close to zero. Magnitude pruning treats `|w|` as a stand-in for importance and sets the smallest weights to exactly zero. This is *unstructured* pruning: the matrix keeps its shape but becomes *sparse* (mostly zeros). A *recovery* phase (more training with removed weights held at zero) wins back most of the lost accuracy.
+Many weights in a trained network are close to zero. Magnitude pruning treats $\lvert w \rvert$ as a stand-in for importance and sets the smallest weights to exactly zero. This is *unstructured* pruning: the matrix keeps its shape but becomes *sparse* (mostly zeros). A *recovery* phase (more training with removed weights held at zero) wins back most of the lost accuracy.
 
 ## How it works
 
-1. Pick a *sparsity* `s`, the fraction of all weights to remove (0.9 keeps 1 in 10).
-2. Rank weights by `|w|`. A *global* ranking puts every layer in one list. A *per-layer* ranking removes the same fraction from each layer.
-3. Let `k = s * n_weights`. The threshold `thr` is the `k`-th smallest `|w|`. The *mask* is `m = (|w| > thr)`, a 0/1 array shaped like `W`.
-4. Use `W * m` from now on, and multiply the gradient by `m` too, so dead weights stay dead.
+1. Pick a *sparsity* $s$, the fraction of all weights to remove (0.9 keeps 1 in 10).
+2. Rank weights by $\lvert w \rvert$. A *global* ranking puts every layer in one list. A *per-layer* ranking removes the same fraction from each layer.
+3. Let $k = s \cdot N$, where $N$ is the number of weights. The threshold $\tau$ (`thr` in the code) is the $k$-th smallest $\lvert w \rvert$. The *mask* $M$ is a 0/1 array shaped like $W$ that keeps every weight above the threshold:
+
+$$
+M_{ij} = \begin{cases} 1 & \lvert w_{ij} \rvert > \tau \\ 0 & \text{otherwise} \end{cases}
+$$
+
+4. Use $W \odot M$ from now on, and multiply the gradient by $M$ too, so dead weights stay dead:
+
+$$
+\begin{aligned}
+W &\leftarrow W \odot M \\
+\nabla_W L &\leftarrow \nabla_W L \odot M
+\end{aligned}
+$$
+
 5. Recover with labels or *knowledge distillation* (KD), where the pruned net learns to match the unpruned net's output probabilities.
-6. Gradual variant: repeat steps 2-5 with a rising `s`.
+6. Gradual variant: repeat steps 2-5 with a rising $s$.
 
 ```python
 mags = concat(|W_i| for every layer)          # already-pruned weights count as 0
@@ -22,13 +35,19 @@ for i in layers:
 
 `magnitude_prune` in `lab/compress.py` starts with `net = net.copy()`, so the input is never modified.
 
-The helper `mask_for(mags, flat)` does the ranking. `k = int(round(sparsity * flat.size))` counts how many weights must be zero, over *all* weights, already-pruned ones included. `thr = np.partition(flat, k - 1)[k - 1]` finds the `k`-th smallest magnitude without a full sort, and the mask is `mags > thr`. Dead weights have magnitude 0, sit at the bottom and stay dead. So calling the function again with a higher target removes only the difference.
+The helper `mask_for(mags, flat)` does the ranking. `k = int(round(sparsity * flat.size))`, that is $k = \round(s \cdot N)$, counts how many weights must be zero, over *all* weights, already-pruned ones included. `thr = np.partition(flat, k - 1)[k - 1]` finds the $k$-th smallest magnitude without a full sort, and the mask is `mags > thr`. Dead weights have magnitude 0, sit at the bottom and stay dead. So calling the function again with a higher target removes only the difference.
 
 In the global branch, `flat = np.concatenate([np.abs(net.eff(i)).ravel() for i in layers])` pools every layer's magnitudes, so one threshold applies everywhere. `net.eff(i)` is the weight as the forward pass uses it. The per-layer branch calls `mask_for(w, w.ravel())` once per layer.
 
 `net.apply_masks()` writes the zeros in (`self.W[i] *= m` in `lab/nn.py`). `MLP.eff` multiplies by the mask on every forward pass, `MLP.backward` does `dW[i] *= self.masks[i]`, and `fit` re-applies masks after each optimizer step, so dead weights stay dead.
 
-`run_magnitude` in `lab/methods.py` calls `magnitude_prune(m, 1 - (1 - sp) ** (i / k))` for gradual step `i` of `k`. That is a geometric schedule: each step removes the same share of the survivors. For `sp = 0.9`, `k = 5` the targets are about 0.37, 0.60, 0.75, 0.84 and 0.90. Each step is followed by `scratch` (labels) or `distill` (KD from the unpruned teacher) for `FT // k` steps, so the total recovery budget is fixed.
+`run_magnitude` in `lab/methods.py` calls `magnitude_prune(m, 1 - (1 - sp) ** (i / k))` for gradual step $i$ of $k$. With final sparsity $s$, the target after step $i$ is
+
+$$
+s_i = 1 - (1 - s)^{i/k}
+$$
+
+That is a geometric schedule: the surviving fraction $1 - s_i = (1 - s)^{i/k}$ shrinks by the same factor $(1 - s)^{1/k}$ at every step, so each step removes the same share of the survivors. For `sp = 0.9`, `k = 5` the targets are about 0.37, 0.60, 0.75, 0.84 and 0.90. Each step is followed by `scratch` (labels) or `distill` (KD from the unpruned teacher) for `FT // k` steps, so the total recovery budget is fixed.
 
 ## What the simulations show
 
@@ -64,4 +83,4 @@ Page runs (500 recovery steps): the defaults (0.9, KD, global) recover from 0.27
 
 ## Going further
 
-On large models unstructured sparsity pays off only with a runtime that exploits it, such as sparse formats on CPUs or N:M patterns on recent GPUs. See also Wanda and SparseGPT. The YOLOv8n cockpit does not prune single weights. It zeros whole channels (`harness/mask.py` masks the lowest-L1 output channels of a stage), because a channel can actually be removed from a conv layer. The cliff-then-recover pattern is the lesson the cockpit's README draws: the loop must be prune → fine-tune → test, never prune → test.
+On large models unstructured sparsity pays off only with a runtime that exploits it, such as sparse formats on CPUs or N:M patterns on recent GPUs. See also Wanda and SparseGPT. The YOLOv8n cockpit does not prune single weights. It zeros whole channels (`harness/mask.py` masks the lowest-L1 output channels of a stage), because a channel can actually be removed from a conv layer. The cliff-then-recover pattern is the lesson the cockpit's README draws: the loop must be prune, then fine-tune, then test, never prune then test.

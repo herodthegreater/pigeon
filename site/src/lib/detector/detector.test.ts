@@ -199,3 +199,15 @@ describe("a YOLOv8n recipe in a link", () => {
     expect(read("cut=L22:20")).toEqual({ error: "L22 has no channels to cut" });
   });
 });
+
+describe("1-bit scales on a padded tail group", () => {
+  it("average only the real weights, like the cockpit's precision.py", () => {
+    // one output channel of 27 weights in groups of 16: a full group, then an 11-wide tail
+    const w = Float32Array.from({ length: 27 }, (_, i) => (i % 2 ? -1 : 1) * (i + 1));
+    const q = quantize(w, 1, 27, 1, 16, "int");
+    const mean = (a: number, b: number) => { let s = 0; for (let i = a; i < b; i++) s += Math.abs(w[i]); return s / (b - a); };
+    expect(Math.abs(q[0])).toBeCloseTo(mean(0, 16), 5);
+    expect(Math.abs(q[26])).toBeCloseTo(mean(16, 27), 5); // not the sum over 16
+    expect(Math.sign(q[1])).toBe(-1);
+  });
+});

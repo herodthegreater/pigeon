@@ -1,3 +1,5 @@
+@import "katex/dist/katex.min.css";
+
 /* Long-form text: method write-ups, lesson intros, the results report.
    Ruled and calm, like a printed field guide. Import from pages that render markdown. */
 
@@ -30,6 +32,27 @@ pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: norm
 .tok-com { color: var(--tok-com); font-style: italic; }
 .tok-num { color: var(--tok-num); }
 .tok-dec { color: var(--tok-dec); }
+
+/* Math, typeset by KaTeX at build time (lib/lab/markdown.ts). Sized to sit level with
+   the body text; a display equation gets its own line and scrolls sideways on a
+   phone rather than spilling off the page. A formula KaTeX couldn't read shows its
+   source in the bad color (and fails the tests). */
+.katex { font-size: 1.08em; }
+.math-display {
+  overflow-x: auto; overflow-y: hidden; max-width: 100%; padding: var(--space-1) 0;
+  /* scroll shadows: a soft edge appears only on a side that has more equation to
+     scroll to (the paper-colored covers move with the content, the shadows don't) */
+  background:
+    linear-gradient(to right, var(--paper) 30%, transparent) left / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--paper) 30%, transparent) right / 2rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--ink) 18%, transparent), transparent) left / .6rem 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--ink) 18%, transparent), transparent) right / .6rem 100% no-repeat scroll;
+}
+.math-display .katex-display { margin: 0; }
+@media (max-width: 40rem) {
+  .math-display .katex { font-size: 0.98em; }
+}
+.math-error { color: var(--bad); }
 
 .tablewrap { overflow-x: auto; max-width: 100%; }
 .tablewrap table, table.restable { border-collapse: collapse; width: 100%; font-size: var(--step--1); }

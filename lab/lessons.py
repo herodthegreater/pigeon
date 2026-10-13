@@ -142,24 +142,34 @@ def check(lesson_id: str, code: str, timeout: float = 60.0) -> dict:
 lesson(
     id="softmax_ce", title="1. Softmax, cross-entropy and its gradient",
     methods=["kd"],
-    intro="""
-    Every classifier in this lab ends the same way: a vector of **logits** `z`
+    intro=r"""
+    Every classifier in this lab ends the same way: a vector of **logits** $z$
     (one number per class) becomes probabilities with **softmax**, and the
     loss is **cross-entropy** against the true class.
 
-    `softmax(z)_i = exp(z_i) / sum_j exp(z_j)`
+    $$
+    \softmax(z)_i = \frac{e^{z_i}}{\sum_j e^{z_j}}
+    $$
 
-    Dividing the logits by a **temperature** `T` before the softmax flattens
-    the distribution when `T > 1`. Distillation depends on that knob.
+    Dividing the logits by a **temperature** $T$ before the softmax, $\softmax(z / T)$, flattens
+    the distribution when $T > 1$. Distillation depends on that knob.
 
     Two things to get right:
 
     1. **Numerical stability.** `exp(1000)` overflows. Subtracting the row's
-       maximum first changes nothing mathematically (it cancels in the ratio)
+       maximum first changes nothing mathematically (it cancels in the ratio:
+       $\softmax(z - c) = \softmax(z)$ for any constant $c$)
        and keeps every exponent at or below 0.
-    2. **The gradient.** For `L = -log softmax(z)[y]`, the derivative with
-       respect to the logits is beautifully simple: `p - onehot(y)`. Averaged
-       over a batch of N rows, divide by N.
+    2. **The gradient.** For $L = -\log \softmax(z)_y$, the derivative with
+       respect to the logits is beautifully simple: $p - \operatorname{onehot}(y)$, where $p = \softmax(z)$. Averaged
+       over a batch of $N$ rows, divide by $N$:
+
+    $$
+    \begin{aligned}
+    L &= -\frac{1}{N} \sum_{n=1}^{N} \log p_{n, y_n} \\
+    \frac{\partial L}{\partial z_n} &= \frac{1}{N} \big( p_n - \operatorname{onehot}(y_n) \big)
+    \end{aligned}
+    $$
 
     Implement the three functions. All inputs are 2-D: one row per example.
     """,
@@ -242,7 +252,7 @@ lesson(
     """,
     hints=["`z.max(axis=1, keepdims=True)` keeps the shape (N, 1) so it broadcasts.",
            "For the gradient, start from `softmax(z)` and subtract 1 at each row's true class, "
-           "then divide by N because the loss is a mean."],
+           "then divide by $N$ because the loss is a mean."],
 )
 
 # ===========================================================================
@@ -251,17 +261,34 @@ lesson(
 lesson(
     id="dense_layer", title="2. A dense layer: forward and backward",
     methods=["kd", "magnitude_pruning"],
-    intro="""
-    A dense (fully connected) layer with a ReLU computes `a = relu(h @ W + b)`
-    for a batch `h` of shape (N, in), weights `W` of shape (in, out) and bias
-    `b` of shape (out,).
+    intro=r"""
+    A dense (fully connected) layer with a ReLU computes $a = \relu(hW + b)$
+    (`a = relu(h @ W + b)`) for a batch $h$ of shape (N, in), weights $W$ of
+    shape (in, out) and bias $b$ of shape (out,).
 
-    Backpropagation runs the chain rule backwards. Given `g = dL/da` (same
-    shape as `a`), you need three things:
+    Backpropagation runs the chain rule backwards. Given $g = \partial L / \partial a$ (same
+    shape as $a$), you need three things:
 
     1. `gz = g * (z > 0)`, where `z = h @ W + b`. ReLU passes gradient only where it was active.
+
+    $$
+    g_z = \frac{\partial L}{\partial z} = g \odot \mathbb{1}[z > 0]
+    $$
+
     2. `dW = h.T @ gz` and `db = gz.sum(axis=0)`: how the loss changes with each parameter.
+
+    $$
+    \begin{aligned}
+    \frac{\partial L}{\partial W} &= h^\top g_z \\
+    \frac{\partial L}{\partial b} &= \sum_{n=1}^{N} (g_z)_n
+    \end{aligned}
+    $$
+
     3. `dh = gz @ W.T`: the gradient to hand to the layer below.
+
+    $$
+    \frac{\partial L}{\partial h} = g_z W^\top
+    $$
 
     Every network in `lab/nn.py` is a stack of these. `MLP.backward` is this
     function in a loop.
@@ -340,8 +367,16 @@ lesson(
 lesson(
     id="train_mlp", title="3. Train a two-layer network from scratch",
     methods=["small_tricks"],
-    intro="""
-    Put lessons 1 and 2 together: a network `x -> relu(x W1 + b1) -> logits = h W2 + b2`
+    intro=r"""
+    Put lessons 1 and 2 together: a network `x -> relu(x W1 + b1) -> logits = h W2 + b2`,
+
+    $$
+    \begin{aligned}
+    h &= \relu(x W_1 + b_1) \\
+    z &= h W_2 + b_2
+    \end{aligned}
+    $$
+
     trained with plain mini-batch gradient descent on a two-spirals dataset
     (provided). No libraries beyond numpy.
 
@@ -349,9 +384,9 @@ lesson(
 
     1. Shuffle, take a batch.
     2. Forward: hidden activations, logits.
-    3. `dz = (softmax(logits) - onehot(y)) / N`.
+    3. `dz = (softmax(logits) - onehot(y)) / N`, the lesson-1 gradient $\partial L / \partial z$.
     4. Backward through the output layer, then the ReLU layer.
-    5. `param -= lr * grad` for all four parameters.
+    5. `param -= lr * grad` for all four parameters: $\theta \leftarrow \theta - \eta \, \partial L / \partial \theta$ with learning rate $\eta$.
 
     Implement `train(X, y, hidden, epochs, lr, seed)` returning a `predict(X)`
     function. The test requires 90% training accuracy on the spirals, which a
@@ -438,8 +473,8 @@ lesson(
         assert out.shape == (50,), f"shape {out.shape}"
     """,
     hints=["Reuse your softmax and dense-layer code from lessons 1 and 2.",
-           "If accuracy is stuck near 0.5, check the ReLU mask uses z1 (pre-activation), "
-           "and that you update W1/b1, not only W2/b2."],
+           "If accuracy is stuck near 0.5, check the ReLU mask uses `z1` (pre-activation), "
+           "and that you update `W1`/`b1`, not only `W2`/`b2`."],
 )
 
 # ===========================================================================
@@ -448,18 +483,38 @@ lesson(
 lesson(
     id="adam", title="4. The Adam optimizer",
     methods=["kd"],
-    intro="""
+    intro=r"""
     Plain gradient descent uses one learning rate for every parameter. **Adam**
-    keeps two running averages per parameter, the gradient (`m`, momentum) and
-    the squared gradient (`v`), and steps by `m / sqrt(v)`: large where the
+    keeps two running averages per parameter, the gradient ($m$, momentum) and
+    the squared gradient ($v$), and steps by $m / \sqrt{v}$: large where the
     gradient is consistent, small where it is noisy or huge.
 
-    For step `t = 1, 2, ...`:
+    For step $t = 1, 2, \dots$, with gradient $g$ (in code `b1`, `b2` are $\beta_1$, $\beta_2$ and `lr` is $\eta$):
 
     1. `m = b1 * m + (1 - b1) * g`
     2. `v = b2 * v + (1 - b2) * g * g`
+
+    $$
+    \begin{aligned}
+    m_t &= \beta_1 m_{t-1} + (1 - \beta_1) \, g_t \\
+    v_t &= \beta_2 v_{t-1} + (1 - \beta_2) \, g_t^2
+    \end{aligned}
+    $$
+
     3. `m_hat = m / (1 - b1**t)`, `v_hat = v / (1 - b2**t)` (bias correction: both start at 0)
+
+    $$
+    \begin{aligned}
+    \hat{m}_t &= \frac{m_t}{1 - \beta_1^t} \\
+    \hat{v}_t &= \frac{v_t}{1 - \beta_2^t}
+    \end{aligned}
+    $$
+
     4. `p -= lr * m_hat / (sqrt(v_hat) + eps)`
+
+    $$
+    p_t = p_{t-1} - \eta \, \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}
+    $$
 
     Implement it as a class that updates arrays **in place**, like
     `lab/nn.py:Adam` (which also adds decoupled weight decay).
@@ -529,24 +584,36 @@ lesson(
 lesson(
     id="kd_loss", title="5. The distillation loss and its gradient",
     methods=["kd", "kd_losses"],
-    intro="""
+    intro=r"""
     Hinton's distillation loss compares the student's and teacher's softened
     distributions:
 
-    `L = T^2 * mean_i KL(p_t || p_s)`, with `p_t = softmax(z_t / T)`, `p_s = softmax(z_s / T)`
+    $$
+    \begin{aligned}
+    L &= \frac{T^2}{N} \sum_{i=1}^{N} \KL\big(p_{t,i} \,\|\, p_{s,i}\big) \\
+    p_t &= \softmax(z_t / T) \\
+    p_s &= \softmax(z_s / T)
+    \end{aligned}
+    $$
 
-    and `KL(p || q) = sum_c p_c (log p_c - log q_c)`.
+    and
 
-    Why `T^2`? The gradient of the softened loss shrinks like `1/T^2` as `T`
+    $$
+    \KL(p \,\|\, q) = \sum_c p_c \left( \log p_c - \log q_c \right)
+    $$
+
+    Why $T^2$? The gradient of the softened loss shrinks like $1/T^2$ as $T$
     grows; multiplying back keeps its size comparable to the cross-entropy
     term when the two are mixed.
 
     The gradient with respect to the student's logits works out to
 
-    `dL/dz_s = T * (p_s - p_t) / N`
+    $$
+    \frac{\partial L}{\partial z_s} = \frac{T}{N} \left( p_s - p_t \right)
+    $$
 
     Derive it yourself first: it's the cross-entropy gradient from lesson 1
-    with a soft target, with the chain rule through `z / T`.
+    with a soft target, with the chain rule through $z / T$.
     """,
     skeleton="""
     import numpy as np
@@ -602,8 +669,8 @@ lesson(
                 num[i, j] = (student.kd_loss(zs + e, zt, 3.0)[0] - student.kd_loss(zs - e, zt, 3.0)[0]) / 2e-6
         assert np.abs(g - num).max() < 1e-5
     """,
-    hints=["Compute log-probabilities with a stable log-softmax; `log(softmax(...))` can hit log(0).",
-           "The `T^2` in the loss and the `1/T` from the chain rule leave a single `T` in the gradient."],
+    hints=[r"Compute log-probabilities with a stable log-softmax; `log(softmax(...))` can hit $\log 0$.",
+           "The $T^2$ in the loss and the $1/T$ from the chain rule leave a single $T$ in the gradient."],
 )
 
 # ===========================================================================
@@ -612,17 +679,18 @@ lesson(
 lesson(
     id="magnitude_mask", title="6. Global magnitude pruning",
     methods=["magnitude_pruning", "lottery_ticket"],
-    intro="""
+    intro=r"""
     Magnitude pruning keeps the largest weights and zeros the rest. **Global**
     pruning ranks the weights of all layers together, so a layer full of tiny
     weights can lose most of them while a sensitive layer keeps more.
 
     Implement `global_masks(weights, sparsity)`: given a list of weight
-    matrices and the fraction to remove, return one 0/1 mask per matrix
+    matrices and the fraction to remove, return one 0/1 mask $M$ per matrix
     (same shapes) that removes exactly `round(sparsity * total)` weights, the
-    smallest in absolute value across all matrices.
+    smallest in absolute value $\lvert w \rvert$ across all matrices.
 
-    Then the training loop multiplies weights by their mask after every step
+    Then the training loop multiplies weights by their mask after every step,
+    $W \leftarrow W \odot M$,
     so pruned weights stay dead (`lab/nn.py:MLP.apply_masks`).
     """,
     skeleton="""
@@ -673,7 +741,7 @@ lesson(
         assert (ms[1] == 0).mean() > 0.75, "rank all layers together, not each layer separately"
     """,
     hints=["Concatenate `abs(w).ravel()` for every matrix, rank once, then split back by sizes.",
-           "`np.argsort(...)[:k]` gives the indices of the k smallest."],
+           "`np.argsort(...)[:k]` gives the indices of the $k$ smallest."],
 )
 
 # ===========================================================================
@@ -682,18 +750,29 @@ lesson(
 lesson(
     id="fake_quant", title="7. Fake quantization with group scales",
     methods=["ptq", "qat", "conv_quantization"],
-    intro="""
-    To store a weight in `b` bits with a symmetric scheme, pick a scale `s`
-    and keep the integer `q = round(w / s)`, clipped to `[-qmax, qmax]` where
-    `qmax = 2^(b-1) - 1`. The stored model holds `q` and `s`; using it means
-    computing `q * s`.
+    intro=r"""
+    To store a weight in $b$ bits with a symmetric scheme, pick a scale $s$
+    and keep the integer $q = \round(w / s)$, clipped to $[-q_{\max}, q_{\max}]$ where
+    $q_{\max} = 2^{b-1} - 1$. The stored model holds $q$ and $s$; using it means
+    computing $q \cdot s$:
 
-    **Fake quantization** returns `q * s` in float directly, so you can measure
+    $$
+    \begin{aligned}
+    q &= \clip\!\big(\round(w / s), -q_{\max}, q_{\max}\big) \\
+    \hat{w} &= q \cdot s
+    \end{aligned}
+    $$
+
+    **Fake quantization** returns $\hat{w} = q \cdot s$ in float directly, so you can measure
     the accuracy of the quantized model without any integer kernels. That's
     what `harness/quant.py` does to YOLO and `lab/nn.py:fake_quantize` does here.
 
-    The scale is shared by a **group** of consecutive weights:
-    `s = max|w in group| / qmax`. Smaller groups, more scales, less error.
+    The scale is shared by a **group** $G$ of consecutive weights.
+    Smaller groups, more scales, less error.
+
+    $$
+    s = \frac{\max_{i \in G} \lvert w_i \rvert}{q_{\max}}
+    $$
 
     Implement `fake_quantize(w, bits, group)` for `bits` in 2..8, where
     `group=None` means one scale for the whole tensor. Group along the
@@ -754,17 +833,18 @@ lesson(
 lesson(
     id="neuron_surgery", title="8. Structured pruning: removing neurons for real",
     methods=["structured_pruning", "channel_pruning"],
-    intro="""
+    intro=r"""
     Zeroing weights doesn't make a network faster on ordinary hardware; the
     matrix multiply is the same size. **Structured** pruning deletes whole
     neurons, so the matrices shrink.
 
-    Deleting hidden neuron `j` between two layers means three edits that must
-    agree:
+    Hidden neuron $j$ computes $h_j = \relu\big(x \, (W_1)_{:,j} + (b_1)_j\big)$ and
+    passes $h_j \, (W_2)_{j,:}$ to the next layer. Deleting it between the two
+    layers means three edits that must agree:
 
-    1. remove column `j` of `W1` (its incoming weights),
-    2. remove entry `j` of `b1`,
-    3. remove row `j` of `W2` (its outgoing weights).
+    1. remove column $j$ of $W_1$ (its incoming weights),
+    2. remove entry $j$ of $b_1$,
+    3. remove row $j$ of $W_2$ (its outgoing weights).
 
     Miss one and the shapes no longer match. In a CNN with skip connections
     the same idea needs a *dependency group* of layers, which is what
@@ -773,7 +853,7 @@ lesson(
     Implement `keep_neurons(W1, b1, W2, keep)` returning the smaller
     `(W1, b1, W2)` that keeps only the hidden neurons listed in `keep`, and
     `l1_scores(W1)` returning one importance score per hidden neuron (the L1
-    norm of its incoming weights).
+    norm of its incoming weights, $\lVert (W_1)_{:,j} \rVert_1 = \sum_i \lvert (W_1)_{ij} \rvert$).
     """,
     skeleton="""
     import numpy as np
@@ -821,7 +901,7 @@ lesson(
         s = student.l1_scores(W1)
         assert s.shape == (8,) and np.allclose(s, np.abs(W1).sum(0))
     """,
-    hints=["Column j of W1 is `W1[:, j]`; row j of W2 is `W2[j, :]`.",
+    hints=["Column $j$ of $W_1$ is `W1[:, j]`; row $j$ of $W_2$ is `W2[j, :]`.",
            "Index with the whole `keep` array at once: `W1[:, keep]`."],
 )
 
@@ -831,20 +911,35 @@ lesson(
 lesson(
     id="low_rank_svd", title="9. Low-rank factorization with the SVD",
     methods=["low_rank", "qlora"],
-    intro="""
-    Any matrix `W` (m x n) can be written as `U diag(S) V^T` with singular
-    values `S` sorted from large to small. Keeping only the first `r` gives the
-    **best** rank-`r` approximation in squared error (the Eckart-Young
+    intro=r"""
+    Any matrix $W$ ($m \times n$) can be written as $U \diag(S) V^\top$ with singular
+    values $S_1 \ge S_2 \ge \dots$ sorted from large to small. Keeping only the first $r$ gives the
+    **best** rank-$r$ approximation in squared error (the Eckart-Young
     theorem), and the error is exactly the energy you dropped:
 
-    `||W - W_r||_F = sqrt(S[r]^2 + S[r+1]^2 + ...)`
+    $$
+    \begin{aligned}
+    W_r &= \sum_{k=1}^{r} S_k \, u_k v_k^\top \\
+    \lVert W - W_r \rVert_F &= \min_{\rank(B) \le r} \lVert W - B \rVert_F \\
+    &= \sqrt{S_{r+1}^2 + S_{r+2}^2 + \cdots}
+    \end{aligned}
+    $$
 
-    Store it as two thin matrices `A = U_r * sqrt(S_r)` (m x r) and
-    `B = sqrt(S_r) * V_r^T` (r x n): `m*r + r*n` numbers instead of `m*n`.
-    It only saves space when `r < m*n / (m + n)`.
+    (numpy counts from 0, so that is `S[r]**2 + S[r+1]**2 + ...`.)
+
+    Store it as two thin matrices, $mr + rn$ numbers instead of $mn$:
+
+    $$
+    \begin{aligned}
+    A &= U_r \diag(\sqrt{S_r}) \in \R^{m \times r} \\
+    B &= \diag(\sqrt{S_r}) \, V_r^\top \in \R^{r \times n}
+    \end{aligned}
+    $$
+
+    It only saves space when $r < mn / (m + n)$.
 
     Implement `factorize(W, r)` returning `(A, B)` with `A @ B` the best
-    rank-r approximation.
+    rank-$r$ approximation.
     """,
     skeleton="""
     import numpy as np
@@ -885,7 +980,7 @@ lesson(
         assert np.allclose(A @ B, W)
     """,
     hints=["`np.linalg.svd(W, full_matrices=False)` returns U, S (a vector), Vt.",
-           "Splitting sqrt(S) between the two factors keeps them balanced in size."],
+           r"Splitting $\sqrt{S}$ between the two factors keeps them balanced in size."],
 )
 
 # ===========================================================================
@@ -894,18 +989,36 @@ lesson(
 lesson(
     id="gptq_loop", title="10. GPTQ's error-compensation loop",
     methods=["gptq", "sparsegpt"],
-    intro="""
+    intro=r"""
     Round-to-nearest quantizes each weight independently. GPTQ notices that
-    what we care about is the layer's **output** on real inputs `X`, and that
+    what we care about is the layer's **output** on real inputs $X$, and that
     the error from rounding one column can be partly cancelled by nudging the
     columns that haven't been quantized yet.
 
-    With `H = 2 X^T X / N` and `U` the upper Cholesky factor of `H^-1`
-    (so `H^-1 = U^T U`), process columns `j = 0, 1, ...` of `W` (shape out x in):
+    With $U$ the upper Cholesky factor of $H^{-1}$:
+
+    $$
+    \begin{aligned}
+    H &= \frac{2}{N} X^\top X \\
+    H^{-1} &= U^\top U
+    \end{aligned}
+    $$
+
+    process columns $j = 0, 1, \dots$ of $W$ (shape $\text{out} \times \text{in}$), writing $w_j$ for column $j$:
 
     1. `q = round_to_grid(W[:, j])`
     2. `err = (W[:, j] - q) / U[j, j]`
+
+    $$
+    \delta_j = \frac{w_j - q_j}{U_{jj}}
+    $$
+
     3. `W[:, j+1:] -= outer(err, U[j, j+1:])`
+
+    $$
+    w_k \leftarrow w_k - \delta_j \, U_{jk} \quad \text{for every } k > j
+    $$
+
     4. store `q` as column `j` of the result.
 
     Step 3 is the Optimal Brain Surgeon update: the change to the remaining

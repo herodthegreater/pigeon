@@ -6,13 +6,44 @@ A classifier outputs a probability for every class. Those probabilities say whic
 
 1. Train the teacher on labeled data.
 2. Choose a *transfer set*: inputs on which to query the teacher. They need no labels.
-3. For a batch, compute teacher logits `zt` and student logits `zs` (raw scores before softmax).
-4. Soften both: `pt = softmax(zt / T)`, `ps = softmax(zs / T)`. Larger `T` flattens them so runner-up classes get visible mass.
-5. KD loss: `T² · KL(pt ‖ ps) = T² · Σ pt · (log pt − log ps)`. KL divergence is zero when they agree.
-6. Mix with cross-entropy (CE) on rows that have a label: `loss = alpha · KD + (1 − alpha) · CE`.
-7. Use the student at `T = 1` at test time.
+3. For a batch, compute teacher logits $z_t$ and student logits $z_s$ (raw scores before softmax).
+4. Soften both: $p_t = \softmax(z_t / T)$, $p_s = \softmax(z_s / T)$. Larger $T$ flattens them so runner-up classes get visible mass. For $C$ classes:
 
-The gradient of the KL term with respect to `zs` is `(ps − pt) / T`; the `T²` factor keeps its size comparable across temperatures.
+$$
+\begin{aligned}
+p_{t,c} &= \frac{\exp(z_{t,c} / T)}{\sum_{c'=1}^{C} \exp(z_{t,c'} / T)} \\[4pt]
+p_{s,c} &= \frac{\exp(z_{s,c} / T)}{\sum_{c'=1}^{C} \exp(z_{s,c'} / T)}
+\end{aligned}
+$$
+
+5. KD loss: $T^2 \cdot \KL(p_t \,\|\, p_s)$. KL divergence is zero when they agree.
+
+$$
+\begin{aligned}
+\mathcal{L}_{\text{KD}} &= T^2 \cdot \KL(p_t \,\|\, p_s) \\
+&= T^2 \sum_{c=1}^{C} p_{t,c} \left( \log p_{t,c} - \log p_{s,c} \right)
+\end{aligned}
+$$
+
+6. Mix with cross-entropy (CE) on rows that have a label $y$:
+
+$$
+\begin{aligned}
+\mathcal{L} &= \alpha \cdot \mathcal{L}_{\text{KD}} + (1 - \alpha) \cdot \mathcal{L}_{\text{CE}} \\
+\mathcal{L}_{\text{CE}} &= -\log \softmax(z_s)_y
+\end{aligned}
+$$
+
+7. Use the student at $T = 1$ at test time.
+
+The gradient of the KL term with respect to $z_s$ is $(p_s - p_t) / T$; the $T^2$ factor keeps its size comparable across temperatures:
+
+$$
+\begin{aligned}
+\frac{\partial}{\partial z_s} \KL(p_t \,\|\, p_s) &= \frac{1}{T} (p_s - p_t) \\[4pt]
+\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_s} &= T \, (p_s - p_t)
+\end{aligned}
+$$
 
 ```python
 pt = softmax(teacher(x) / T)
@@ -22,17 +53,17 @@ loss = alpha * T*T * sum(pt * (log(pt) - ls)) + (1 - alpha) * ce(student(x), y)
 
 ## The code, line by line
 
-`softmax` in `lab/train.py` divides by `T`, then subtracts each row's maximum (`z - z.max(1, keepdims=True)`); softmax ignores constant shifts, so this only stops `exp` from overflowing.
+`softmax` in `lab/train.py` divides by `T`, then subtracts each row's maximum (`z - z.max(1, keepdims=True)`); softmax ignores constant shifts, $\softmax(z - m) = \softmax(z)$, so this only stops `exp` from overflowing.
 
 `KD.__init__` stores `T`, a `weight` (this is `alpha`) and a `kind`; Hinton KD is `kind="kl"`. For that kind `KD._teacher_probs` just returns `softmax(tl, T)`.
 
-In `KD.__call__`, `ls = log_softmax(z, T)` is the student's log-probabilities, `ps = np.exp(ls)` its probabilities, and `lt = log_softmax(b.t_logits, T)` the teacher's log-probabilities, computed exactly from its logits rather than as `log` of a probability that may have underflowed to 0. The loss is `T * T * (pt * (lt - ls)).sum() / N`, the formula above averaged over `N` rows. The MLP in `lab/nn.py` has hand-written backprop, so each loss term also returns its gradient with respect to the logits, `dz = T * (ps - pt) / N`, and `{}` for (unused) hidden-layer gradients.
+In `KD.__call__`, `ls = log_softmax(z, T)` is the student's log-probabilities, `ps = np.exp(ls)` its probabilities, and `lt = log_softmax(b.t_logits, T)` the teacher's log-probabilities, computed exactly from its logits rather than as `log` of a probability that may have underflowed to 0. The loss is `T * T * (pt * (lt - ls)).sum() / N`, the formula above averaged over $N$ rows. The MLP in `lab/nn.py` has hand-written backprop, so each loss term also returns its gradient with respect to the logits, `dz = T * (ps - pt) / N`, which is $T (p_s - p_t) / N$, and `{}` for (unused) hidden-layer gradients.
 
-`distill` in `lab/common.py` wires it together; its default is `T = 1.0` (this page defaults to 4 so you can see the effect). `net(student, seed=seed)` builds a fresh student. `transfer_X(d, transfer)` returns the inputs: `"train"` is the 8k labeled set, `"pool"` adds 20k unlabeled inputs labeled `-1`. `FixedSource(X, y, ..., teacher=t)` runs the teacher once over every input and stores its logits. The terms are `KD(T=T, weight=alpha, ...)` plus `CE(weight=1 - alpha)` when `alpha < 1`; `CE` multiplies by `b.lab`, so unlabeled rows only feed the KD term. `train` fixes the number of optimizer steps, so the 28k pool does not win by training longer. `run_kd` compares this with `scratch` (labels only) at the same step count.
+`distill` in `lab/common.py` wires it together; its default is `T = 1.0` (this page defaults to 4 so you can see the effect). `net(student, seed=seed)` builds a fresh student. `transfer_X(d, transfer)` returns the inputs: `"train"` is the 8k labeled set, `"pool"` adds 20k unlabeled inputs labeled `-1`. `FixedSource(X, y, ..., teacher=t)` runs the teacher once over every input and stores its logits. The terms are `KD(T=T, weight=alpha, ...)` plus `CE(weight=1 - alpha)` when $\alpha < 1$; `CE` multiplies by `b.lab`, so unlabeled rows only feed the KD term. `train` fixes the number of optimizer steps, so the 28k pool does not win by training longer. `run_kd` compares this with `scratch` (labels only) at the same step count.
 
 ## What the simulations show
 
-From `size_ladder` (3 seeds, 3000 steps, `T = 1`, test accuracy):
+From `size_ladder` (3 seeds, 3000 steps, $T = 1$, test accuracy):
 
 | student | labels only | KD, labeled inputs | KD, + pool |
 |---|---|---|---|
@@ -42,11 +73,11 @@ From `size_ladder` (3 seeds, 3000 steps, `T = 1`, test accuracy):
 | 2x64 | 0.8820 | 0.8817 | 0.8957 |
 | 2x128 | 0.9042 | 0.9040 | 0.9156 |
 
-KD on the 8k labeled inputs matches labels only at every width; KD on the pool helps every width. The reason is the teacher: on its own training inputs it is 1.0 accurate with mean top probability 0.9994, so its `T = 1` output there is nearly the one-hot label. On the unlabeled pool the mean top probability is 0.9684, and that is where its soft labels carry new information.
+KD on the 8k labeled inputs matches labels only at every width; KD on the pool helps every width. The reason is the teacher: on its own training inputs it is 1.0 accurate with mean top probability 0.9994, so its $T = 1$ output there is nearly the one-hot label. On the unlabeled pool the mean top probability is 0.9684, and that is where its soft labels carry new information.
 
-Temperature makes things worse here. In `temperature_alpha` (2x16, labeled inputs), `T = 1` gives 0.6631-0.6639 for every `alpha`, and accuracy falls as `T` rises: 0.6399 at `T = 4`, 0.5815 at `T = 16` (`alpha = 1.0`). The teacher's logits are very spread out (median max-minus-min: 47.2), so a high `T` asks a tiny student to copy structure it cannot represent, and it becomes overconfident: NLL (mean negative log-probability of the true class) rises from 1.0176 at `T = 1` to 1.8606 at `T = 4`.
+Temperature makes things worse here. In `temperature_alpha` (2x16, labeled inputs), $T = 1$ gives 0.6631-0.6639 for every $\alpha$, and accuracy falls as $T$ rises: 0.6399 at $T = 4$, 0.5815 at $T = 16$ ($\alpha = 1.0$). The teacher's logits are very spread out (median max-minus-min: 47.2), so a high $T$ asks a tiny student to copy structure it cannot represent, and it becomes overconfident: NLL (mean negative log-probability of the true class) rises from 1.0176 at $T = 1$ to 1.8606 at $T = 4$.
 
-This page's runs (1000 steps, seed 0, pool): at width 16, labels only 0.5803, KD at `T = 4` 0.5551, KD at `T = 1` 0.5850. At width 64, labels only 0.8514, `T = 4` 0.8232, `T = 1` 0.8596. Single-seed gaps under about 0.015 are noise. The toy cannot say how a softer teacher, trained with heavy augmentation, would shift the best `T`.
+This page's runs (1000 steps, seed 0, pool): at width 16, labels only 0.5803, KD at $T = 4$ 0.5551, KD at $T = 1$ 0.5850. At width 64, labels only 0.8514, $T = 4$ 0.8232, $T = 1$ 0.8596. Single-seed gaps under about 0.015 are noise. The toy cannot say how a softer teacher, trained with heavy augmentation, would shift the best $T$.
 
 ## When it breaks
 
@@ -56,7 +87,7 @@ This page's runs (1000 steps, seed 0, pool): at width 16, labels only 0.5803, KD
 
 ## Try this
 
-- At **student width** 16, set **temperature** to 1, 4, then 12. Accuracy should fall as `T` rises.
+- At **student width** 16, set **temperature** to 1, 4, then 12. Accuracy should fall as $T$ rises.
 - At **temperature** 1, compare **student sees** = train vs pool. Only the pool should beat labels only.
 - Set **weight on KD (vs. labels)** to 0.5 and see whether labels pull the student toward the labels-only score.
 

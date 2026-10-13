@@ -7,7 +7,7 @@ A convolution layer outputs a stack of feature maps called *channels*, one per f
 1. Rewrite: replace each Ultralytics `C2f` block with `C2f_v2`, which computes the same thing in a form the tracer can follow.
 2. Trace: mark every weight as trainable, switch to training mode, and run one example image through the model. torch-pruning follows the autograd graph to record which layer feeds which.
 3. Group: for each output channel, collect everything tied to it: the conv filter, its batch-norm (BN) entries, the input slice of each consumer, and anything joined by a residual add or a concatenation.
-4. Score each channel in a group by the size of its weights (an L2, sum-of-squares criterion), combined across all the group's layers. A small score means little signal flows through it.
+4. Score each channel $c$ in a group by the size of its weights, an L2 (sum-of-squares) criterion $\lVert W_c \rVert_2^2$ on each layer's slice $W_c$, combined across all the group's layers. A small score means little signal flows through it.
 5. Remove the lowest-scoring fraction of every group by slicing the tensors, so they physically shrink. The fraction is either one number for the whole model or one per stage.
 6. Never remove output channels of the Detect head (the layer that emits boxes and class scores).
 
@@ -15,9 +15,9 @@ Example: YOLOv8's Bottleneck computes `x + cv2(cv1(x))`. Cutting channel 7 from 
 
 ## The code, line by line
 
-`C2f` splits one 1x1 conv's output in half with `chunk(2, 1)`; the module docstring records that the tracer can't follow it, so a generic pruner removes zero channels.
+`C2f` splits one $1 \times 1$ conv's output in half with `chunk(2, 1)`; the module docstring records that the tracer can't follow it, so a generic pruner removes zero channels.
 
-`C2f_v2.__init__` builds two convs instead, `self.cv0` and `self.cv1`, each producing `self.c = int(c2 * e)` channels. `self.cv2` maps the concatenation of `2 + n` branches back to `c2` channels. `forward` builds `y = [self.cv0(x), self.cv1(x)]`, runs each Bottleneck on the newest entry (`y.extend(m(y[-1]) for m in self.m)`) and returns `self.cv2(torch.cat(y, 1))`. Every split is now a separate layer the tracer can see.
+`C2f_v2.__init__` builds two convs instead, `self.cv0` and `self.cv1`, each producing `self.c = int(c2 * e)` channels. `self.cv2` maps the concatenation of $2 + n$ branches back to `c2` channels. `forward` builds `y = [self.cv0(x), self.cv1(x)]`, runs each Bottleneck on the newest entry (`y.extend(m(y[-1]) for m in self.m)`) and returns `self.cv2(torch.cat(y, 1))`. Every split is now a separate layer the tracer can see.
 
 `transfer_weights` makes the swap exact: it reuses the old `cv2` and `m`, gives `old_weight[:half]` of `cv1.conv.weight` to `cv0` and `old_weight[half:]` to `cv1`, splits the BN tensors the same way, and copies plain attributes such as `c` and Ultralytics' routing tags `f` and `i`. `make_prunable` swaps every `C2f` in `yolo.model`.
 
@@ -35,7 +35,7 @@ Both prune functions build their pruner with `_pruner`:
 
 ## What the simulations show
 
-The toy-MLP analogue, not YOLO, is `prune_structured` (lab/results/prune_structured.json). A 3x256 MLP teacher loses whole neurons, ranked by L1 weight norm, then gets no recovery, fine-tuning on labels, or distillation from the teacher (KD) for 3,000 steps, the same budget as training fresh. Accuracy on 20 classes; recovered numbers are 2-seed means.
+The toy-MLP analogue, not YOLO, is `prune_structured` (lab/results/prune_structured.json). A 3x256 MLP teacher loses whole neurons, ranked by the L1 norm of their weights, $\lVert w_j \rVert_1$, then gets no recovery, fine-tuning on labels, or distillation from the teacher (KD) for 3,000 steps, the same budget as training fresh. Accuracy on 20 classes; recovered numbers are 2-seed means.
 
 | hidden width | no recovery | labels | KD | fresh net, KD |
 |---|---|---|---|---|

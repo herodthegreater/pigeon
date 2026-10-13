@@ -18,6 +18,7 @@
     "@astrojs/mdx": "^8.0.2",
     "@tensorflow/tfjs": "^4.22.0",
     "astro": "^7.3.4",
+    "katex": "^0.16.47",
     "onnxruntime-web": "^1.30.0"
   },
   "allowScripts": {

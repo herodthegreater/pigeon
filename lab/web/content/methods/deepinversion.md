@@ -4,10 +4,33 @@ Distillation needs inputs to show the teacher. When the training images are gone
 
 ## How it works
 
-1. Make a batch `x` of random images a trainable tensor; pick target classes `y`.
-2. Run the frozen teacher in eval mode. At each BN layer `l`, hook its input and take the per-channel batch mean `mu_l(x)` and variance `var_l(x)`.
-3. Loss: `CE(teacher(x), y) + a_bn * Σ_l (||mu_l(x) - running_mean_l|| + ||var_l(x) - running_var_l||) + a_tv * TV(x) + a_l2 * ||x||²`. TV, total variation, sums differences between neighbouring pixels and keeps images smooth.
-4. Update only `x` with Adam for a few thousand steps, randomly jittering and flipping it each step.
+1. Make a batch $x$ of random images a trainable tensor; pick target classes $y$.
+2. Run the frozen teacher $f$ in eval mode. At each BN layer $l$, hook its input $a_l$ and take the per-channel batch mean $\mu_l(x)$ and variance $\sigma_l^2(x)$. For a batch of $B$ feature maps of size $H \times W$ indexed by $b, h, w$, channel $c$ gives
+
+$$
+\begin{aligned}
+\mu_{l,c}(x) &= \frac{1}{BHW} \sum_{b,h,w} a_{l,bchw} \\
+\sigma_{l,c}^2(x) &= \frac{1}{BHW} \sum_{b,h,w} \left( a_{l,bchw} - \mu_{l,c}(x) \right)^2
+\end{aligned}
+$$
+
+3. Loss: the cross-entropy of the teacher's prediction $f(x)$ against $y$, plus a BN statistics term that compares the batch statistics with the layer's running mean $\hat{\mu}_l$ and variance $\hat{\sigma}_l^2$, plus a total-variation prior and an L2 prior. TV, total variation, sums differences between neighbouring pixels and keeps images smooth.
+
+$$
+\begin{aligned}
+\mathcal{R}_{\text{BN}}(x) = \sum_l \Big( &\lVert \mu_l(x) - \hat{\mu}_l \rVert_2 \\
+&+ \lVert \sigma_l^2(x) - \hat{\sigma}_l^2 \rVert_2 \Big)
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+\mathcal{L}(x) = {} &\operatorname{CE}(f(x), y) + \alpha_{\text{bn}} \, \mathcal{R}_{\text{BN}}(x) \\
+&+ \alpha_{\text{tv}} \operatorname{TV}(x) + \alpha_{\text{l2}} \lVert x \rVert_2^2
+\end{aligned}
+$$
+
+4. Update only $x$ with Adam for a few thousand steps, randomly jittering and flipping it each step.
 5. Repeat for many batches, then distill the student on the synthetic pool.
 
 ```python
@@ -28,7 +51,7 @@ for step in range(2000):
 
 ## The code, line by line
 
-`invert_teacher` in lab/experiments/transfer.py is the toy version without the BN term. `X = rng.standard_normal(...)` starts from noise, `c` holds random target classes and `Y` their one-hot rows. `Adam([X], lr=lr)` optimizes the inputs, not the weights. Each step, `dz = (softmax(z) - Y) / n` is the gradient of the mean cross-entropy with respect to the logits, `t.backward(cache, dz)` carries it back to the input as `dX`, and `opt.step([dX + l2 * X / n])` adds the gradient of the L2 prior (the `a_l2` term above). The toy MLP has no BN layers, so the statistics term, the part that makes DeepInversion work, is missing.
+`invert_teacher` in lab/experiments/transfer.py is the toy version without the BN term. `X = rng.standard_normal(...)` starts from noise, `c` holds random target classes and `Y` their one-hot rows. `Adam([X], lr=lr)` optimizes the inputs, not the weights. Each step, `dz = (softmax(z) - Y) / n` is $\partial \mathcal{L} / \partial z = (\softmax(z) - Y) / n$, the gradient of the mean cross-entropy with respect to the logits $z$, `t.backward(cache, dz)` carries it back to the input as `dX`, and `opt.step([dX + l2 * X / n])` adds the gradient of the L2 prior (the `a_l2` term above, $\alpha_{\text{l2}}$ in the loss). The toy MLP has no BN layers, so the statistics term, the part that makes DeepInversion work, is missing.
 
 ## What the simulations show
 

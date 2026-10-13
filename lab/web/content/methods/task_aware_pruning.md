@@ -4,19 +4,38 @@ Ordinary importance scores ask which neurons matter for everything the network d
 
 ## How it works
 
-1. Group the 20 classes, each grouping a `C x K` 0/1 matrix `G`. Scoring uses `binary` (bird | rest). The head uses `supers` (bird | 3 siblings | 4 other superclasses).
-2. Score each hidden neuron with the Taylor criterion, `sum over examples of |a * dL/da|`, where `L = -log q[true group]` and `q = softmax(z) @ G`.
-3. Keep the top `w` neurons per layer (structured pruning).
-4. Collapse the 20-way output layer to `K` outputs, each the mean of its member classes' weights.
-5. Recover with grouped knowledge distillation (KD): the teacher's probabilities summed into the same `K` groups.
+1. Group the 20 classes, each grouping a $C \times K$ 0/1 matrix $G$. Scoring uses `binary` (bird | rest). The head uses `supers` (bird | 3 siblings | 4 other superclasses).
+2. Score each hidden neuron with the Taylor criterion, the sum over examples of $\lvert a \cdot \partial L / \partial a \rvert$, where $L$ is the negative log-probability of the example's true group. For an example of class $y$ in group $g(y)$ with logits $z$:
+
+$$
+\begin{aligned}
+q &= \softmax(z) \, G \\
+L &= -\log q_{g(y)}
+\end{aligned}
+$$
+
+3. Keep the top $w$ neurons per layer (structured pruning).
+4. Collapse the 20-way output layer to $K$ outputs, each the mean of its member classes' weights (and biases). With $g_k$ the set of classes in group $k$:
+
+$$
+W'_{:,k} = \frac{1}{\lvert g_k \rvert} \sum_{c \in g_k} W_{:,c}
+$$
+
+5. Recover with grouped knowledge distillation (KD): the teacher's probabilities summed into the same $K$ groups.
 
 ## The code, line by line
 
-`neuron_importance` in `lab/compress.py`, with `method="taylor"` and a `group` matrix, starts like plain Taylor. It then builds the gradient of the grouped loss with respect to the 20 logits. `yg = group[y].argmax(1)` maps each example's class to its group. `Gy = group[:, yg].T` is an `N x C` matrix with 1 for every class in the example's true group. `qy = (p * Gy).sum(1, keepdims=True)` is the probability of that group, and `dz = (p - p * Gy / qy) / len(z)` is the gradient of `-log qy`. For a non-bird example the true group is all 19 other classes, and for each of them the gradient is `p_c * (1 - 1 / qy)`, proportional to `p_c`. It never reshuffles probability inside the group, so only the bird-vs-rest boundary produces a signal. The score is then `np.abs(h * g).sum(0)` as usual.
+`neuron_importance` in `lab/compress.py`, with `method="taylor"` and a `group` matrix, starts like plain Taylor. It then builds the gradient of the grouped loss with respect to the 20 logits. `yg = group[y].argmax(1)` maps each example's class to its group. `Gy = group[:, yg].T` is an $N \times C$ matrix with 1 for every class in the example's true group. `qy = (p * Gy).sum(1, keepdims=True)` is the probability of that group, and `dz = (p - p * Gy / qy) / len(z)` is the gradient of $-\log q_y$, averaged over the batch. For one example, with $p = \softmax(z)$ and $q_y$ the probability of its true group,
 
-`collapse_head` copies the net. `norm = G / G.sum(0, keepdims=True)` divides each column of `G` by its group size, so `net.W[-1] @ norm` turns the 256x20 output matrix into a 256xK one whose column `k` averages its members' columns. The bias is treated the same way. The bird is a group of one, so its *logit* is copied exactly. Its *probability* still changes, because the softmax now runs over 8 averaged logits. Averaging logits is not summing probabilities, so merged groups need recovery.
+$$
+\frac{\partial (-\log q_y)}{\partial z_c} = p_c - \frac{p_c \, [c \in g(y)]}{q_y} .
+$$
 
-`run_task_prune` in `lab/methods.py` scores with `group=G["binary"]` ("bird") or `None` ("all classes"), prunes the 3x256 teacher to `[w] * 3`, collapses to the 8-output `supers` head, and recovers a copy with `S.spec_distill(cut.copy(), t, G["supers"], 0, steps=FT, lr=FT_LR)` (grouped KD at T=1). The `.copy()` matters: `spec_distill` trains in place, so without it the "no recovery" row would show the recovered network.
+For a non-bird example the true group is all 19 other classes, and for each of them the gradient is $p_c (1 - 1 / q_y)$, proportional to $p_c$. It never reshuffles probability inside the group, so only the bird-vs-rest boundary produces a signal. The score is then `np.abs(h * g).sum(0)` as usual.
+
+`collapse_head` copies the net. `norm = G / G.sum(0, keepdims=True)` divides each column of `G` by its group size, so `net.W[-1] @ norm` turns the $256 \times 20$ output matrix into a $256 \times K$ one whose column $k$ averages its members' columns. The bias is treated the same way. The bird is a group of one, so its *logit* is copied exactly. Its *probability* still changes, because the softmax now runs over 8 averaged logits. Averaging logits is not summing probabilities, so merged groups need recovery.
+
+`run_task_prune` in `lab/methods.py` scores with `group=G["binary"]` ("bird") or `None` ("all classes"), prunes the 3x256 teacher to `[w] * 3`, collapses to the 8-output `supers` head, and recovers a copy with `S.spec_distill(cut.copy(), t, G["supers"], 0, steps=FT, lr=FT_LR)` (grouped KD at $T = 1$). The `.copy()` matters: `spec_distill` trains in place, so without it the "no recovery" row would show the recovered network.
 
 ## What the simulations show
 

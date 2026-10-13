@@ -19,7 +19,7 @@ bird AP. (That is the teacher these experiments trained. The website's Run
 buttons load the copy committed in `lab/models`, the same recipe trained
 again, which scores 0.915 and 0.989.) Students are mostly 2×16 (820
 parameters) or 2×32 (2.1k). Unless an experiment is about temperature,
-distillation uses T=1. Pruned or quantized
+distillation uses $T = 1$. Pruned or quantized
 models are recovered with the same optimizer and learning rate as models
 trained from scratch, so comparisons differ only in where the weights start.
 
@@ -42,9 +42,9 @@ over-parameterized teacher) than a refutation.
    set (loss 0.0006, essentially one-hot outputs there), so distilling on the
    8k labeled inputs gives exactly what the labels give (2×32: 0.818 vs
    0.817). Adding 20k *unlabeled* inputs is what helps (0.832), and it helps a
-   lot when labels are scarce: with 250 labels, 0.476 → 0.701.
-2. **Higher temperature hurt every small student here.** 2×16 student: T=1
-   0.663, T=4 0.640, T=16 0.582. The textbook T=4 is a setting to tune, not
+   lot when labels are scarce: with 250 labels, from 0.476 to 0.701.
+2. **Higher temperature hurt every small student here.** 2×16 student: $T = 1$
+   0.663, $T = 4$ 0.640, $T = 16$ 0.582. The textbook $T = 4$ is a setting to tune, not
    a constant.
 3. **A teacher's soft labels are worth at most a few points.** Distilling from
    the *exact* Bayes posterior beats labels by 2.3 points at 2×32 and 3.4 at
@@ -98,17 +98,17 @@ indistinguishable from labels at every width.
 | 2×128 | 0.904 | 0.904 | 0.916 |
 
 **Temperature and KD weight** (`temperature_alpha`, 2×16, labeled inputs
-only). Accuracy falls monotonically with T at every mixing weight; at T=1 KD
+only). Accuracy falls monotonically with $T$ at every mixing weight; at $T = 1$ KD
 equals labels. A capacity-starved student spends its few parameters fitting
 the teacher's softened tail.
 
 **Which form of teacher signal** (`loss_zoo`, 2×16, labeled + unlabeled
-inputs). Hard pseudo-labels (0.671), KD at T=1 (0.671), and a teacher that
+inputs). Hard pseudo-labels (0.671), KD at $T = 1$ (0.671), and a teacher that
 reveals only its top-1 or top-3 probabilities (0.673, 0.671) are
-interchangeable. KD at T=4 (0.640) and reverse KL (0.629) are worse; MSE on
+interchangeable. KD at $T = 4$ (0.640) and reverse KL (0.629) are worse; MSE on
 logits is far worse (0.509) because it asks a tiny model to reproduce a
 memorizing teacher's huge logit gaps. Adding a FitNets hint or
-similarity-preserving loss to T=1 KD changes nothing (0.672, 0.667); a hint
+similarity-preserving loss to $T = 1$ KD changes nothing (0.672, 0.667); a hint
 *instead* of KD is worse (0.622).
 
 **Few labels** (`label_budget`, 2×32). The big teacher plus the unlabeled pool
@@ -134,7 +134,7 @@ the short-trained one 0.735.
 - **Bigger teachers never hurt** (`capacity_gap`). A 2×32 student gains up to a
   64-wide teacher (0.827) and is flat after (0.835 from a 512-wide one). A
   2×8 student is flat across all teachers (0.455–0.470): it is limited by its
-  own width. **Teacher assistants** (512 → 128 → 8, 512 → 32 → 8) are within
+  own width. **Teacher assistants** ($512 \to 128 \to 8$, $512 \to 32 \to 8$) are within
   noise of distilling directly. A *weak* teacher hurts: pure KD from a
   16-wide teacher (0.679) gives a 2×32 student 0.674, against 0.817 from
   labels.
@@ -144,16 +144,16 @@ the short-trained one 0.735.
   posterior 0.485 vs 0.309) makes an equally good student (0.831). No
   "early-stopped teachers teach better" effect here.
 - **Label-smoothed teachers** (`teacher_smoothing`). Smoothing makes a better
-  *model* (0.914 → 0.926 at 0.4) and, at T=4, a much worse *teacher* (student
-  0.640 → 0.555), matching Müller et al. At T=1 the damage is small until
-  smoothing 0.4 (0.671 → 0.653).
+  *model* (0.914 to 0.926 at 0.4) and, at $T = 4$, a much worse *teacher* (student
+  0.640 to 0.555), matching Müller et al. At $T = 1$ the damage is small until
+  smoothing 0.4 (0.671 to 0.653).
 - **The perfect teacher** (`oracle_teacher`). See point 3 above:
   posterior-KD beats labels by 1.4 / 2.3 / 2.7 / 3.4 points at widths
   16 / 32 / 64 / 128, and Bayes-argmax labels on the same inputs get almost all
   of that. Most of the teacher's value is *correct labels on more inputs*.
 - **Self-distillation** (`born_again`). It makes small students worse every
-  generation (2×32: 0.816 → 0.792 after three) and the teacher-sized model
-  slightly better (0.917 → 0.923 with the unlabeled pool).
+  generation (2×32: 0.816 to 0.792 after three) and the teacher-sized model
+  slightly better (0.917 to 0.923 with the unlabeled pool).
 - **Students don't match their teachers** (`fidelity_gap`). Even a student
   with the *teacher's exact architecture* agrees with it on only 95–97% of
   test inputs after distillation; a 2×64 student reaches 93% after 12,000
@@ -163,14 +163,14 @@ the short-trained one 0.735.
   from clean labels. Mixing clean labels back in repairs it (KD weight 0.25:
   0.947).
 - **Ensembles** (`ensemble_teacher`). Eight teachers make a better ensemble
-  (0.914 → 0.926) and the same student (0.832 → 0.834), whether logits or
+  (0.914 to 0.926) and the same student (0.832 to 0.834), whether logits or
   probabilities are averaged. The student, not the teacher, is the
   bottleneck.
 
 ## 3 · What the student sees (transfer data)
 
 **Which inputs carry the knowledge** (`transfer_set`, 2×32 student, KD at
-T=1):
+$T = 1$):
 
 | transfer inputs | accuracy |
 |---|---|
@@ -191,7 +191,7 @@ inverting the teacher was no better than noise here: in 12 dimensions noise
 already covers the input space; in image space it wouldn't, which is why
 DeepInversion needs its batch-norm prior. When real data is scarce, mixing it
 up and querying the teacher on the mixtures is the single biggest lever
-(500 → 0.756).
+(500 real inputs: 0.756).
 
 **Patient, consistent teaching** (`function_matching`, 2×32, only the 8k
 labeled inputs). Querying the teacher on freshly mixed-up inputs every step
@@ -212,7 +212,7 @@ giving new information. This is Beyer et al.'s result, reproduced.
 | 98% | 0.060 | 0.621 | 0.629 | 0.618 | 0.853 |
 | 99% | 0.054 | 0.080 | 0.088 | 0.401 | 0.779 |
 
-Gradual pruning only helps at the extreme (99%). Past ~95%, a *dense* network
+Gradual pruning only helps at the extreme (99%). Past about 95%, a *dense* network
 with the same number of nonzero weights is better, and it needs no sparse
 kernels to be fast.
 
@@ -222,7 +222,7 @@ fine-tuning the pruned weights, re-initializing them, or using a random mask,
 and the gap grows with sparsity: at 96.9% sparsity, rewind 0.612, fine-tune
 0.487, same mask with fresh init 0.480, random mask 0.322.
 
-**Structured pruning** (`prune_structured`, teacher 3×256 → 3×W; "short" =
+**Structured pruning** (`prune_structured`, teacher $3 \times 256 \to 3 \times W$; "short" =
 750 steps of recovery, "full" = 3,000, the same as training fresh).
 
 | width | no recovery | pruned + KD, short | fresh + KD, short | pruned + KD, full | fresh + KD, full |
@@ -256,7 +256,7 @@ vs 0.820–0.843).
 recovers the over-parameterized teacher completely, even at 1 bit, and cannot
 save the small student below 3 bits.
 
-**Low-rank** (`low_rank`). Replacing each 256×256 matrix by a rank-r product
+**Low-rank** (`low_rank`). Replacing each $256 \times 256$ matrix by a rank-$r$ product
 and distilling: rank 32 (41.8k parameters) matches the teacher (0.920), rank
 16 (24.7k) is at 0.911, and below that it collapses (rank 8: 0.735). At about
 10k parameters, deleting neurons is better (3×64: 0.893, 10.5k parameters).
@@ -266,11 +266,11 @@ per-layer k-means codebook beats uniform rounding wherever bits are scarce
 (teacher at 2 bits: 0.849 vs 0.071; student at 3 bits: 0.645 vs 0.485), and
 fine-tuning with re-snapping adds 1–3 more points. One edge case worth
 knowing: symmetric 2-bit uniform quantization has only three levels
-{−s, 0, +s} with s set by the largest weight, so most weights round to zero
+$\{-s, 0, +s\}$ with $s$ set by the largest weight, so most weights round to zero
 and it does *worse* than 1-bit sign quantization (teacher 0.071 vs 0.401).
 
 **Deleting layers** (`layer_drop`, 8×128 teachers). Removing even one layer
-from a plain network collapses it (0.910 → 0.062), but a short distillation
+from a plain network collapses it (0.910 to 0.062), but a short distillation
 restores it completely, even with 6 of 8 layers gone (0.914). A residual
 network degrades gracefully without any recovery (1 layer gone: 0.867, 2:
 0.804, 4: 0.532), which is why layer dropping is practical for transformers.
@@ -282,15 +282,15 @@ over random init (0.916 vs 0.919): this teacher's depth was surplus.
 | model | kbit | accuracy |
 |---|---|---|
 | teacher, fp32 | 4,482 | 0.914 |
-| 90%-sparse teacher, 4-bit (prune → QAT) | 359 | 0.914 |
+| 90%-sparse teacher, 4-bit (prune, then QAT) | 359 | 0.914 |
 | structured-pruned 3×64, 4-bit | 58 | 0.900 |
 | **KD student 2×64, 4-bit** | **35** | **0.901** |
 | KD student 2×32, 4-bit | 13 | 0.836 |
 | structured-pruned 3×32, 4-bit | 19 | 0.824 |
 
 Sparse storage pays a bitmap per weight position, which is why the sparse
-teacher stays large. **Order matters**: at 97% sparsity, prune → quantize
-(0.858) beats quantize → prune (0.794).
+teacher stays large. **Order matters**: at 97% sparsity, prune-then-quantize
+(0.858) beats quantize-then-prune (0.794).
 
 ## 5 · Making small models better
 
@@ -340,7 +340,7 @@ over labels. Extra outputs that preserve "which non-bird is it" only stop
 hurting at 2×32.
 
 **Carving the specialist out of the generalist** (`specialist_prune`, teacher
-3×256 → 3×W, bird AP). Scoring neurons by their effect on a *bird-vs-rest*
+$3 \times 256 \to 3 \times W$, bird AP). Scoring neurons by their effect on a *bird-vs-rest*
 loss keeps a usable bird detector even before any recovery (0.50 at 3×32,
 against 0.08 for all-class importance), and the neurons it keeps differ from
 the generally important ones: only 16% overlap at 3×32 and none at 3×4.
@@ -378,7 +378,7 @@ measure bird mAP@50. The toy can't promise numbers for YOLO, but it points at
 concrete things to try, roughly in order of expected payoff:
 
 1. **Put non-bird images in the recovery set.** The single biggest effect in
-   section 6 (0.797 → 0.962 bird AP) comes from adding negatives to an
+   section 6 (0.797 to 0.962 bird AP) comes from adding negatives to an
    all-positive recovery set. A detector sees background inside bird images,
    which is partial protection the toy doesn't have; `build_finetune_set.py`
    keeps only the bird boxes, so other objects in those photos already count
@@ -439,7 +439,7 @@ above comes from the corrected code:
   learning rate of the fresh baselines, which made "train small from scratch"
   look up to 15 points better than "prune and recover". At equal budget the gap
   mostly disappears (section 4).
-- The default distillation temperature (T=4) was hurting every small student;
-  experiments now use T=1 except where temperature is the variable.
+- The default distillation temperature ($T = 4$) was hurting every small student;
+  experiments now use $T = 1$ except where temperature is the variable.
 - Ensemble probability-averaging went through `log(p + 1e-8)`, which reshaped
   the targets; it now uses an exact log-mean-exp.

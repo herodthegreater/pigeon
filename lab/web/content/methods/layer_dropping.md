@@ -1,18 +1,30 @@
 ## The idea
 
-Layers run one after another, so removing a whole layer saves time on any hardware. Whether a layer can go depends on the architecture. In a *plain* network each layer transforms its input, `h = relu(h W + b)`, and the next layer is tuned to that transform, so removing one feeds it something it has never seen. In a *residual* network each layer adds a correction to a running *stream*, `h = h + relu(h W + b)`. Deleting a residual layer just drops one correction, and the stream it leaves behind is still in the format the next layer expects.
+Layers run one after another, so removing a whole layer saves time on any hardware. Whether a layer can go depends on the architecture. In a *plain* network each layer transforms its input,
+
+$$
+h \leftarrow \relu(h W + b),
+$$
+
+and the next layer is tuned to that transform, so removing one feeds it something it has never seen. In a *residual* network each layer adds a correction to a running *stream*,
+
+$$
+h \leftarrow h + \relu(h W + b).
+$$
+
+Deleting a residual layer just drops one correction, and the stream it leaves behind is still in the format the next layer expects.
 
 ## How it works
 
 1. Start from a deep trained network. Here that is 8 hidden layers of 128, either plain or residual.
 2. List candidates: hidden-to-hidden layers whose input and output widths match.
-3. Choose `k` layers greedily. At each step, try deleting each remaining candidate (on top of those already chosen), measure accuracy on a probe set, and keep the deletion that hurts least.
+3. Choose $k$ layers greedily. At each step, try deleting each remaining candidate (on top of those already chosen), measure accuracy on a probe set, and keep the deletion that hurts least.
 4. Delete the chosen layers.
 5. Optionally recover by distilling from the original deep net.
 
 ## The code, line by line
 
-`_greedy_drop` in `lab/experiments/shrink.py` builds `cand = [i for i in range(1, m.n_layers - 1) if m.sizes[i] == m.sizes[i + 1]]`. That excludes layer 0 (12 → 128) and the output layer (128 → 20), leaving layers 1-7. For each of the `k` picks it loops over unused candidates, builds `trial = drop_layers(m, dropped + [c])` from the *original* net with all deletions so far plus `c`, and scores `(trial.logits(X).argmax(1) == y).mean()` on the 2,000 probe examples. The best `c` is appended to `dropped`. Indices always refer to the original numbering: `drop_layers` in `lab/compress.py` deletes in descending order (`sorted(layers, reverse=True)`), so no deletion shifts a later index.
+`_greedy_drop` in `lab/experiments/shrink.py` builds `cand = [i for i in range(1, m.n_layers - 1) if m.sizes[i] == m.sizes[i + 1]]`. That excludes layer 0 (12 to 128) and the output layer (128 to 20), leaving layers 1-7. For each of the `k` picks it loops over unused candidates, builds `trial = drop_layers(m, dropped + [c])` from the *original* net with all deletions so far plus `c`, and scores `(trial.logits(X).argmax(1) == y).mean()` on the 2,000 probe examples. The best `c` is appended to `dropped`. Indices always refer to the original numbering: `drop_layers` in `lab/compress.py` deletes in descending order (`sorted(layers, reverse=True)`), so no deletion shifts a later index.
 
 `MLP.drop_layer` in `lab/nn.py` asserts `0 < layer < self.n_layers - 1 and self.sizes[layer] == self.sizes[layer + 1]`. It removes that layer's entry from every per-layer list (`W`, `b`, `res`, `masks`, `lin`) and `del self.sizes[layer + 1]` removes its output width. The next layer now reads the deleted layer's input, which works only because the widths match.
 

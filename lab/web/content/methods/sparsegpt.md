@@ -4,11 +4,24 @@ Pruning is quantization to a single level, zero. SparseGPT therefore reuses GPTQ
 
 ## How it works
 
-Notation as on the GPTQ page: one output row `w`, calibration inputs `X` (n x d), Hessian `H = 2 XᵀX / n`, and `U`, the upper Cholesky factor of `H⁻¹`.
+Notation as on the GPTQ page: one output row $w$, calibration inputs $X$ ($n \times d$), Hessian $H = 2 X^\top X / n$, and $U$, the upper Cholesky factor of $H^{-1}$.
 
-1. **Cost of removing a weight.** OBS says forcing coordinate `j` from `w_j` to 0 (the minimum-error forced change, derived on the GPTQ page with `e = w_j`) raises the error by `w_j² / (2 [H_F⁻¹]_jj)`, after the other weights are optimally adjusted. Here `F` is the set of columns not yet processed. Since `[H_F⁻¹]_jj = U[j, j]²`, the *saliency* is `w_j² / U[j, j]²`.
-2. **Choose the mask a block at a time.** For columns `b0 .. b0+B-1`, compute the saliency of every weight in the block from the *current* weights, which already include the compensation from earlier blocks. Mark the lowest-saliency fraction for removal.
-3. **Prune and compensate, column by column.** For `j` in the block: set the marked weights to zero, with `e = w_j` where pruned and 0 where kept. Then apply the GPTQ update `W[:, j+1:] -= (e / U[j, j]) ⊗ U[j, j+1:]`.
+1. **Cost of removing a weight.** OBS says forcing coordinate $j$ from $w_j$ to 0 (the minimum-error forced change, derived on the GPTQ page with $e = w_j$) raises the error by $w_j^2 / (2 [H_F^{-1}]_{jj})$, after the other weights are optimally adjusted. Here $F$ is the set of columns not yet processed. Since $[H_F^{-1}]_{jj} = U_{jj}^2$, the cost and the *saliency* are
+
+$$
+\begin{aligned}
+\Delta E_j &= \frac{w_j^2}{2\, [H_F^{-1}]_{jj}} = \frac{w_j^2}{2\, U_{jj}^2} \\
+\text{saliency}_j &= \frac{w_j^2}{U_{jj}^2}
+\end{aligned}
+$$
+
+2. **Choose the mask a block at a time.** For columns $b_0, \dots, b_0 + B - 1$, compute the saliency of every weight in the block from the *current* weights, which already include the compensation from earlier blocks. Mark the lowest-saliency fraction for removal.
+3. **Prune and compensate, column by column.** For $j$ in the block: set the marked weights to zero, with $e = w_j$ where pruned and 0 where kept. Then apply the GPTQ update to all rows at once, with $e$ the column of per-row errors (an outer product with row $j$ of $U$):
+
+$$
+W_{:,\,j+1:} \leftarrow W_{:,\,j+1:} - \frac{e}{U_{jj}}\, U_{j,\,j+1:}
+$$
+
 4. Repeat for the next block, then the next layer, which is fed outputs of the already-pruned layers.
 
 Choosing the mask per block, not all at once, is the paper's *adaptive mask selection*. Weights get reshaped by compensation as you go, so a mask fixed up front would be stale. The paper uses blocks of 128 columns.
@@ -21,8 +34,8 @@ Choosing the mask per block, not all at once, is the paper's *adaptive mask sele
 
 - `U, dead = _hessian_inverse_chol(X, damp)` and `W[:, dead] = 0` are identical to GPTQ (see that page for the damping and dead-input handling).
 - `keep = np.ones_like(W, bool)` is the mask, filled in block by block.
-- `sal = W[:, b0:b1] ** 2 / np.diag(U)[b0:b1][None, :] ** 2` is step 1's saliency for the current block, computed from the current `W`.
-- `k = int(round(b1 * sparsity)) - int(round(b0 * sparsity))` is this block's share of the row's quota. The per-block counts add up to exactly `round(din · sparsity)` per row, the same count magnitude and Wanda remove, whatever the block size. `idx = np.argsort(sal, 1)[:, :k]` picks the `k` lowest-saliency weights *in each row* of the block. `np.put_along_axis(blk, idx, False, 1)` writes them into the mask.
+- `sal = W[:, b0:b1] ** 2 / np.diag(U)[b0:b1][None, :] ** 2` is step 1's saliency $w_j^2 / U_{jj}^2$ for the current block, computed from the current `W`.
+- `k = int(round(b1 * sparsity)) - int(round(b0 * sparsity))` is this block's share of the row's quota. The per-block counts add up to exactly $\round(d_{\text{in}} \cdot \text{sparsity})$ per row, the same count magnitude and Wanda remove, whatever the block size. `idx = np.argsort(sal, 1)[:, :k]` picks the `k` lowest-saliency weights *in each row* of the block. `np.put_along_axis(blk, idx, False, 1)` writes them into the mask.
 - Inside the block, `q = w * keep[:, j]` is the "quantized" column: unchanged where kept, zero where pruned.
 - `err = (w - q) / U[j, j]` and `W[:, j + 1:] -= np.outer(err, U[j, j + 1:])` are GPTQ's update. They also adjust weights later in the block that are already marked for pruning. Those are zeroed when their own turn comes, and their error at that point includes the adjustment, just as in the reference code.
 - `return W * keep` (already zero where pruned).
@@ -47,7 +60,7 @@ At 50%, all three are within 1.1 points of each other. At 70%, error compensatio
 
 - At very high sparsity (0.9 here) no compensation can recover. The remaining weights can't express the layer.
 - Small blocks force a fixed per-row sparsity in every short run of columns. That is a hidden structural constraint, and it shows in the block-4 row.
-- Like GPTQ, it fits `H` to calibration data. Too few inputs, or data unlike deployment, and the compensation targets the wrong inputs.
+- Like GPTQ, it fits $H$ to calibration data. Too few inputs, or data unlike deployment, and the compensation targets the wrong inputs.
 - Unstructured sparsity speeds nothing up without sparse kernels. The 2:4 pattern costs more accuracy.
 
 ## Try this

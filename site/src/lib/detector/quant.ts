@@ -62,12 +62,15 @@ function snap(x: number, scale: number, bits: number, levels: Levels): number {
   return f(Math.min(Math.max(rhe(f(x / step)), -q), q) * step);
 }
 
-/** One scale-sharing row: src[start, end), zero-padded to length `len` (only the 1-bit mean sees the padding). */
+/** One scale-sharing row: src[start, end). `len` is the padded row length the harness
+ *  reshapes to; padding is zeros, so nothing here needs it (the 1-bit mean, like the
+ *  harness, averages over the real weights only). */
 function quantRow(src: Float32Array, dst: Float32Array, start: number, end: number, len: number, bits: number, levels: Levels, clip: Clip) {
+  void len;
   if (bits === 1) { // sign times the mean magnitude: no zero, no range to clip
     let s = 0;
     for (let i = start; i < end; i++) s += Math.abs(src[i]);
-    s = f(s / len);
+    s = f(s / (end - start));
     for (let i = start; i < end; i++) dst[i] = src[i] >= 0 ? s : -s;
     return;
   }
