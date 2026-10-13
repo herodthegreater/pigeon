@@ -205,9 +205,11 @@ def export_frontend(out: str) -> None:
     static = os.path.join(HERE, "static")
     for name in ("app.js", "style.css"):
         shutil.copy(os.path.join(static, name), out)
+    shutil.copytree(os.path.join(static, "vendor"), os.path.join(out, "vendor"), dirs_exist_ok=True)
     export_worker(out)
     html = open(os.path.join(static, "index.html")).read()
     html = html.replace('href="/static/style.css"', 'href="style.css"')
+    html = html.replace('"/static/vendor/', '"vendor/')
     html = html.replace('<script src="/static/app.js"></script>',
                         '<script>window.LAB_STATIC = true;</script>\n<script src="app.js"></script>')
     assert "window.LAB_STATIC" in html and "/static/" not in html

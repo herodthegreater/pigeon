@@ -100,22 +100,44 @@ function highlight(code) {
   return out + esc(code.slice(last));
 }
 
+// ---------------------------------------------------------------- math (same rules as site/src/lib/lab/markdown.ts)
+const MATH_MACROS = {
+  "\\softmax": "\\operatorname{softmax}", "\\KL": "\\operatorname{KL}", "\\diag": "\\operatorname{diag}",
+  "\\round": "\\operatorname{round}", "\\clip": "\\operatorname{clip}", "\\sign": "\\operatorname{sign}",
+  "\\relu": "\\operatorname{ReLU}", "\\rank": "\\operatorname{rank}", "\\argmax": "\\operatorname*{arg\\,max}",
+  "\\argmin": "\\operatorname*{arg\\,min}", "\\R": "\\mathbb{R}", "\\E": "\\mathbb{E}",
+};
+const INLINE_MATH = /(?<![\\\w$])\$(?=[^\s$])((?:\\.|[^$\\\n])*?[^\s\\])\$(?![\w$])/g;
+function renderMath(tex, display = false) {
+  if (!window.katex) return `<code>${esc(tex)}</code>`;  // vendor/katex didn't load: show the source
+  try {
+    return window.katex.renderToString(tex, { displayMode: display, throwOnError: true, output: "htmlAndMathml", macros: { ...MATH_MACROS } });
+  } catch (e) {
+    return `<code class="math-error" title="${esc(e.message)}">${esc(tex)}</code>`;
+  }
+}
+
 // ---------------------------------------------------------------- markdown (the subset our pages use)
 function inline(s) {
   return s.split(/(`[^`]*`)/).map((part) => {
     if (part.startsWith("`") && part.endsWith("`") && part.length > 1) return `<code>${esc(part.slice(1, -1))}</code>`;
-    return esc(part)
+    const maths = [];
+    const text = part.replace(/\\\$/g, "\u0001")
+      .replace(INLINE_MATH, (_, tex) => `\u0000${maths.push(renderMath(tex)) - 1}\u0000`)
+      .replace(/\u0001/g, "$");
+    return esc(text)
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>")
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, u) =>
-        /^(https?:|#|\/)/.test(u) ? `<a href="${u}"${u.startsWith("http") ? ' target="_blank" rel="noopener"' : ""}>${t}</a>` : t);
+        /^(https?:|#|\/)/.test(u) ? `<a href="${u}"${u.startsWith("http") ? ' target="_blank" rel="noopener"' : ""}>${t}</a>` : t)
+      .replace(/\u0000(\d+)\u0000/g, (_, k) => maths[Number(k)]);
   }).join("");
 }
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 function md(src, toc) {
   const L = (src || "").replace(/\r/g, "").split("\n");
   let h = "", i = 0;
-  const isBlock = (l) => /^```|^#{1,4} |^\s*[-*] |^\s*\d+\. |^\|/.test(l);
+  const isBlock = (l) => /^```|^\$\$|^#{1,4} |^\s*[-*] |^\s*\d+\. |^\|/.test(l);
   while (i < L.length) {
     const l = L[i];
     if (/^```/.test(l)) {
@@ -124,6 +146,17 @@ function md(src, toc) {
       i++;
       const code = buf.join("\n");
       h += `<pre><code>${lang === "python" || lang === "py" || !lang ? highlight(code) : esc(code)}</code></pre>`;
+    } else if (/^\$\$/.test(l)) {
+      const one = l.trim().match(/^\$\$(.+)\$\$$/);
+      let tex;
+      if (one) { tex = one[1]; i++; }
+      else {
+        const buf = [l.trim().slice(2)]; i++;
+        while (i < L.length && !/\$\$\s*$/.test(L[i])) buf.push(L[i++]);
+        if (i < L.length) buf.push(L[i++].replace(/\$\$\s*$/, ""));
+        tex = buf.join("\n");
+      }
+      h += `<div class="math-display" tabindex="0">${renderMath(tex.trim(), true)}</div>`;
     } else if (/^#{1,4} /.test(l)) {
       const n = l.match(/^#+/)[0].length, text = l.slice(n + 1).trim(), id = slug(text);
       if (toc && n === 2) toc.push({ id, text });
