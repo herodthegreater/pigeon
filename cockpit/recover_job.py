@@ -100,7 +100,7 @@ def main() -> None:
         if qat:
             n_qat = enable_qat(y.model, quant.get("bits", 16), quant.get("stage_bits"),
                                _gran(quant.get("granularity", "channel")),
-                               quant.get("levels", "int"))
+                               quant.get("levels", "int"), quant.get("clip", "max"))
 
         state = {"status": "training", "epoch": 0, "epochs": a.epochs, "map": 0.0,
                  "params_m": round(params / 1e6, 3), "flops_g": round(macs / 1e9, 3),

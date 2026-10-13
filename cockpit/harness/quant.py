@@ -60,7 +60,10 @@ def fake_quantize(
         groups = flat.reshape(-1, group_size)  # G x group_size
 
     if bits == 1:
-        scale = groups.abs().mean(dim=1, keepdim=True).clamp_min(1e-12)
+        # mean |w| over the real weights: the last group's `pad` zeros don't count
+        real = torch.full((groups.shape[0], 1), float(groups.shape[1]), device=groups.device)
+        real[-1] = groups.shape[1] - pad
+        scale = (groups.abs().sum(dim=1, keepdim=True) / real).clamp_min(1e-12)
         q = torch.sign(groups)
         q = torch.where(q == 0, torch.ones_like(q), q)  # map exact zeros to +1
         deq = q * scale

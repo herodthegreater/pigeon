@@ -28,7 +28,7 @@
     decode box edges; quantizing them was a suspect for the 4-bit collapse.
     Sparing it: v8n 4-bit g128 0.0191 → 0.0379, per-tensor 0.0000 → 0.0000;
     8-bit/6-bit change ≤0.004. Not the cause. Both `carve.py` and
-    `/api/quantize` now spare it (it is 16 constants, not a learned weight).
+    the precision lab (`/api/measure`, `harness/precision.py`) now spare it (it is 16 constants, not a learned weight).
 - **REAL structured channel removal** (`harness/prune.py`, `real_prune_test.py`) —
   now works. Key fix: swap Ultralytics `C2f` -> `C2f_v2` (splits the `chunk()`
   the tracer can't follow), model in **train()** for tracing, ignore `Detect`,
@@ -114,9 +114,10 @@ FastAPI + node-grid front end, verified end-to-end in-browser:
   ignored before the requires_grad fix). Compute is reported as **GMACs**; the
   UI used to label torch-pruning's MAC count "GFLOP" (1 MAC = 2 FLOPs).
 - **Export + Recover** (`recover_job.py`, subprocess) -> prune + fine-tune the
-  pruned model, streaming per-epoch mAP to a JSON the UI polls. The curve now
-  starts at the pruned model's *measured* mAP (it was a hard-coded 0.0, so the
-  earlier "a light L9 cut recovered 0.00 -> 0.4395" had an unmeasured start).
+  pruned model, streaming per-epoch mAP to a JSON the UI polls. The status JSON
+  reports the pruned model's *measured* mAP as `before`, and the curve holds one
+  point per epoch (it used to start at a hard-coded 0.0, so the earlier "a light
+  L9 cut recovered 0.00 -> 0.4395" had an unmeasured start).
   Verified: L9 cut 30% -> **0.1256 after the cut -> 0.3261 -> 0.3949** (val
   mAP@50, 2 epochs), saved to `runs/recover/weights/best.pt`. Also fixed: the
   final re-validation of best.pt was appended as an extra epoch ("epoch 13 of
@@ -125,7 +126,8 @@ FastAPI + node-grid front end, verified end-to-end in-browser:
   `eval_set/`, and best.pt is picked on it, so recovered numbers are
   optimistic. The cockpit's live mAP is a 40-img subset of those images.)
 - **Sensitivity scan** (`GET /api/sensitivity`, ~7s): probes every stage
-  (cut 25%, measure mAP drop on a 16-img subset), colors the grid green→red and
+  (cut `probe` of its channels, 10% by default (earlier versions cut 25%), and
+  measure the mAP drop on a 16-img subset), colors the grid green→red and
   ranks by **value = compute share / sensitivity**. Teaches cut-by-value: e.g.
   L7 (2.7% of MACs, sens 0.00) and L16 (1.4%, sens 0.00) are nearly free to cut
   while L4 (7.2%, sens 1.00) is load-bearing. (Slower than the old ~3.5s
@@ -137,7 +139,7 @@ FastAPI + node-grid front end, verified end-to-end in-browser:
   and a "Principles of reverse training" lesson.
 - **Technique-split, explanation-first redesign**: a persistent scoreboard
   (mAP / size / compute vs native) over three modules — **Precision** (quantize,
-  `/api/quantize`), **Structure** (prune, scan+grid), **Regrow** (fine-tune).
+  now `/api/measure`), **Structure** (prune, scan+grid), **Regrow** (fine-tune).
   Each leads with a plain-English explanation + a one-click **suggested** action
   (Apply 8-bit / Cut top-value stages / Recover 12 epochs) and hides manual
   controls behind a "details" expander. Useful first, informative second.
@@ -151,9 +153,14 @@ masking and masking zeroed weights only, so a masked channel still output
 SiLU(bias); (2) masking picked the lowest-L1 filters of each conv on its own,
 while Export removes torch-pruning dependency *groups* (e.g. both sides of a
 residual add, chosen by group L2). Now masking asks the same pruner which
-channels it would remove (`prune.removal_plan`, interactive step, nothing
-removed) and zeroes those channels' weight *and* bias in the fused model
-(`mask.apply_plan`). bird mAP@50, 125 imgs, no fine-tune:
+channels it would remove (`prune.removal_plan`) and zeroes those channels'
+weight *and* bias in the fused model (`mask.apply_plan`). `removal_plan` replays
+Export's own loop on a copy of the model, pruning each group before the next is
+scored, because torch-pruning scores a group only when it reaches it; reading
+the groups without pruning them could in principle pick different channels. On
+the shipped torch-pruning 1.6.0 the two agreed on all five recipes
+`check_masking.py` tries, where the masked and the really pruned model give the
+same outputs (max |diff| 4.3e-4, float32 rounding). bird mAP@50, 125 imgs, no fine-tune:
 
 | cut | old mask | old mask + bias | Export (old) | Export (fixed) | new mask |
 |---|---|---|---|---|---|
@@ -167,7 +174,7 @@ Raw detector outputs of the masked and exported models agree to ≤3e-3 (fused
 vs unfused rounding). Planning costs ~0.2-0.5s per cut on CPU.
 
 ## Quantize size estimate
-`/api/quantize` estimated size as params × bits / 8. It now counts one fp16
+The old `/api/quantize` (now `/api/measure`) estimated size as params × bits / 8. It now counts one fp16
 scale per group (or per tensor), and keeps biases and the DFL at 16-bit: group
 128 at 8 / 6 / 4 bits = 3.21 / 2.42 / 1.63 MB (was 3.15 / 2.36 / 1.58), of a
 6.30 MB fp16 fused model.
@@ -250,3 +257,18 @@ QAT-aware Regrow, Export reports real pre-regrow mAP.
 Shared venv: `../weight-harness/.venv` (torch, transformers, ultralytics,
 fiftyone, torch-pruning). COCO cache `~/fiftyone`. Base weights: yolo11n.pt,
 yolov8n.pt in project root.
+
+## Fixes, 2026-10-13
+- **QAT trains on the grid it is scored on.** `QATConv2d` always fake-quantized
+  with `clip="max"`, while `cockpit_map` (and the cockpit's Measure) score with
+  the recipe's clip, so an MSE-clipped recipe was trained on one grid and judged
+  on another. `enable_qat(..., clip=...)` now stores the clip on each conv and
+  `recover_job.py` passes the recipe's. MSE clip costs about 3x the forward time
+  on CPU (it searches 29 clip ratios per row).
+- **1-bit scales ignore padding.** A 1-bit group's scale is mean |w|; for the
+  short last group (`quant.py`, flat groups) or each channel's short tail group
+  (`precision.py`, in-channel groups) that mean included the zero padding, so
+  the scale came out too small. Both now average the real weights only; the
+  site's TypeScript detector port (`site/src/lib/detector/quant.ts`) and the
+  lab's numpy twin (`lab/nn.py`) changed with them, so all four still agree.
+- **`removal_plan` replays Export** (see "Masking = Export" above).

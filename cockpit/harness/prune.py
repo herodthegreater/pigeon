@@ -14,6 +14,8 @@ Base model is YOLOv8n: YOLO11's C3k2/C2PSA blocks have no equivalent recipe.
 
 from __future__ import annotations
 
+import copy
+
 import torch
 import torch.nn as nn
 import torch_pruning as tp
@@ -143,22 +145,32 @@ def structured_prune_per_stage(yolo, stage_fracs: dict[str, float],
 def removal_plan(yolo, stage_fracs: dict[str, float],
                  example: torch.Tensor | None = None) -> dict[str, list[int]]:
     """The exact output channels `structured_prune_per_stage` would remove, as
-    {conv name: channel indices}, without removing anything. Zeroing these
-    channels (weight and bias) in the fused model reproduces the pruned model's
-    outputs, because every coupled producer of a removed channel is listed.
-    Call make_prunable(yolo) once first; the model is left unchanged.
+    {conv name: channel indices into the *unpruned* conv}, without touching
+    `yolo`. Zeroing these channels (weight and bias) in the fused model
+    reproduces the pruned model's outputs, because every coupled producer of a
+    removed channel is listed. Call make_prunable(yolo) once first.
+
+    It runs Export's own loop on a copy: torch-pruning scores each group only
+    when it reaches it, after the earlier groups have been pruned, so a plan
+    read off the groups without pruning them can pick different channels
+    whenever two groups share a layer. Indices a group reports are positions in
+    the tensors *as they are then*; `alive` maps them back to original channels.
     """
-    model = yolo.model
+    model = copy.deepcopy(yolo.model)
     names = {m: n for n, m in model.named_modules()}
     pruner = _stage_pruner(model, stage_fracs, example)
     plan: dict[str, set[int]] = {}
-    # importance is ranked before the first group is yielded, so not pruning
-    # the groups as we go does not change which channels are picked
-    for group in pruner.step(interactive=True):
+    alive: dict[str, list[int]] = {}  # conv name -> original indices still present, in order
+    for group in pruner.step(interactive=True):  # exactly what step() does, one group at a time
         for dep, idxs in group:
             m = dep.target.module
             if isinstance(m, torch.nn.Conv2d) and pruner.DG.is_out_channel_pruning_fn(dep.handler):
-                plan.setdefault(names[m], set()).update(int(i) for i in idxs)
+                n = names[m]
+                now = alive.setdefault(n, list(range(m.out_channels)))
+                gone = {int(i) for i in idxs}
+                plan.setdefault(n, set()).update(now[i] for i in gone)
+                alive[n] = [c for j, c in enumerate(now) if j not in gone]
+        group.prune()
     return {n: sorted(ix) for n, ix in plan.items()}
 
 

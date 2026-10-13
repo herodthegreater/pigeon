@@ -40,7 +40,10 @@ def fake_quantize(w: np.ndarray, bits: int, group_size: int | None = None) -> np
         pad = (-n) % group_size
         g = np.concatenate([flat, np.zeros(pad, w.dtype)]).reshape(-1, group_size)
     if bits == 1:
-        scale = np.maximum(np.abs(g).mean(1, keepdims=True), 1e-12)
+        # mean |w| over the real weights: the last group's `pad` zeros don't count
+        real = np.full((g.shape[0], 1), float(g.shape[1]))
+        real[-1] = g.shape[1] - pad
+        scale = np.maximum(np.abs(g).sum(1, keepdims=True) / real, 1e-12)
         q = np.where(g >= 0, 1.0, -1.0)
     else:
         qmax = (1 << (bits - 1)) - 1
