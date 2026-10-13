@@ -1,27 +1,177 @@
 ---
 import Base from "../../layouts/Base.astro";
-const lessons = [
-  ["What a weight is", "FP32 → FP16 / BF16: bits, range and precision"],
-  ["Scale and zero-point", "The one formula behind all quantization"],
-  ["Bits and rounding", "INT8 → INT4 → INT2 → binary"],
-  ["Granularity", "Per tensor, per channel, per group: the knob that matters most"],
-  ["Outliers", "Why a few huge values ruin everything"],
-  ["Activations and calibration", "Weight-only vs W8A8, static vs dynamic"],
-  ["Sensitivity and mixed precision", "Not every layer is equal"],
-  ["Codebooks", "Non-uniform levels and palettes"],
-  ["Pruning", "Unstructured, 2:4 and structured, and the cliff"],
-  ["Recovery", "Fine-tuning and quantization-aware training"],
-  ["Distillation", "A big teacher trains a small student"],
-  ["Low-rank", "One big matrix becomes two thin ones"],
-];
+import "../../styles/page.css";
+import { lessons, methods } from "../../lib/lab/data";
+import { CHECK_LIMIT_S } from "../../lib/lab/python";
+import { course, lessonHref } from "../../components/school/course";
+import PigeonSays from "../../components/PigeonSays.astro";
+
+const chapters = course();
+const all = lessons();
+const names = new Map(methods().map((m) => [m.id, m.name]));
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+
+// The lede's numbers, counted from the chapters as they render (dropped citations don't count).
+const reading = chapters.filter((c) => c.links.some((l) => l.kind === "read")).length;
+const coded = chapters.filter((c) => c.links.some((l) => l.kind === "code")).length;
+const tried = chapters.filter((c) => c.links.some((l) => l.kind === "try")).length;
+const gaps = chapters.filter((c) => c.gap).length;
+const total = chapters.length;
+const of = (k: number) => (k === total ? `All ${total}` : `${k} of the ${total}`);
+// The lede's second sentence after "...point to the Field Guide sections that teach them".
+const rest =
+  (coded === total ? " and every one has a coding lesson" : coded === 0 ? "; none has a coding lesson yet" : ` and ${coded} have a coding lesson`) +
+  (gaps === 0 ? "." : `; the ${gaps === 1 ? "one" : gaps} that ${gaps === 1 ? "isn't" : "aren't"} fully written yet ${gaps === 1 ? "says" : "say"} what's missing.`);
 ---
-<Base title="Flight School · Pigeon" active="school">
-  <main style="max-width: 760px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: flex; flex-direction: column; gap: 20px;">
-    <p class="label">Coming next</p>
-    <h1 style="font-size: var(--step-3)">Flight School</h1>
-    <p style="color: var(--muted)">Twelve lessons, each with one interactive on Pigeon's real weights. They're being written now. Until then, the Coop is open.</p>
-    <ol style="display: flex; flex-direction: column; gap: 10px; padding-left: 1.4em;">
-      {lessons.map(([t, d]) => <li><strong>{t}</strong><br /><span style="color: var(--muted)">{d}</span></li>)}
-    </ol>
+<Base
+  title="Flight School · Pigeon"
+  active="school"
+  description={`A ${chapters.length}-chapter reading map through model compression, plus ${all.length} coding lessons you check in your browser.`}
+>
+  <main id="main" class="page">
+    <header>
+      <h1>Flight School</h1>
+      <p class="lede">
+        Today Flight School is a reading map: {chapters.length} chapters in order, plus {all.length} coding lessons
+        where you build the algorithms yourself, checked against tests in your browser. {of(reading)} chapters point to
+        the <a href={`${base}guide/`}>Field Guide</a> sections that teach them{rest}
+      </p>
+    </header>
+
+    <section class="group" aria-labelledby="course">
+      <h2 id="course">The course</h2>
+      <p>
+        A chapter lists the Field Guide sections to read, then the lesson that codes the idea when it has one
+        ({coded} of {chapters.length} do), then a preset that loads the idea onto Pigeon's real weights in the Coop
+        where one fits ({tried} of {chapters.length}).
+      </p>
+      <ol class="course" role="list">
+        {chapters.map((c) => (
+          <li class="chapter">
+            <span class="n num" aria-hidden="true">{c.n}</span>
+            <div class="head">
+              <h3><span class="visually-hidden">Chapter {c.n}: </span>{c.title}</h3>
+              <p class="sub">{c.subtitle}</p>
+            </div>
+            <div class="reading">
+              {c.links.length > 0 && (
+                <ul role="list">
+                  {c.links.map((l) => (
+                    <li class={l.kind}><a href={l.href}>{l.label}</a></li>
+                  ))}
+                </ul>
+              )}
+              {c.gap && <p class="gap">{c.gap}</p>}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="group" aria-labelledby="build">
+      <h2 id="build">Build it yourself</h2>
+      <p>
+        Write the pieces of compression in plain numpy, from softmax to GPTQ's error-compensation loop. Each lesson
+        gives you starting code and runs hidden tests against yours: gradient checks, comparisons with the lab's own
+        implementation, or a model that has to reach an accuracy.
+      </p>
+      <p>
+        Your code runs in your own browser (Python compiled to WebAssembly), with a {CHECK_LIMIT_S}-second limit
+        per check. Nothing is sent to a server: your drafts and the lessons you pass are kept in this browser only.
+      </p>
+      <p class="progress" data-progress data-total={all.length} hidden></p>
+      <PigeonSays mood="warn" data-storage-blocked hidden>
+        <p>
+          This browser blocks site storage, so passed lessons and drafts aren't remembered here. The lessons still
+          check your code; copy it somewhere before you leave a page. Allowing site storage for this site, or opening it
+          outside a private window, brings both back.
+        </p>
+      </PigeonSays>
+      <ul class="entries">
+        {all.map((l) => (
+          <li>
+            <a class="entry" href={lessonHref(l.id)}>
+              <span class="name">{l.title}</span>
+              <span class="aside passed" data-passed={l.id} hidden>Passed</span>
+              {l.methods.length > 0 && (
+                <span class="summary">Used in: {l.methods.map((m) => names.get(m) ?? m).join(", ")}</span>
+              )}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   </main>
 </Base>
+
+<style>
+  .group + .group { margin-top: var(--space-5); }
+
+  /* The course: a numbered index, like a field guide's plate list. Number, then
+     the chapter's name and subtitle, then what to read. */
+  .course { list-style: none; margin: var(--space-3) 0 0; padding: 0; border-top: 1px solid var(--rule); }
+  .chapter {
+    display: grid; grid-template-columns: 3rem minmax(0, 17rem) minmax(0, 1fr);
+    gap: var(--space-2) var(--space-5); padding-block: var(--space-4); border-bottom: 1px solid var(--rule);
+  }
+  .n {
+    font-family: var(--display); font-size: var(--step-3); line-height: 1; color: var(--muted);
+    text-align: right; padding-top: 2px;
+  }
+  .head { display: flex; flex-direction: column; gap: var(--space-1); }
+  .head h3 { font-size: var(--step-1); }
+  .sub { font-family: var(--display); font-style: italic; color: var(--muted); }
+  .reading { display: flex; flex-direction: column; gap: var(--space-2); max-width: var(--measure); }
+  .reading ul { list-style: none; margin: 0; padding: 0; }
+  .reading a { display: inline-flex; align-items: center; min-height: 32px; padding-block: 2px; overflow-wrap: anywhere; }
+  .reading .code a, .reading .try a { font-weight: 600; }
+  .reading .gap { padding-top: var(--space-1); }
+
+  @media (max-width: 860px) {
+    .chapter { grid-template-columns: 2.5rem minmax(0, 1fr); }
+    .reading { grid-column: 2; }
+  }
+  @media (pointer: coarse), (max-width: 640px) {
+    .reading a { min-height: var(--tap); padding-block: var(--space-2); }
+  }
+
+  .progress { font-weight: 600; }
+  .progress[data-none] { font-weight: 400; color: var(--muted); }
+  .entry .passed { color: var(--teal); font-weight: 600; }
+</style>
+
+<script>
+  // Progress lives in this browser only, under the keys the old lab used, so earlier passes still count.
+  // Blocked storage (strict settings, some private windows) must not look like "nothing passed yet":
+  // try a write once, and say which of the two it is.
+  const storageWorks = (() => {
+    try {
+      localStorage.setItem("pigeon.probe", "1");
+      localStorage.removeItem("pigeon.probe");
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  const read = (k: string) => {
+    try { return localStorage.getItem(k); } catch { return null; }
+  };
+  const line = document.querySelector<HTMLElement>("[data-progress]");
+  if (!storageWorks) {
+    document.querySelector<HTMLElement>("[data-storage-blocked]")!.hidden = false;
+  } else if (line) {
+    let passed = 0;
+    document.querySelectorAll<HTMLElement>("[data-passed]").forEach((el) => {
+      if (read(`passed:${el.dataset.passed}`) === "1") {
+        el.hidden = false;
+        passed++;
+      }
+    });
+    const total = Number(line.dataset.total);
+    line.textContent = passed > 0
+      ? `${passed} of ${total} passed in this browser`
+      : `None of the ${total} lessons is marked passed in this browser yet. Pass one and it shows here.`;
+    line.toggleAttribute("data-none", passed === 0);
+    line.hidden = false;
+  }
+</script>

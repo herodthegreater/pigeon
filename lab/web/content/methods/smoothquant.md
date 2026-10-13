@@ -35,19 +35,19 @@ With **weight bits** below 16, `run_smoothquant` passes both models through `app
 
 ## What the simulations show
 
-3x256 teacher with 3 outlier channels injected into layer 2's input, at outlier size 30. Weights are 8-bit (W8), and the float model scores 0.9139.
+3x256 teacher with 3 outlier channels injected into layer 2's input, at outlier size 30. Weights are 8-bit (W8), and the float model scores 0.9150.
 
 | activation bits | plain, W8 | SmoothQuant α 0.5, W8 |
 |---|---|---|
-| 16 (float) | 0.9143 | 0.9144 |
-| 8 | 0.9145 | 0.9140 |
-| 6 | 0.9036 | 0.9135 |
-| 5 | 0.8472 | 0.9126 |
-| 4 | 0.5493 | 0.9071 |
+| 16 | 0.9146 | 0.9146 |
+| 8 | 0.9137 | 0.9154 |
+| 6 | 0.9049 | 0.9155 |
+| 5 | 0.8517 | 0.9152 |
+| 4 | 0.5661 | 0.9079 |
 
-At outlier size 100, plain falls to 0.6771 at A6 and 0.2226 at A4; SmoothQuant gives 0.9135 and 0.9071, identical to size 30, because `s` absorbs the injected factor exactly. Without injected outliers, plain A4 already gives 0.9104 and SmoothQuant 0.9088: there was nothing to fix.
+At outlier size 100, plain falls to 0.6850 at A6 and 0.2157 at A4; SmoothQuant gives 0.9155 and 0.9079, identical to size 30, because `s` absorbs the injected factor exactly. Without injected outliers, plain A4 already gives 0.9096 and SmoothQuant 0.9089: there was nothing to fix.
 
-The weight side costs little here. At W4A6, plain gives 0.8945 and SmoothQuant 0.9090. Even `α = 1`, which moves all of the activation range into the weights, gives 0.9116 at W4A6. Across `α` = 0, 0.5, 0.8 and 1 at W8A4, SmoothQuant gives 0.9000, 0.9071, 0.9108 and 0.9099. So this toy does not show the paper's trade-off, where too large an `α` makes the weights hard to quantize, probably because its weights have no outliers of their own for the migrated range to collide with.
+The weight side costs little here. At W4A6, plain gives 0.8963 and SmoothQuant 0.9112. Even `α = 1`, which moves all of the activation range into the weights, gives 0.9101 at W4A6. Across `α` = 0, 0.5, 0.8 and 1 at W8A4, SmoothQuant gives 0.9035, 0.9079, 0.9090 and 0.9099. So this toy does not show the paper's trade-off, where too large an `α` makes the weights hard to quantize, probably because its weights have no outliers of their own for the migrated range to collide with.
 
 ## When it breaks
 

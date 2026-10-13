@@ -56,7 +56,7 @@ With no real data, all three fake sources land near 0.68: far below real data, w
 
 Inversion does not beat plain noise. A look at 1000 inverted inputs explains part of it: their mean length is 2.12 against 3.39 for real test inputs (the L2 prior pulls them inward), and the teacher's mean top probability on them is 0.9983, so the targets are nearly one-hot. Gaussian noise already has the same mean length as real inputs (3.39) and the teacher assigns it to all 20 classes.
 
-This page's runs (1000 steps, seed 0, default `n` = 4000): labels only 0.7398; real 0.7267, Gaussian 0.5654, uniform 0.5609, inversion 0.5827. With `n` = 500 real inputs the student reached 0.5829, and with all 28000, 0.7465. The first run at a new `n` is slow; later runs read the cached inversion. The toy flatters noise: 12 standardized numbers are a small space, so random points often land near real data.
+This page's runs (1000 steps, seed 0, default `n` = 4000): labels only 0.7398; real 0.7266, Gaussian 0.5733, uniform 0.5559, inversion 0.5788. With `n` = 500 real inputs the student reached 0.5823, and with all 28000, 0.7455. The first run at a new `n` is slow; later runs read the cached inversion. The toy flatters noise: 12 standardized numbers are a small space, so random points often land near real data.
 
 ## When it breaks
 

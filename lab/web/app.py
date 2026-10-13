@@ -49,7 +49,10 @@ def _experiment(name: str) -> dict | None:
     figs = sorted(os.path.basename(p) for p in glob.glob(os.path.join(FIGS, f"{name}_*.png")))
     return dict(name=name, title=res["title"], question=res["question"], group=res["group"],
                 seconds=res.get("seconds"), figures=[f"/figures/{f}" for f in figs],
-                rows=res["rows"], refs=res.get("refs", {}), notes=res.get("notes", ""))
+                rows=res["rows"], refs=res.get("refs", {}), notes=res.get("notes", ""),
+                # what each figure plots (figure i is drawn from plots[i] by report.py),
+                # so pages can describe the figures in words
+                plots=res.get("plots", []))
 
 
 def _summary(m) -> dict:
@@ -76,7 +79,7 @@ def method(mid: str):
         raise HTTPException(404, f"no method {mid!r}")
     exps = [e for e in (_experiment(n) for n in m.experiments) if e]
     for e in exps:
-        e.pop("rows"); e.pop("refs")
+        e.pop("rows")  # refs stay: figure descriptions name the reference lines they draw
     return dict(**_summary(m), page=_page(mid), papers=m.papers,
                 params=[vars(p) for p in m.params],
                 code=[get_source(ref) for ref in m.code], experiments=exps,

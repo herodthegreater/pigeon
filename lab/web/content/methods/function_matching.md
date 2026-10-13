@@ -44,7 +44,7 @@ Short training favors fixed targets; online augmentation is a harder task and ne
 
 The effect is largest when real data is scarce. In `transfer_set`, a student distilled on only 500 real inputs reaches 0.5931; with online mixup on the same 500 it reaches 0.7382, and 0.7556 with mixup plus jitter. In `small_tricks`, combining the unlabeled pool, online mixup, weight averaging and 4x longer training gives a 2x32 student 0.8607, against 0.8170 for labels only.
 
-This page's runs (seed 0, mixup), fixed against online: length 2 (2000 steps) 0.7946 against 0.7742; length 4, 0.8284 against 0.8222; length 8, 0.8416 against 0.8453; length 24 (24000 steps), 0.8414 against 0.8736. The crossover falls between 4x and 8x, and at 24x the fixed student has stalled while the online one is still gaining.  In 12 dimensions, mixup between two real points stays fairly close to the data; the toy cannot show how far this carries to images, where Beyer et al. trained for thousands of epochs.
+This page's runs (seed 0, mixup), fixed against online: length 2 (2000 steps) 0.7939 against 0.7747; length 4, 0.8294 against 0.8213; length 8, 0.8416 against 0.8480; length 24 (24000 steps), 0.8331 against 0.8716. The crossover falls between 4x and 8x, and at 24x the fixed student has slipped back while the online one is still gaining. In 12 dimensions, mixup between two real points stays fairly close to the data; the toy cannot show how far this carries to images, where Beyer et al. trained for thousands of epochs.
 
 ## When it breaks
 

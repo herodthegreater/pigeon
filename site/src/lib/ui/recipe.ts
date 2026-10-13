@@ -3,7 +3,7 @@
  * Vanilla DOM; calls `onChange(recipe)` after every edit.
  */
 
-import type { Granularity } from "../compress/quant";
+import type { FloatQuantOptions, Granularity } from "../compress/quant";
 import type { Kind, TensorMeta } from "../engine/model";
 import { ALL_KINDS, type Recipe, type Step } from "../engine/pipeline";
 
@@ -27,7 +27,7 @@ export const PRESETS: { id: string; name: string; hint: string; recipe: Recipe }
     { op: "int", parts: ["conv", "depthwise", "pointwise", "head"], bits: 8, granularity: chan, symmetric: true },
     { op: "int", parts: ["squeeze_excite"], bits: 4, granularity: chan, symmetric: true },
   ] } },
-  { id: "mxfp4", name: "MXFP4", hint: "4-bit floats sharing a power-of-two scale per 32 weights.", recipe: { steps: [{ op: "float", parts: ALL, format: "fp4_e2m1", scaling: { kind: "mx", block: 32 } }] } },
+  { id: "mxfp4", name: "MXFP4", hint: "4-bit floats. Each block of up to 32 weights in an output channel shares a power-of-two scale.", recipe: { steps: [{ op: "float", parts: ALL, format: "fp4_e2m1", scaling: { kind: "mx", block: 32 } }] } },
   { id: "sparse24", name: "2:4 sparsity", hint: "Keep the biggest 2 of every 4 weights.", recipe: { steps: [{ op: "prune", parts: ALL, method: "nm", amount: 0.5 }] } },
   { id: "palette", name: "16-colour palette", hint: "k-means: every weight becomes one of 16 shared values.", recipe: { steps: [{ op: "cluster", parts: ALL, k: 16 }] } },
 ];
@@ -35,7 +35,7 @@ export const PRESETS: { id: string; name: string; hint: string; recipe: Recipe }
 const clone = (r: Recipe): Recipe => JSON.parse(JSON.stringify(r));
 
 export function describeStep(s: Step): string {
-  const parts = s.parts.length === ALL.length ? "all" : s.parts.map((p) => PART_NAMES[p]).join(" + ");
+  const parts = s.parts.length === ALL.length ? "all" : s.parts.length ? s.parts.map((p) => PART_NAMES[p]).join(" + ") : "no layers";
   switch (s.op) {
     case "int": {
       if (s.bits >= 16) return `off (${parts})`;
@@ -43,7 +43,8 @@ export function describeStep(s: Step): string {
       return `${s.ternary ? "ternary" : `INT${s.bits}`} ${g}${s.symmetric ? "" : " asym"} · ${parts}`;
     }
     case "float": {
-      const sc = s.scaling.kind === "mx" ? ` MX/${s.scaling.block}` : s.scaling.kind === "nv" ? ` NV/${s.scaling.block}` : "";
+      // Every scaling is named except a plain cast, so two different recipes never share a label.
+      const sc = s.scaling.kind === "mx" ? ` MX/${s.scaling.block}` : s.scaling.kind === "nv" ? ` NV/${s.scaling.block}` : s.scaling.kind === "tensor" ? " one scale" : "";
       return `${s.format.toUpperCase().replace("_", " ")}${sc} · ${parts}`;
     }
     case "prune":
@@ -54,7 +55,133 @@ export function describeStep(s: Step): string {
 }
 
 export function describeRecipe(r: Recipe): string {
-  return r.steps.length ? r.steps.map(describeStep).join(" → ") : "Full precision";
+  return r.steps.length ? r.steps.map(describeStep).join(", then ") : "Full precision";
+}
+
+/** A recipe's identity: every setting of every step, the same text its link carries. Equal keys are equal recipes. */
+export function recipeKey(r: Recipe): string {
+  return r.steps.map(stepText).join(",");
+}
+
+/** The preset a recipe matches, if any, compared setting by setting (not by label). */
+export function presetOf(r: Recipe): string | null {
+  const key = recipeKey(r);
+  return PRESETS.find((p) => recipeKey(p.recipe) === key)?.id ?? null;
+}
+
+/* ------------------------------------------------------------ the recipe in a link */
+
+const FORMATS = ["fp16", "bf16", "fp8_e4m3", "fp8_e5m2", "fp4_e2m1"] as const;
+const GROUP_SIZES = [16, 32, 64, 128];
+const MAX_PRUNE = { magnitude: 95, channels: 60 } as const; // the Remove slider's ends
+/**
+ * The most steps a recipe holds, in the editor and in a link: more than anyone builds by hand, few enough
+ * to score in reasonable time. The editor stops at the same number, so every recipe it builds has a link that loads.
+ */
+export const MAX_STEPS = 12;
+
+const partsText = (parts: Kind[]) => (parts.length === ALL.length ? "all" : parts.length ? ALL.filter((k) => parts.includes(k)).join("-") : "none");
+
+/** One step as link text: "int.8.channel.all", "int.4.g32.asym.conv-head", "float.fp4_e2m1.mx.all", "prune.magnitude.30.all", "cluster.16.all". */
+function stepText(s: Step): string {
+  switch (s.op) {
+    case "int": {
+      const g = s.granularity.kind === "group" ? `g${s.granularity.size}` : s.granularity.kind;
+      return ["int", s.bits >= 16 ? "off" : String(s.bits), g, ...(s.symmetric ? [] : ["asym"]), ...(s.ternary ? ["ternary"] : []), partsText(s.parts)].join(".");
+    }
+    case "float":
+      return ["float", s.format, s.scaling.kind, partsText(s.parts)].join(".");
+    case "prune":
+      return ["prune", s.method, ...(s.method === "nm" ? [] : [String(Math.round(s.amount * 100))]), partsText(s.parts)].join(".");
+    case "cluster":
+      return ["cluster", String(s.k), partsText(s.parts)].join(".");
+  }
+}
+
+/** The query that reopens a recipe in the Coop: "" for full precision, "preset=<id>" for a preset, otherwise "steps=" and every step. */
+export function linkQuery(r: Recipe): string {
+  const preset = presetOf(r);
+  if (preset) return preset === "fp32" ? "" : `preset=${preset}`;
+  return `steps=${r.steps.map(stepText).join(",")}`;
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const nearest = (v: number, options: number[]) => options.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
+const number = (s: string | undefined) => (s && s.trim() ? Number(s) : NaN);
+
+function partsFrom(s: string | undefined): Kind[] | null {
+  if (s === "all") return [...ALL];
+  if (s === "none") return [];
+  const named = (s ?? "").split("-");
+  if (!named.every((k) => (ALL as string[]).includes(k))) return null;
+  return ALL.filter((k) => named.includes(k));
+}
+
+/** One step back from its link text, every number clamped to what its controls can set; null if it can't be read. */
+function stepFrom(text: string): Step | null {
+  const [op, ...rest] = text.split(".");
+  const parts = partsFrom(rest.pop());
+  if (!parts) return null;
+  if (op === "int") {
+    const [b, g, ...flags] = rest;
+    const n = b === "off" ? 16 : number(b);
+    const size = /^g(\d+)$/.exec(g ?? "");
+    const granularity: Granularity | null = g === "tensor" || g === "channel" ? { kind: g } : size ? { kind: "group", size: nearest(Number(size[1]), GROUP_SIZES) } : null;
+    if (!Number.isFinite(n) || !granularity || !flags.every((f) => f === "asym" || f === "ternary")) return null;
+    const bits = n >= 16 ? 16 : clamp(Math.round(n), 1, 8);
+    const step: Step = { op, parts, bits, granularity, symmetric: !flags.includes("asym") };
+    if (bits === 2 && flags.includes("ternary")) step.ternary = true; // the ternary box only exists at 2 bits
+    return step;
+  }
+  if (op === "float") {
+    const [format, sc] = rest;
+    const f = FORMATS.find((x) => x === format);
+    // The editor's blocks: MX shares a scale per 32 weights, NVFP4 per 16.
+    const scaling: FloatQuantOptions["scaling"] | null =
+      sc === "none" || sc === "tensor" ? { kind: sc } : sc === "mx" ? { kind: "mx", block: 32 } : sc === "nv" ? { kind: "nv", block: 16 } : null;
+    if (!f || !scaling || rest.length !== 2) return null;
+    return { op, parts, format: f, scaling };
+  }
+  if (op === "prune") {
+    const [method, amount] = rest;
+    if (method === "nm") return rest.length === 1 ? { op, parts, method, amount: 0.5 } : null;
+    if ((method !== "magnitude" && method !== "channels") || rest.length !== 2) return null;
+    const pct = number(amount);
+    if (!Number.isFinite(pct)) return null;
+    return { op, parts, method, amount: clamp(Math.round(pct / 5) * 5, 0, MAX_PRUNE[method]) / 100 };
+  }
+  if (op === "cluster") {
+    const k = number(rest[0]);
+    if (!Number.isFinite(k) || k <= 0 || rest.length !== 1) return null;
+    return { op, parts, k: 2 ** clamp(Math.round(Math.log2(k)), 1, 8) };
+  }
+  return null;
+}
+
+export type FromLink = { recipe: Recipe; preset: string | null } | { error: string } | null;
+
+/**
+ * The recipe a Coop link carries: ?steps=<linkQuery's steps>, or ?preset=<id>. Returns null when
+ * the link carries no recipe, and the reason in words when it can't be read.
+ */
+export function recipeFromLink(params: URLSearchParams): FromLink {
+  const text = params.get("steps");
+  if (text === null) {
+    const id = params.get("preset");
+    if (id === null) return null;
+    const p = PRESETS.find((x) => x.id === id);
+    return p ? { recipe: clone(p.recipe), preset: p.id } : { error: `there is no preset called "${id}"` };
+  }
+  const parts = text.split(",").filter((t) => t.trim());
+  if (parts.length > MAX_STEPS) return { error: `it stacks ${parts.length} steps, and the Coop takes at most ${MAX_STEPS}` };
+  const steps: Step[] = [];
+  for (const [i, t] of parts.entries()) {
+    const step = stepFrom(t.trim());
+    if (!step) return { error: `step ${i + 1}, "${t}", isn't a step the Coop can build` };
+    steps.push(step);
+  }
+  const recipe = { steps };
+  return { recipe, preset: presetOf(recipe) };
 }
 
 const STEP_TITLES = { int: "Quantize to integers", float: "Change number format", prune: "Prune", cluster: "Palettize (k-means)" } as const;
@@ -67,6 +194,14 @@ function newStep(op: Step["op"]): Step {
     case "cluster": return { op, parts: [...ALL], k: 16 };
   }
 }
+
+/** What each float scaling stores, said once under its select so the option labels stay short enough for a phone. */
+const SCALING_NOTE: Record<"none" | "tensor" | "mx" | "nv", string> = {
+  none: "Each weight rounds to the nearest value the format holds, and anything past its largest value is clipped to it. No scale is stored.",
+  tensor: "Each tensor is scaled so its largest weight lands on the format's largest value. That one scale is stored as 32 bits.",
+  mx: "Each block of up to 32 weights in an output channel shares a power-of-two scale, stored as 8 bits (E8M0).",
+  nv: "Each block of up to 16 weights in an output channel shares an FP8 (E4M3) scale, and each tensor adds one 32-bit scale.",
+};
 
 const NO_PRESET = "Pick a preset to load its steps, or build your own below.";
 const presetHint = (id: string | null) => {
@@ -94,12 +229,20 @@ export class RecipeEditor {
     this.render();
   }
 
-  load(r: Recipe, preset: string | null = null) {
+  /** `focus` keeps focus on the clicked preset; a preset loaded from the URL leaves focus where it is. */
+  load(r: Recipe, preset: string | null = null, focus = true) {
     this.recipe = clone(r);
     this.active = preset;
-    this.render();
-    if (preset) this.root.querySelector<HTMLElement>(`[data-preset="${preset}"]`)?.focus();
+    this.render(preset && focus ? `[data-preset="${preset}"]` : this.focusKey());
     this.emit();
+  }
+
+  /** Load a preset by id, as if its button were clicked. Returns false for an unknown id. */
+  loadPreset(id: string, focus = true): boolean {
+    const p = PRESETS.find((x) => x.id === id);
+    if (!p) return false;
+    this.load(p.recipe, p.id, focus);
+    return true;
   }
 
   private setHint(id: string | null) {
@@ -111,19 +254,32 @@ export class RecipeEditor {
     this.onChange(clone(this.recipe), describeRecipe(this.recipe));
   }
 
-  private render() {
+  /** A selector for the focused control, so a re-render can put keyboard focus back on its replacement. */
+  private focusKey(): string | null {
+    const a = document.activeElement as HTMLElement | null;
+    if (!a || !this.root.contains(a)) return null;
+    const d = a.dataset;
+    if (d.preset) return `[data-preset="${d.preset}"]`;
+    if (d.add) return `[data-add="${d.add}"]`;
+    if (d.i && d.f) return `[data-i="${d.i}"][data-f="${d.f}"]${a instanceof HTMLInputElement && (a.type === "radio" || a.type === "checkbox") ? `[value="${a.value}"]` : ""}`;
+    return null;
+  }
+
+  private render(focus: string | null = this.focusKey()) {
     const presets = PRESETS.map((p) => `<button type="button" class="preset" data-preset="${p.id}" aria-pressed="${p.id === this.active}" aria-describedby="preset-hint">${p.name}</button>`).join("");
     const steps = this.recipe.steps.map((s, i) => this.stepHTML(s, i)).join("");
+    const full = this.recipe.steps.length >= MAX_STEPS;
     this.root.innerHTML = `
-      <div class="presets"><span class="label">Presets</span><div class="preset-row">${presets}</div><p class="preset-hint" id="preset-hint">${presetHint(this.active)}</p></div>
-      <ol class="steps">${steps || `<li class="empty">No steps yet: this is the full-precision Pigeon. Add a step, or start from a preset.</li>`}</ol>
-      <div class="add"><span class="label">Add a step</span><div class="add-row">
-        ${(Object.keys(STEP_TITLES) as Step["op"][]).map((op) => `<button type="button" class="add-btn" data-add="${op}">+ ${STEP_TITLES[op]}</button>`).join("")}
-      </div></div>`;
+      <div class="presets" role="group" aria-labelledby="presets-label"><span class="sub" id="presets-label">Presets</span><div class="preset-row">${presets}</div><p class="preset-hint" id="preset-hint">${presetHint(this.active)}</p></div>
+      ${steps ? `<ol class="steps">${steps}</ol>` : `<p class="empty">No steps yet: this is the full-precision Pigeon. Add a step, or start from a preset.</p>`}
+      <div class="add" role="group" aria-labelledby="add-label"><span class="sub" id="add-label">Add a step</span><div class="add-row">
+        ${(Object.keys(STEP_TITLES) as Step["op"][]).map((op) => `<button type="button" class="btn secondary add-btn" data-add="${op}"${full ? ' disabled aria-describedby="add-full"' : ""}>+ ${STEP_TITLES[op]}</button>`).join("")}
+      </div>${full ? `<p class="note" id="add-full">A recipe holds at most ${MAX_STEPS} steps. Remove one to add another.</p>` : ""}</div>`;
+    if (focus) this.root.querySelector<HTMLElement>(focus)?.focus();
   }
 
   private partsHTML(s: Step, i: number) {
-    return `<fieldset class="parts"><legend class="label">Applies to</legend>${ALL.map(
+    return `<fieldset class="parts"><legend class="sub">Applies to</legend>${ALL.map(
       (k) => `<label class="part"><input type="checkbox" data-i="${i}" data-f="part" value="${k}" ${s.parts.includes(k) ? "checked" : ""}/>
         <span>${PART_NAMES[k]}</span><span class="share num">${(this.shares[k] * 100).toFixed(k === "head" || k === "conv" ? 2 : 0)}%</span></label>`,
     ).join("")}</fieldset>`;
@@ -137,28 +293,29 @@ export class RecipeEditor {
       body = `
         <label for="${id("bits")}" class="field"><span>Bits per weight</span><output class="num">${s.ternary ? "1.58 (ternary)" : s.bits >= 16 ? "off" : s.bits}</output></label>
         <input id="${id("bits")}" type="range" min="1" max="8" step="1" value="${Math.min(s.bits, 8)}" data-i="${i}" data-f="bits"/>
-        <div class="seg" role="radiogroup" aria-label="Scale granularity">${(["tensor", "channel", "group"] as const).map(
+        <fieldset class="gran"><legend class="sub">Scale granularity</legend><div class="seg">${(["tensor", "channel", "group"] as const).map(
           (k) => `<label><input type="radio" name="${id("g")}" value="${k}" data-i="${i}" data-f="gran" ${g === k ? "checked" : ""}/><span>${k === "tensor" ? "Per tensor" : k === "channel" ? "Per channel" : "Per group"}</span></label>`,
-        ).join("")}</div>
+        ).join("")}</div></fieldset>
         ${g === "group" ? `<label class="field" for="${id("gs")}"><span>Group size</span><select id="${id("gs")}" data-i="${i}" data-f="gsize">${[16, 32, 64, 128].map((n) => `<option ${s.granularity.kind === "group" && s.granularity.size === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>` : ""}
         <label class="check"><input type="checkbox" data-i="${i}" data-f="asym" ${s.symmetric ? "" : "checked"}/> Asymmetric (scale + zero-point)</label>
-        ${s.bits === 2 ? `<label class="check"><input type="checkbox" data-i="${i}" data-f="ternary" ${s.ternary ? "checked" : ""}/> Ternary {−1, 0, +1} (BitNet-style)</label>` : ""}`;
+        <label class="check ternary"${s.bits === 2 ? "" : " hidden"}><input type="checkbox" data-i="${i}" data-f="ternary" ${s.ternary ? "checked" : ""}/> Ternary {−1, 0, +1} (BitNet-style)</label>`;
     } else if (s.op === "float") {
       const sc = s.scaling.kind;
       body = `
         <label class="field" for="${id("fmt")}"><span>Format</span><select id="${id("fmt")}" data-i="${i}" data-f="format">${[
           ["fp16", "FP16 (16 bits)"], ["bf16", "BF16 (16 bits)"], ["fp8_e4m3", "FP8 E4M3"], ["fp8_e5m2", "FP8 E5M2"], ["fp4_e2m1", "FP4 E2M1"],
         ].map(([v, n]) => `<option value="${v}" ${s.format === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-        <label class="field" for="${id("sc")}"><span>Scaling</span><select id="${id("sc")}" data-i="${i}" data-f="scaling">${[
-          ["none", "None (plain cast)"], ["tensor", "One scale per tensor"], ["mx", "MX: power-of-two per 32"], ["nv", "NVFP4: FP8 scale per 16"],
-        ].map(([v, n]) => `<option value="${v}" ${sc === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
+        <label class="field" for="${id("sc")}"><span>Scaling</span><select id="${id("sc")}" data-i="${i}" data-f="scaling" aria-describedby="${id("sc-note")}">${[
+          ["none", "None (plain cast)"], ["tensor", "One scale per tensor"], ["mx", "MX, blocks of 32"], ["nv", "NVFP4, blocks of 16"],
+        ].map(([v, n]) => `<option value="${v}" ${sc === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        <p class="note" id="${id("sc-note")}">${SCALING_NOTE[sc]}</p>`;
     } else if (s.op === "prune") {
       body = `
         <label class="field" for="${id("m")}"><span>Method</span><select id="${id("m")}" data-i="${i}" data-f="method">${[
           ["magnitude", "Smallest weights (unstructured)"], ["nm", "2:4 pattern (semi-structured)"], ["channels", "Whole channels (structured)"],
         ].map(([v, n]) => `<option value="${v}" ${s.method === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         ${s.method === "nm" ? "" : `<label for="${id("amt")}" class="field"><span>Remove</span><output class="num">${Math.round(s.amount * 100)}%</output></label>
-        <input id="${id("amt")}" type="range" min="0" max="${s.method === "channels" ? 60 : 95}" step="5" value="${Math.round(s.amount * 100)}" data-i="${i}" data-f="amount"/>`}`;
+        <input id="${id("amt")}" type="range" min="0" max="${MAX_PRUNE[s.method === "channels" ? "channels" : "magnitude"]}" step="5" value="${Math.round(s.amount * 100)}" data-i="${i}" data-f="amount"/>`}`;
     } else {
       body = `
         <label for="${id("k")}" class="field"><span>Palette size</span><output class="num">${s.k} values (${Math.log2(s.k)} bits)</output></label>
@@ -166,17 +323,28 @@ export class RecipeEditor {
     }
     return `<li class="step" data-op="${s.op}">
       <div class="step-head"><span class="step-n num">${i + 1}</span><h3>${STEP_TITLES[s.op]}</h3>
-        <button type="button" class="remove" data-remove="${i}" aria-label="Remove step ${i + 1}">Remove</button></div>
+        <button type="button" class="btn secondary remove" data-remove="${i}" aria-label="Remove step ${i + 1}">Remove</button></div>
       <div class="step-body">${body}${this.partsHTML(s, i)}</div></li>`;
   }
 
   private onClick(e: Event) {
     const t = (e.target as HTMLElement).closest("button");
-    if (!t) return;
-    if (t.dataset.preset) return this.load(PRESETS.find((p) => p.id === t.dataset.preset)!.recipe, t.dataset.preset);
+    if (!t || t.disabled) return;
+    if (t.dataset.preset) return void this.loadPreset(t.dataset.preset);
+    if (t.dataset.add && this.recipe.steps.length >= MAX_STEPS) return;
     this.active = null;
-    if (t.dataset.add) { this.recipe.steps.push(newStep(t.dataset.add as Step["op"])); this.render(); return this.emit(); }
-    if (t.dataset.remove) { this.recipe.steps.splice(Number(t.dataset.remove), 1); this.render(); return this.emit(); }
+    if (t.dataset.add) {
+      this.recipe.steps.push(newStep(t.dataset.add as Step["op"]));
+      this.render(`[data-i="${this.recipe.steps.length - 1}"]`); // focus moves to the new step's first control
+      return this.emit();
+    }
+    if (t.dataset.remove) {
+      const i = Number(t.dataset.remove), steps = this.recipe.steps;
+      steps.splice(i, 1);
+      // focus moves to the step that took its place, else the one above, else the first "add" button
+      this.render(steps.length ? `[data-remove="${Math.min(i, steps.length - 1)}"]` : ".add-btn");
+      return this.emit();
+    }
   }
 
   private onInput(e: Event) {
@@ -189,7 +357,17 @@ export class RecipeEditor {
     if (f === "part") {
       s.parts = [...this.root.querySelectorAll<HTMLInputElement>(`input[data-i="${i}"][data-f="part"]:checked`)].map((x) => x.value as Kind);
     } else if (s.op === "int") {
-      if (f === "bits") { const was = s.bits; s.bits = Number(el.value); if (s.bits !== 2) s.ternary = false; rerender = (was === 2) !== (s.bits === 2); }
+      if (f === "bits") {
+        // The ternary option only exists at 2 bits. It is shown or hidden in place: rebuilding the editor
+        // here would replace the slider under the pointer and end the drag at 2.
+        s.bits = Number(el.value);
+        if (s.bits !== 2) s.ternary = false;
+        const tern = el.closest(".step")?.querySelector<HTMLInputElement>('[data-f="ternary"]');
+        if (tern) {
+          tern.checked = !!s.ternary;
+          tern.closest("label")!.hidden = s.bits !== 2;
+        }
+      }
       if (f === "gran") { s.granularity = el.value === "group" ? { kind: "group", size: 32 } : { kind: el.value as "tensor" | "channel" }; rerender = true; }
       if (f === "gsize") s.granularity = { kind: "group", size: Number(el.value) };
       if (f === "asym") s.symmetric = !el.checked;
@@ -198,9 +376,13 @@ export class RecipeEditor {
       if (out && f !== "gran") out.textContent = s.ternary ? "1.58 (ternary)" : String(s.bits);
     } else if (s.op === "float") {
       if (f === "format") s.format = el.value as typeof s.format;
-      if (f === "scaling") s.scaling = el.value === "mx" ? { kind: "mx", block: 32 } : el.value === "nv" ? { kind: "nv", block: 16 } : { kind: el.value as "none" | "tensor" };
+      if (f === "scaling") {
+        s.scaling = el.value === "mx" ? { kind: "mx", block: 32 } : el.value === "nv" ? { kind: "nv", block: 16 } : { kind: el.value as "none" | "tensor" };
+        const note = el.closest(".step")?.querySelector(".note");
+        if (note) note.textContent = SCALING_NOTE[s.scaling.kind];
+      }
     } else if (s.op === "prune") {
-      if (f === "method") { s.method = el.value as typeof s.method; if (s.method === "channels") s.amount = Math.min(s.amount, 0.6); rerender = true; }
+      if (f === "method") { s.method = el.value as typeof s.method; if (s.method === "channels") s.amount = Math.min(s.amount, MAX_PRUNE.channels / 100); rerender = true; }
       if (f === "amount") { s.amount = Number(el.value) / 100; el.closest(".step")!.querySelector("output")!.textContent = `${el.value}%`; }
     } else if (s.op === "cluster" && f === "k") {
       s.k = 2 ** Number(el.value);

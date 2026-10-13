@@ -2,7 +2,7 @@
  "name": "transfer_set",
  "group": "3 \u00b7 What the student sees (transfer data)",
  "title": "Distilling without (much) real data",
- "question": "Which inputs carry the teacher's knowledge best -- real labeled, real unlabeled, augmented, pure noise, or inputs dreamed up by inverting the teacher?",
+ "question": "Which inputs carry the teacher's knowledge best: real labeled, real unlabeled, augmented, pure noise, or inputs dreamed up by inverting the teacher?",
  "quick": false,
  "seconds": 107.1,
  "rows": [

@@ -1,57 +1,92 @@
 /* Pigeon design tokens: a field guide on sage paper, inked in slate, with the
-   rock pigeon's iridescent neck (teal <-> magenta) as the only accent pair. */
+   rock pigeon's iridescent neck (teal <-> magenta) as the only accent pair.
+   Direction lives in DESIGN.md. Every color is one light-dark() pair, so the
+   palette is written once and the theme control only sets color-scheme. */
 
 :root {
-  --paper: #eef1eb;
-  --card: #f7f9f5;
-  --sunk: #e3e8e1;
-  --ink: #1c2a33;
-  --muted: #586970;
-  --rule: #c9d2ca;
-  --teal: #277265;
-  --teal-wash: #dceae4;
-  --magenta: #924070;
-  --magenta-wash: #f0dfe8;
-  --good: #277265;
-  --warn: #98591a;
-  --bad: #a83a3a;
-  --bird-line: #2a2f33;
-  --bird-rib: #5b4a3c;
-  --bird-shadow: rgba(28, 42, 51, 0.08);
-  --bone: #efe8d8;
-  --bird-halo: transparent; /* dark mode only: rims the bird so it doesn't sink into a dark card */
+  color-scheme: light dark;
 
+  /* Ground and ink */
+  --paper: light-dark(#eef1eb, #121a1e);
+  --card: light-dark(#f7f9f5, #182227);
+  --sunk: light-dark(#e3e8e1, #0e1417);
+  --plate: #f7f9f5; /* figure plates stay light in both themes, like a printed plate */
+  --ink: light-dark(#1c2a33, #e2e8e2);
+  --muted: light-dark(#586970, #9aaaa8);
+  --rule: light-dark(#c9d2ca, #2e3c40);
+  --rule-strong: light-dark(#7d8d88, #6b7b7b); /* input and button borders: 3:1 on paper and card */
+
+  /* The accent pair */
+  --teal: light-dark(#277265, #6cc1af);
+  --teal-wash: light-dark(#dceae4, #1b3230);
+  --on-teal: light-dark(#eef1eb, #121a1e);
+  --magenta: light-dark(#924070, #d88ab8);
+  --magenta-wash: light-dark(#f0dfe8, #35202d);
+
+  /* Real states only */
+  --good: var(--teal);
+  --warn: light-dark(#98591a, #e0a15c);
+  --bad: light-dark(#a83a3a, #e07a7a);
+  --bad-wash: light-dark(#f6e3e1, #3a1f1d);
+
+  /* Data marks: four series, each at least 5:1 on card. Their hues differ but
+     three share a lightness, so charts also give every series its own dash
+     pattern and marker shape: color is never the only cue. */
+  --series-1: light-dark(#277265, #6cc1af);
+  --series-2: light-dark(#924070, #d88ab8);
+  --series-3: light-dark(#98591a, #e0a15c);
+  --series-4: light-dark(#1c2a33, #e2e8e2);
+  --truth-box: #3fd1b4;      /* where the birds really are, drawn over photos */
+  --detect-box: #ff6fc2;     /* where a detector says the birds are, drawn over photos (dashed) */
+  --heat: 214 66 150;        /* rgb triplet for the evidence heatmap's alpha ramp */
+
+  /* Code */
+  --code-bg: light-dark(#e6ebe4, #0e1417);
+  --tok-kw: light-dark(#7a3363, #e0a3c8);
+  --tok-str: light-dark(#226357, #7fcbbb);
+  --tok-com: light-dark(#586970, #9aaaa8);
+  --tok-num: light-dark(#8a5016, #e8b47c);
+  --tok-dec: light-dark(#226357, #7fcbbb);
+
+  /* The mascot */
+  --bird-line: light-dark(#2a2f33, #0d1113);
+  --bird-rib: light-dark(#5b4a3c, #3b2f27);
+  --bird-shadow: light-dark(rgba(28, 42, 51, 0.08), rgba(0, 0, 0, 0.35));
+  --bone: light-dark(#efe8d8, #d9d2c2);
+  --bird-halo: light-dark(transparent, #9aaaa8); /* rims the bird so it doesn't sink into a dark card */
+  --bird-dull: #8a8176;      /* starving birds' colors drift toward this grey-brown */
+  --bird-beak-cere: #eeeae2; /* the pigeon's pale cere */
+
+  /* Type */
   --display: "Newsreader", Georgia, "Times New Roman", serif;
   --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --step--1: 0.8rem;
-  --step-0: 1rem;
-  --step-1: 1.2rem;
-  --step-2: 1.55rem;
-  --step-3: 2.1rem;
-  --step-4: 3rem;
-  --radius: 4px;
-}
+  --step--2: 0.75rem;  /* credits, chart ticks, fine print */
+  --step--1: 0.875rem; /* secondary text, captions, controls */
+  --step-0: 1rem;      /* body */
+  --step-1: 1.2rem;    /* lede, h3 */
+  --step-2: 1.55rem;   /* h2 */
+  --step-3: 2.1rem;    /* h1 on inner pages, big numbers */
+  --step-4: 3rem;      /* home h1 */
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #121a1e; --card: #182227; --sunk: #0e1417; --ink: #e2e8e2; --muted: #9aaaa8;
-    --rule: #2e3c40; --teal: #6cc1af; --teal-wash: #1b3230; --magenta: #d88ab8; --magenta-wash: #35202d;
-    --good: #6cc1af; --warn: #e0a15c; --bad: #e07a7a;
-    --bird-line: #0d1113; --bird-rib: #3b2f27; --bird-shadow: rgba(0, 0, 0, 0.35); --bone: #d9d2c2;
-    --bird-halo: #9aaaa8;
-    color-scheme: dark;
-  }
+  /* Space: a 4px-based scale. Small steps connect, large steps separate. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 72px;
+  --gutter: 20px;
+
+  --radius: 4px;
+  --measure: 68ch;
+  --tap: 44px;
 }
-:root[data-theme="dark"] {
-  --paper: #121a1e; --card: #182227; --sunk: #0e1417; --ink: #e2e8e2; --muted: #9aaaa8;
-  --rule: #2e3c40; --teal: #6cc1af; --teal-wash: #1b3230; --magenta: #d88ab8; --magenta-wash: #35202d;
-  --good: #6cc1af; --warn: #e0a15c; --bad: #e07a7a;
-  --bird-line: #0d1113; --bird-rib: #3b2f27; --bird-shadow: rgba(0, 0, 0, 0.35); --bone: #d9d2c2;
-  --bird-halo: #9aaaa8;
-  color-scheme: dark;
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -65,12 +100,43 @@ body {
 }
 h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.15; margin: 0; text-wrap: balance; }
 p { margin: 0; }
-a { color: var(--teal); }
-button, input, select { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--magenta); outline-offset: 2px; }
-.label {
-  font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+a { color: var(--teal); text-underline-offset: 2px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+/* iOS Safari zooms the page into any focused field under 16px and leaves it zoomed, so on touch
+   screens and phones every typed or picked field is at least 16px, wherever its parent sets 14px. */
+@media (pointer: coarse), (max-width: 640px) {
+  select, textarea, input:not([type="checkbox"], [type="radio"], [type="range"]) { font-size: max(16px, 1em); }
 }
+:focus-visible { outline: 2px solid var(--magenta); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
 [hidden] { display: none !important; }
+
+/* Shared controls: one look for every button on the site. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: 36px; padding: var(--space-2) var(--space-4); border-radius: var(--radius);
+  border: 1px solid var(--teal); background: var(--teal); color: var(--on-teal);
+  font-weight: 600; font-size: var(--step--1); text-decoration: none; cursor: pointer;
+}
+/* Hover says "this is the thing you'll press": the label underlines; secondary buttons turn teal. */
+.btn:hover { text-decoration: underline; text-underline-offset: 3px; }
+.btn.secondary { background: var(--card); color: var(--ink); border-color: var(--rule-strong); }
+.btn.secondary:hover { border-color: var(--teal); color: var(--teal); }
+/* Busy or spent buttons. aria-disabled keeps keyboard focus on the button while it works. */
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.6; cursor: default; text-decoration: none; }
+.btn[aria-busy="true"] { cursor: progress; }
+.btn.secondary[aria-disabled="true"]:hover { border-color: var(--rule-strong); color: var(--ink); }
+@media (pointer: coarse), (max-width: 640px) {
+  .btn { min-height: var(--tap); }
+}
+
+/* Status of a method: a plain label, not a badge. */
+.status { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+.status.runnable { color: var(--teal); }
+
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

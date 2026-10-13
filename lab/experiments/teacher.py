@@ -198,7 +198,7 @@ def fidelity_gap():
 
 @experiment("biased_teacher", G, "A systematically wrong teacher",
             "The teacher learned a bias: half its 'bird' training labels said 'sibling'. "
-            "KD copies the bias faithfully -- can mixing in clean labels undo it?")
+            "KD copies the bias faithfully. Can mixing in clean labels undo it?")
 def biased_teacher():
     base = data()
     rng = np.random.default_rng(5)

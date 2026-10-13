@@ -45,7 +45,7 @@ The small network loses accuracy every generation. The big one gains a little: w
 
 `small_tricks` agrees for small models: self-distillation gave 0.6234 against a 0.6637 baseline for 2x16, and 0.8008 against 0.8170 for 2x32.
 
-This page's runs (1000 steps, seed 0). Width 32: 0.7398, 0.7032, 0.6980. Width 128, three generations: 0.9008, 0.8936, 0.8938, 0.8910. Width 8: 0.3645, 0.3437, 0.3343, 0.3893. The last generation's jump at width 8 is a single seed on a very unstable model, not a trend. At this page's short budget, even width 128 gets no benefit.
+This page's runs (1000 steps, seed 0). Width 32: 0.7398, 0.7032, 0.6980. Width 128, three generations: 0.9010, 0.8920, 0.8938, 0.8904. Width 8: 0.3645, 0.3437, 0.3343, 0.3893. The last generation's jump at width 8 is a single seed on a very unstable model, not a trend. At this page's short budget, even width 128 gets no benefit.
 
 ## When it breaks
 

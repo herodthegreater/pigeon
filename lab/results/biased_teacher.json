@@ -2,7 +2,7 @@
  "name": "biased_teacher",
  "group": "2 \u00b7 Teacher edge cases",
  "title": "A systematically wrong teacher",
- "question": "The teacher learned a bias: half its 'bird' training labels said 'sibling'. KD copies the bias faithfully -- can mixing in clean labels undo it?",
+ "question": "The teacher learned a bias: half its 'bird' training labels said 'sibling'. KD copies the bias faithfully. Can mixing in clean labels undo it?",
  "quick": false,
  "seconds": 36.5,
  "rows": [

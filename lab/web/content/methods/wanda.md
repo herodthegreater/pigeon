@@ -32,28 +32,29 @@ The page's "magnitude, per row" baseline is the same function with `X` replaced 
 
 ## What the simulations show
 
-3x256 teacher (0.9139), 512 calibration inputs, no injected outliers:
+3x256 teacher (0.9150), 512 calibration inputs, no injected outliers:
 
 | fraction removed | magnitude, per row | Wanda |
 |---|---|---|
-| 0.3 | 0.9103 | 0.9075 |
-| 0.5 | 0.8841 | 0.8797 |
-| 0.7 | 0.7772 | 0.7261 |
-| 0.9 | 0.1430 | 0.1106 |
+| 0.3 | 0.9084 | 0.9090 |
+| 0.5 | 0.8899 | 0.8838 |
+| 0.7 | 0.7696 | 0.7187 |
+| 0.9 | 0.1302 | 0.1152 |
 
-On the plain toy network Wanda is *not* better. Its inputs have no outlier channels, so activation norms add noise more than signal.
+On the plain toy network Wanda is *not* better: it ties magnitude at 0.3 and trails it from 0.5 up. Its inputs have no outlier channels, so activation norms add noise more than signal.
 
 Injected outliers show what Wanda is for. Wanda's score is unchanged by the rescaling: `|w/30| · 30·n = |w| · n`. Magnitude pruning instead sees the rescaled weights as tiny and removes them. At 60% removed:
 
 | outlier channels injected | magnitude, per row | Wanda |
 |---|---|---|
-| 0 | 0.8527 | 0.8346 |
-| 3 | 0.8502 | 0.8346 |
-| 16 | 0.8371 | 0.8346 |
-| 64 | 0.7759 | 0.8346 |
-| 128 | 0.6239 | 0.8346 |
+| 0 | 0.8528 | 0.8407 |
+| 8 | 0.8477 | 0.8407 |
+| 16 | 0.8353 | 0.8407 |
+| 32 | 0.8083 | 0.8407 |
+| 64 | 0.7781 | 0.8407 |
+| 128 | 0.6340 | 0.8407 |
 
-Wanda is identical in every row; magnitude crosses below it somewhere between 16 and 64 outlier channels. In LLMs, emergent outlier features make channel norms differ by orders of magnitude in every block, which is where the paper's gains come from.
+Wanda is identical in every row; magnitude crosses below it between 8 and 16 outlier channels. In LLMs, emergent outlier features make channel norms differ by orders of magnitude in every block, which is where the paper's gains come from.
 
 ## When it breaks
 

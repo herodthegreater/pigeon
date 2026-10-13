@@ -1,8 +1,8 @@
 {
  "name": "specialist_data",
- "group": "6 \u00b7 Specialization (the pigeon question)",
+ "group": "6 \u00b7 Specialization (the bird-detector question)",
  "title": "Recovery data for a specialist: are bird images enough?",
- "question": "pigeon's recovery set is 400 images that *all contain birds*. If the recovery data only shows positives, can the model still learn what is NOT a bird?",
+ "question": "The YOLOv8n cockpit's recovery set is 400 images that *all contain birds*. If the recovery data only shows positives, can the model still learn what is NOT a bird?",
  "quick": false,
  "seconds": 30.4,
  "rows": [

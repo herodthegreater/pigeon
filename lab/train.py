@@ -326,7 +326,7 @@ def fit(net: MLP, source, terms: list, epochs: int = 40, lr: float = 3e-3, wd: f
 # evaluation
 # ---------------------------------------------------------------------------
 def average_precision(scores: np.ndarray, positive: np.ndarray) -> float:
-    """One-vs-rest AP (all-points), the same flavour as pigeon's bird mAP@50."""
+    """One-vs-rest AP (all-points), the same flavour as the cockpit's bird mAP@50."""
     order = np.argsort(-scores, kind="stable")
     pos = positive[order]
     tp = np.cumsum(pos)

@@ -1,15 +1,25 @@
 # What the simulations say
 
-28 experiments on one synthetic task, each arm averaged over 2–3 seeds. Every
-number here comes from `lab/results/*.json`; the figures and full tables are in
+28 experiments on one synthetic task. In 26 of them, every arm that trains or
+recovers a model is averaged over 2 or 3 seeds; rows that only score a fixed
+model (a teacher or an ensemble as it is, or a teacher or the distilled
+student cut or rounded with no recovery) come from one run. `weight_sharing`
+and `compression_frontier` ran a single seed throughout.
+Every toy number here comes from `lab/results/*.json`, apart from the shipped
+teacher's own score in the setup paragraph. The detector numbers in
+the last section are quoted from the YOLOv8n cockpit's `cockpit/STATUS.md` and
+`cockpit/README.md`, where marked. The figures and full tables are in
 [`results/RESULTS.md`](results/RESULTS.md) and on the website's Results page.
 
 **The setup in one paragraph.** A 20-class problem in 12 dimensions (5
 superclasses of 4; class 0 plays "bird"), built so that the best possible
 classifier is known exactly: the Bayes-optimal accuracy is **0.973**. The
 "big model" is a 3×256 MLP (140k parameters) at **0.914** accuracy and 0.989
-bird AP. Students are mostly 2×16 (820 parameters) or 2×32 (2.1k). Unless an
-experiment is about temperature, distillation uses T=1. Pruned or quantized
+bird AP. (That is the teacher these experiments trained. The website's Run
+buttons load the copy committed in `lab/models`, the same recipe trained
+again, which scores 0.915 and 0.989.) Students are mostly 2×16 (820
+parameters) or 2×32 (2.1k). Unless an experiment is about temperature,
+distillation uses T=1. Pruned or quantized
 models are recovered with the same optimizer and learning rate as models
 trained from scratch, so comparisons differ only in where the weights start.
 
@@ -40,7 +50,7 @@ over-parameterized teacher) than a refutation.
    the *exact* Bayes posterior beats labels by 2.3 points at 2×32 and 3.4 at
    2×128, and most of that is also captured by plain Bayes-argmax labels on the
    same inputs. Students are limited by their own size first.
-4. **Pruning without recovery is a cliff; with recovery it's a non-event** —
+4. **Pruning without recovery is a cliff; with recovery it's a non-event**,
    up to a point. One-shot 90% magnitude pruning drops the teacher to 0.286;
    1,500 steps of distillation bring it to 0.912 (teacher 0.914). At 98% it
    only recovers to 0.63 while a dense net with the same weight count reaches
@@ -68,8 +78,8 @@ over-parameterized teacher) than a refutation.
 10. **Recovery data needs negatives.** Recovering a bird-specialist pruned
     from the teacher on *bird inputs only* gives 0.797 bird AP; the same birds
     plus an equal number of random non-birds give 0.962, and even pure noise
-    as negatives gives 0.941. pigeon's recovery set is 400 images that all
-    contain birds; see the last section.
+    as negatives gives 0.941. The YOLOv8n cockpit's recovery set is 400
+    images that all contain birds; see the last section.
 
 ---
 
@@ -148,8 +158,8 @@ the short-trained one 0.735.
   with the *teacher's exact architecture* agrees with it on only 95–97% of
   test inputs after distillation; a 2×64 student reaches 93% after 12,000
   steps; a 2×16 student 75%.
-- **A biased teacher** (`biased_teacher`) — half its "bird" training labels
-  said "sibling" — passes the bias on: bird AP 0.895 from pure KD vs 0.952
+- **A biased teacher** (`biased_teacher`). Half its "bird" training labels
+  said "sibling", and it passes the bias on: bird AP 0.895 from pure KD vs 0.952
   from clean labels. Mixing clean labels back in repairs it (KD weight 0.25:
   0.947).
 - **Ensembles** (`ensemble_teacher`). Eight teachers make a better ensemble
@@ -157,7 +167,7 @@ the short-trained one 0.735.
   probabilities are averaged. The student, not the teacher, is the
   bottleneck.
 
-## 3 · What the student sees
+## 3 · What the student sees (transfer data)
 
 **Which inputs carry the knowledge** (`transfer_set`, 2×32 student, KD at
 T=1):
@@ -236,7 +246,7 @@ vs 0.820–0.843).
 
 | bits | teacher PTQ (per tensor / group-16) | teacher QAT + KD | student PTQ (per tensor / group-16) | student QAT + KD |
 |---|---|---|---|---|
-| 8 | 0.914 / 0.914 | — | 0.828 / 0.828 | — |
+| 8 | 0.914 / 0.914 | n/a | 0.828 / 0.828 | n/a |
 | 4 | 0.900 / 0.913 | 0.920 | 0.723 / 0.794 | 0.836 |
 | 3 | 0.777 / 0.897 | 0.919 | 0.485 / 0.640 | 0.791 |
 | 2 | 0.071 / 0.610 | 0.917 | 0.069 / 0.168 | 0.488 |
@@ -261,7 +271,7 @@ and it does *worse* than 1-bit sign quantization (teacher 0.071 vs 0.401).
 
 **Deleting layers** (`layer_drop`, 8×128 teachers). Removing even one layer
 from a plain network collapses it (0.910 → 0.062), but a short distillation
-restores it completely — even with 6 of 8 layers gone (0.914). A residual
+restores it completely, even with 6 of 8 layers gone (0.914). A residual
 network degrades gracefully without any recovery (1 layer gone: 0.867, 2:
 0.804, 4: 0.532), which is why layer dropping is practical for transformers.
 Initializing a 4-layer student from every other teacher layer gave no benefit
@@ -314,7 +324,7 @@ for a final 2×16, training it directly (0.686) beats pruning down from 32,
 al.'s result is about compute-limited training of large transformers; here
 the small model is not compute-limited.
 
-## 6 · Specialization: the pigeon question
+## 6 · Specialization (the bird-detector question)
 
 **How small can a one-class model be?** (`specialist_size`, bird AP)
 
@@ -359,10 +369,10 @@ stand-in for negatives.
 
 ---
 
-## What this means for pigeon
+## What this means for the cockpit
 
-pigeon's loop is: cut YOLOv8n (remove channels, round weights to fewer bits,
-or both), then fine-tune on 400 COCO images that all contain birds, with the
+The YOLOv8n cockpit's loop is: cut YOLOv8n (remove channels, round weights to
+fewer bits, or both), then fine-tune on 400 COCO images that all contain birds, with the
 quantizer inside the training loop (QAT) when the recipe quantizes, and
 measure bird mAP@50. The toy can't promise numbers for YOLO, but it points at
 concrete things to try, roughly in order of expected payoff:
@@ -381,35 +391,36 @@ concrete things to try, roughly in order of expected payoff:
    Ultralytics trainer `recover_job.py` drives has no distillation term yet;
    that is the code to add.
 3. **Cut in small steps and give each step a real recovery budget.** Here,
-   short recovery made pruning look up to 15 points worse than it is. pigeon's
-   own runs (STATUS.md) point the same way, more strongly: one 20% cut plus
+   short recovery made pruning look up to 15 points worse than it is. The
+   cockpit's own runs (cockpit/STATUS.md) point the same way, more strongly: one 20% cut plus
    40 epochs recovered only to 0.0706, while three 7.2% cuts with 15 epochs
    after each kept 0.2874 (native 0.4284) with 31% fewer params. The toy's
    gradual unstructured pruning only helped at 99% sparsity, so on this
    question trust the detector. Each step lost more than the last
-   (0.3943, 0.3377, 0.2874), and STATUS.md names more data and epochs per step
+   (0.3943, 0.3377, 0.2874), and cockpit/STATUS.md names more data and epochs per step
    as the next lever. Those recovered numbers lean optimistic: `best.pt` is
    picked on the same 125 images they are scored on.
 4. **Collapse the head to the task.** Keeping 80 class outputs costs capacity
    a small model doesn't have (section 6). A bird-only (or bird +
    "everything else") head, distilled from the teacher's grouped scores, is
-   the detector version of the specialist head. pigeon still trains the
+   the detector version of the specialist head. The cockpit still trains the
    80-class head.
 5. **Expect quantization to be the cheap win and structure to be the hard
    one.** 8 bits was free everywhere in the toy; low bits need group scales
    and QAT, and hurt small models far more than big ones. The detector agrees:
    with group-128 scales 8-bit costs 0.5% of YOLOv8n's bird mAP@50 and plain
    4-bit rounding collapses, while a one-shot 5% channel cut scores 0.000
-   before fine-tuning (README.md). Better schemes push the precision cliff
+   before fine-tuning (cockpit/README.md). Better schemes push the precision cliff
    back: FP4 levels with one scale per output channel keep 79% of native mAP,
    92% with stages 0-2 left at 8 bits (4.04 bits per weight), and QAT took a
-   3.16-bit recipe from about 0% to 70% of native in 3 epochs (README.md,
-   measured on a stand-in bird set, so read them as relative). The toy's order
+   3.16-bit recipe from about 0% to 70% of native in 3 epochs
+   (cockpit/README.md, measured on a stand-in bird set, so read them as
+   relative). The toy's order
    holds: Regrow prunes first and then fine-tunes with the quantizer in the
    loop.
 6. **Don't trust gradient-based importance computed on training images.** The
    model's loss there is near zero; measure importance on held-out images, or
-   use L1, which was best or tied here. pigeon's Export already ranks channels
+   use L1, which was best or tied here. The cockpit's Export already ranks channels
    by weight magnitude, and its structure scan measures each stage's mAP drop
    on evaluation images rather than training images.
 

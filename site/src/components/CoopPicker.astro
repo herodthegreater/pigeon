@@ -1,0 +1,56 @@
+---
+/**
+ * The Coop has two cages: Pigeon, the bird-or-not classifier, and YOLOv8n, the
+ * detector. This picker sits at the top of both pages and says which one you are in.
+ */
+interface Props { active: "pigeon" | "yolo" }
+const { active } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const models = [
+  { id: "pigeon", name: "Pigeon", what: "bird or not", href: `${base}coop/` },
+  { id: "yolo", name: "YOLOv8n", what: "finds the birds", href: `${base}coop/yolo/` },
+] as const;
+---
+<nav class="picker" aria-label="Model">
+  <span class="label" aria-hidden="true">Model</span>
+  <ul>
+    {models.map((m) => (
+      <li>
+        <a href={m.href} aria-current={m.id === active ? "page" : undefined}>
+          <span class="name">{m.name}</span> <span class="what">({m.what})</span>
+        </a>
+      </li>
+    ))}
+  </ul>
+</nav>
+
+<style>
+  /* Two ruled entries on one line, like tabs in a printed index: the current cage is underlined in teal. */
+  .picker {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4);
+    border-bottom: 1px solid var(--rule);
+  }
+  .label { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 var(--space-5); }
+  a {
+    display: inline-flex; align-items: baseline; gap: var(--space-1); min-height: 36px; padding-block: var(--space-2);
+    color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .name { font-family: var(--display); font-size: var(--step-1); font-weight: 600; }
+  .what { font-size: var(--step--1); }
+  a:hover { color: var(--ink); }
+  a:hover .what { text-decoration: underline; text-underline-offset: 3px; }
+  a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--teal); }
+  @media (pointer: coarse), (max-width: 640px) {
+    a { min-height: var(--tap); align-items: center; }
+  }
+  /* Under 480px the label and both entries no longer fit one line. The label goes (the nav is named "Model"
+     already), and the two cages split the width, each name over its role, both standing on the rule. */
+  @media (max-width: 480px) {
+    .picker { display: block; }
+    .label { display: none; }
+    ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-3); }
+    li { display: flex; }
+    a { flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; }
+  }
+</style>

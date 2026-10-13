@@ -38,7 +38,7 @@ From `small_tricks`, 3,000 steps, mean of 3 seeds, accuracy on 20 classes. The 3
 
 Training longer is the only one of the four tricks with a clear gain. Label smoothing is within noise (2x16 standard deviations are about 0.008). Mixup and EMA hurt. That fits underfitting: regularizers fight memorisation, and this model has none to fight. Distilling from the teacher (T=1, on the labeled inputs plus 20,000 unlabeled ones) adds only 0.0077 for 2x16 and 0.0148 for 2x32.
 
-Page runs (1,000 steps, width 16): baseline 0.5803, label smoothing 0.5846, mixup 0.5397, EMA 0.5796, 4x longer 0.6909. At width 64, EMA gives 0.8505 against 0.8511. With a decay matched to the run, EMA is neutral.
+Page runs (1,000 steps, width 16): baseline 0.5803, label smoothing 0.5846, mixup 0.5397, EMA 0.5796, 4x longer 0.6909. At width 64, EMA gives 0.8508 against 0.8514. With a decay matched to the run, EMA is neutral.
 
 With 8,000 clean labels the toy cannot show where regularizers usually help: big models on small or noisy data.
 
@@ -56,4 +56,4 @@ With 8,000 clean labels the toy cannot show where regularizers usually help: big
 
 ## Going further
 
-Big models overfit, so these tricks are standard there. Ultralytics' trainer, which pigeon's `recover_job.py` drives, keeps an EMA of the weights by default and ramps its decay up over early updates, avoiding the init problem above. STATUS.md lists "more train data, more epochs" as pigeon's next lever. On this toy, more steps was the one trick that reliably helped a capacity-limited model.
+Big models overfit, so these tricks are standard there. Ultralytics' trainer, which the YOLOv8n cockpit's `recover_job.py` drives, keeps an EMA of the weights by default and ramps its decay up over early updates, avoiding the init problem above. STATUS.md lists "more train data, more epochs" as the cockpit's next lever. On this toy, more steps was the one trick that reliably helped a capacity-limited model.

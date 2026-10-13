@@ -230,6 +230,21 @@ python build_web.py                      # -> web/index.html + model.json + weig
 python -m http.server -d web 8765        # open http://localhost:8765
 ```
 
+### The site's Coop
+
+`build_coop.py` exports the same fused fp16 weights (as `weights.bin`) and layer
+graph for the site's YOLOv8n cage (`site/src/pages/coop/yolo.astro`), which
+scores the detector on the site's own 500 Open Images photos at 224 px instead
+of the COCO eval photos. It also records the harness's AP@50 on those photos
+(native, INT8 and INT4 per channel) and writes the unit tests' parity fixture.
+The browser engine is a TypeScript copy of `web/engine.js` in
+`site/src/lib/detector/`; its stage masking is engine.js's (the weakest channels
+of every conv in a stage, by L1 norm), not Export's torch-pruning plan.
+
+```bash
+python build_coop.py                     # -> site/public/coop/yolov8n/ + the parity fixture
+```
+
 ## Architecture & components
 
 ### `harness/` — the domain-agnostic reverse-training instrument

@@ -1,0 +1,113 @@
+---
+/**
+ * The page for any address that doesn't exist. GitHub Pages serves dist/404.html
+ * for every unknown path under /pigeon/, at that path, so every link and asset
+ * here is absolute (the base URL), never relative.
+ */
+import Base from "../layouts/Base.astro";
+import "../styles/page.css";
+import { DODO, mascotSVG } from "../lib/ui/mascot";
+import { course } from "../components/school/course";
+import { experiments, lessons, methods } from "../lib/lab/data";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+// The dodo: a model that broke while it was still full size (ratio 1, all bones).
+const dodo = mascotSVG({ ratio: 1, starve: 1 });
+if (!dodo.dodo) throw new Error("404: mascotSVG no longer draws a dodo for a broken model at ratio 1");
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const runnable = methods().filter((m) => m.status === "runnable").length;
+const places = [
+  { href: base, name: "Home", aside: "", summary: "What Pigeon is, and the birds a model turns into as it gets smaller." },
+  {
+    href: `${base}school/`,
+    name: "Flight School",
+    aside: `${plural(course().length, "chapter", "chapters")}, ${plural(lessons().length, "lesson", "lessons")}`,
+    summary: "The course in order, and coding lessons you check in your browser.",
+  },
+  { href: `${base}coop/`, name: "The Coop", aside: "Pigeon and YOLOv8n", summary: "Shrink Pigeon or YOLOv8n in your browser and see which bird it becomes." },
+  {
+    href: `${base}guide/`,
+    name: "Field Guide",
+    aside: plural(methods().length, "method", "methods"),
+    summary: `One write-up per compression method; ${runnable} of them run in your browser.`,
+  },
+  { href: `${base}results/`, name: "Results", aside: plural(experiments().length, "experiment", "experiments"), summary: "The lab's experiments, their figures and full tables." },
+  { href: `${base}life-list/`, name: "Life list", aside: "kept in your browser", summary: "Every bird you have hatched in the Coop and in Field Guide runs, each species at its best sighting." },
+];
+// Every place but Home is one of the header's sections, so the count can't drift from the list.
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const sections = places.length - 1;
+const sectionsText = `${WORDS[sections] ?? sections} ${sections === 1 ? "section" : "sections"}`;
+---
+<Base title="Page not found · Pigeon" description="There is no page at this address. The pages that do exist are listed here.">
+  <main id="main" class="page lost">
+    <header class="lost-head">
+      <div class="words">
+        <h1>This page went the way of the dodo</h1>
+        <p class="lede">
+          Nothing lives at <span class="path" data-path>this address</span>. It may have moved when the lab's pages
+          became the Field Guide, Flight School and Results, or the address may have a typo. The home page and the
+          site's {sectionsText} are below.
+        </p>
+      </div>
+      {/* The page's one figure, a plate beside the heading. The drawing is described by its caption. */}
+      <figure class="dodo">
+        <div class="bird" aria-hidden="true" set:html={dodo.svg} />
+        <figcaption>
+          <span class="bird-name">{DODO.name}</span> <span class="bird-latin">{DODO.latin}</span>
+          <span class="bird-note">The bird a model becomes when it breaks while it is still nearly full size.</span>
+        </figcaption>
+      </figure>
+    </header>
+
+    <section class="group" aria-labelledby="exist">
+      <h2 id="exist">Pages that do exist</h2>
+      <ul class="entries">
+        {places.map((p) => (
+          <li>
+            <a class="entry" href={p.href}>
+              <span class="name">{p.name}</span>
+              {p.aside && <span class="aside num">{p.aside}</span>}
+              <span class="summary">{p.summary}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  </main>
+</Base>
+
+<style>
+  .lost-head {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: var(--space-4) var(--space-6);
+    align-items: center; max-width: calc(var(--measure) + 220px + var(--space-6));
+  }
+  .words { display: flex; flex-direction: column; gap: var(--space-3); }
+  .dodo { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  /* A plate, like the home page's birds: card ground, hairline, square corners. */
+  .bird { background: var(--card); border: 1px solid var(--rule); padding: var(--space-2); }
+  .bird :global(svg) { display: block; width: 100%; height: auto; }
+  .dodo figcaption { font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: 0 var(--space-2); }
+  .bird-name { font-family: var(--display); font-weight: 600; color: var(--ink); }
+  .bird-latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
+  .bird-note { flex-basis: 100%; }
+  .path { font-family: var(--mono); font-size: 0.9em; color: var(--ink); overflow-wrap: anywhere; }
+  /* Phones: the words first, then the dodo small beside its caption, so the links stay near the top. */
+  @media (max-width: 640px) {
+    .lost-head { grid-template-columns: minmax(0, 1fr); }
+    .dodo { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: center; gap: var(--space-3); }
+  }
+</style>
+
+<script>
+  // Name the address that wasn't found (the server keeps it in the location bar).
+  const el = document.querySelector<HTMLElement>("[data-path]");
+  if (el) {
+    try {
+      el.textContent = decodeURI(location.pathname);
+    } catch {
+      el.textContent = location.pathname;
+    }
+  }
+</script>

@@ -1,0 +1,309 @@
+---
+/**
+ * The life list: every bird this visitor has hatched on the site, read from this
+ * browser's storage (lib/ui/birds.ts). The page is built as a key of the six
+ * birds, then filled in the browser; without JavaScript or storage it says so.
+ */
+import Base from "../layouts/Base.astro";
+import "../styles/page.css";
+import "../styles/prose.css";
+import { PRESETS } from "../lib/ui/recipe";
+import { methods } from "../lib/lab/data";
+import { KEY, RULES, entryHTML } from "../components/birds/lifelist";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const preset = (id: string) => {
+  const p = PRESETS.find((x) => x.id === id);
+  if (!p) throw new Error(`life-list: no Coop preset "${id}"`);
+  return p;
+};
+const presets = [preset("fp16"), preset("mixed")];
+const runnable = new Map(methods().filter((m) => m.status === "runnable").map((m) => [m.id, m.name]));
+const guide = ["ptq", "magnitude_pruning"].map((id) => {
+  const name = runnable.get(id);
+  if (!name) throw new Error(`life-list: "${id}" is not a runnable Field Guide method`);
+  return { id, name };
+});
+---
+<Base title="Life list · Pigeon" active="lifelist" description="Every bird you have hatched on this site, kept in your browser the way a birder keeps a life list.">
+  <main id="main" class="page lifelist" data-lifelist>
+    <header>
+      <h1>Life list</h1>
+      <p class="lede">
+        Every bird you hatch on this site, kept the way a birder keeps a life list: each species counts once, at its best
+        sighting. Birds come only from runs you make yourself, in the Coop's two cages and in the Run box on Field Guide methods.
+      </p>
+      <p class="count" id="count" tabindex="-1" data-count>Reading your life list from this browser.</p>
+      <noscript>
+        <p class="count">Your life list is kept in this browser's storage, and reading it needs JavaScript, which is turned off. Turn it on and reload the page to see your birds.</p>
+        <style is:inline>[data-count], [data-sightings], [data-empty] { display: none !important; }</style>
+      </noscript>
+    </header>
+
+    <section class="key" aria-labelledby="species-title">
+      <h2 id="species-title">The six birds</h2>
+      <p class="key-note">
+        A bird's species follows how many times smaller its model is than the model it was measured against. Its
+        condition follows one of two rules, and every sighting below says which. A bird is drawn once you have seen it,
+        in the best condition you have seen it in.
+      </p>
+      <dl class="rules">
+        {[RULES.keep, RULES.pigeon].map((r) => (
+          <div>
+            <dt>{r.name}<span class="rule-who">, for {r.who}</span></dt>
+            <dd>{r.text}</dd>
+          </div>
+        ))}
+      </dl>
+      <ol class="species" data-species>
+        {KEY.map((k) => <li class="sp" data-id={k.id} set:html={entryHTML(k, null, "srv")} />)}
+      </ol>
+    </section>
+
+    <section class="sightings" aria-labelledby="sightings-title" data-sightings hidden>
+      <h2 id="sightings-title">Every sighting</h2>
+      <div class="filter">
+        <label for="ll-filter">Show</label>
+        <select id="ll-filter" data-filter><option value="">Every species</option></select>
+        <p class="shown" aria-live="polite" data-shown></p>
+      </div>
+      {/* The section is the one landmark; the scroll box is a named group, so it says what it holds when it takes focus. */}
+      <div class="tablewrap" tabindex="0" role="group" aria-label="Every sighting, as a table">
+        <table class="ll-table">
+          <thead>
+            <tr>
+              <th scope="col">When</th>
+              <th scope="col">Bird</th>
+              <th scope="col">Model and recipe</th>
+              <th scope="col" class="num">Size</th>
+              <th scope="col" class="num">Score</th>
+              <th scope="col">Rule</th>
+            </tr>
+          </thead>
+          <tbody data-rows></tbody>
+        </table>
+      </div>
+      <p class="table-note">Newest first. Size is how many times smaller (or bigger) than its reference the model is. Score is what the bird's rule reads: the share of the reference's score the model keeps, or for Pigeon's line, its accuracy and pointing. Rule names which of the two rules above graded the bird. The same recipe run again replaces its earlier sighting.</p>
+
+      <div class="clear" data-clear>
+        <button type="button" class="btn secondary" data-clear-start>Clear the life list</button>
+        <div class="confirm" data-confirm hidden>
+          <p id="confirm-q" data-confirm-q></p>
+          <div class="confirm-actions">
+            <button type="button" class="btn danger" data-clear-yes aria-describedby="confirm-q">Clear it</button>
+            <button type="button" class="btn secondary" data-clear-no>Keep it</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="empty" aria-labelledby="empty-title" data-empty hidden>
+      <h2 id="empty-title">No birds yet</h2>
+      <p>Every model you make smaller here hatches a bird, and each one is saved to this list. Three places to start:</p>
+      <ul class="starts">
+        <li>
+          <span class="start-what">Load a preset in the Coop, where you shrink Pigeon itself:</span>
+          {presets.map((p, i) => <>{i > 0 && " or "}<a href={`${base}coop/?preset=${p.id}`}>{p.name}</a></>)}.
+        </li>
+        <li>
+          <span class="start-what">Shrink a real detector in the Coop's second cage:</span>
+          <a href={`${base}coop/yolo/`}>YOLOv8n</a>.
+        </li>
+        <li>
+          <span class="start-what">Run a Field Guide method in your browser:</span>
+          {guide.map((g, i) => <>{i > 0 && " or "}<a href={`${base}guide/${g.id}/#run`}>{g.name}</a></>)}.
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    import { clearLifeList, LIFE_LIST_EVENT, readLifeList, type Sighting } from "../lib/ui/birds";
+    import { KEY, countLine, entryHTML, newestFirst, rowHTML, summarize } from "../components/birds/lifelist";
+
+    const root = document.querySelector<HTMLElement>("[data-lifelist]")!;
+    const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+    const count = $<HTMLElement>("[data-count]");
+    const sightingsBox = $<HTMLElement>("[data-sightings]");
+    const empty = $<HTMLElement>("[data-empty]");
+    const filter = $<HTMLSelectElement>("[data-filter]");
+    const shown = $<HTMLElement>("[data-shown]");
+    const rows = $<HTMLElement>("[data-rows]");
+    const clearStart = $<HTMLButtonElement>("[data-clear-start]");
+    const confirm = $<HTMLElement>("[data-confirm]");
+    const confirmQ = $<HTMLElement>("[data-confirm-q]");
+    const clearYes = $<HTMLButtonElement>("[data-clear-yes]");
+    const clearNo = $<HTMLButtonElement>("[data-clear-no]");
+    const entries = new Map([...root.querySelectorAll<HTMLElement>("[data-species] > li")].map((li) => [li.dataset.id!, li]));
+
+    let list: Sighting[] = [];
+
+    function renderTable() {
+      const want = filter.value;
+      const pick = newestFirst(list).filter((s) => !want || s.species === want);
+      rows.innerHTML = pick.map(rowHTML).join("");
+      const name = KEY.find((k) => k.id === want)?.name;
+      shown.textContent = want ? `Showing ${pick.length} of ${list.length} sightings: ${name ?? want} only.` : `Showing all ${list.length} sightings.`;
+    }
+
+    function render() {
+      const read = readLifeList();
+      if (!read.ok) {
+        count.textContent = "This browser blocks site storage, so there is no life list here and nothing you hatch can be saved. Allow this site to store data (private windows often block it) and reload the page.";
+        count.classList.add("blocked");
+        for (const k of KEY) entries.get(k.id)!.innerHTML = entryHTML(k, null);
+        sightingsBox.hidden = true;
+        empty.hidden = true;
+        return;
+      }
+      count.classList.remove("blocked");
+      list = read.sightings;
+      const sum = summarize(list);
+      count.textContent = countLine(sum);
+      for (const k of KEY) entries.get(k.id)!.innerHTML = entryHTML(k, sum);
+
+      empty.hidden = list.length > 0;
+      sightingsBox.hidden = list.length === 0;
+      if (!list.length) return;
+
+      // The filter offers only species that have sightings; a choice that no longer has any falls back to all.
+      const keep = filter.value;
+      const seen = KEY.filter((k) => sum.counts.has(k.id));
+      filter.innerHTML = `<option value="">Every species (${list.length})</option>` +
+        seen.map((k) => `<option value="${k.id}">${k.name} (${sum.counts.get(k.id)})</option>`).join("");
+      filter.value = seen.some((k) => k.id === keep) ? keep : "";
+      if (!confirm.hidden) confirmQ.textContent = question();
+      renderTable();
+    }
+
+    const question = () => `Clear all ${list.length} ${list.length === 1 ? "sighting" : "sightings"} from this browser? This can't be undone.`;
+
+    filter.addEventListener("change", renderTable);
+
+    clearStart.addEventListener("click", () => {
+      confirmQ.textContent = question();
+      confirm.hidden = false;
+      clearStart.hidden = true;
+      clearNo.focus();
+    });
+    clearNo.addEventListener("click", () => {
+      confirm.hidden = true;
+      clearStart.hidden = false;
+      clearStart.focus();
+    });
+    clearYes.addEventListener("click", () => {
+      const n = list.length;
+      const ok = clearLifeList();
+      confirm.hidden = true;
+      clearStart.hidden = false;
+      render(); // the event below renders too; this keeps the page right even if storage refused
+      if (!ok) {
+        count.textContent = "The life list couldn't be cleared: this browser refused to change its storage. Reload the page and try again.";
+      } else {
+        count.textContent = `Cleared ${n} ${n === 1 ? "sighting" : "sightings"}. ${count.textContent}`;
+      }
+      // The button that had focus is gone with the list; focus the line that says what happened.
+      count.focus();
+    });
+
+    /** Re-render without dropping focus to the page: a replaced link hands focus to its new copy, else to the count line. */
+    function refresh() {
+      const a = document.activeElement as HTMLElement | null;
+      const li = a?.closest<HTMLElement>("[data-species] > li");
+      const linkIndex = li && a ? [...li.querySelectorAll("a")].indexOf(a as HTMLAnchorElement) : -1;
+      render();
+      if (!a || a === document.body || (document.contains(a) && !a.closest("[hidden]"))) return;
+      const again = li && linkIndex >= 0 ? entries.get(li.dataset.id!)?.querySelectorAll("a")[linkIndex] : null;
+      (again ?? count).focus();
+    }
+
+    addEventListener(LIFE_LIST_EVENT, refresh);
+    // Another tab (the Coop, a Field Guide run) saved a bird: show it here too.
+    addEventListener("storage", (e) => { if (e.key === null || e.key === "pigeon.lifelist") refresh(); });
+
+    render();
+  </script>
+
+  <style>
+    .count { font-family: var(--mono); font-size: var(--step--1); color: var(--ink); }
+    .count.blocked { font-family: var(--body); color: var(--bad); }
+
+    .key { display: flex; flex-direction: column; gap: var(--space-3); border-top: 2px solid var(--ink); padding-top: var(--space-4); }
+    .key > h2, .sightings > h2, .empty > h2 { font-size: var(--step-2); }
+    .key-note { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
+    /* The two rules, each named the way the table's Rule column names it. */
+    .rules { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); max-width: var(--measure); font-size: var(--step--1); }
+    .rules dt { font-weight: 600; color: var(--ink); }
+    .rules .rule-who { font-weight: 400; color: var(--muted); }
+    .rules dd { margin: 0; color: var(--muted); }
+
+    /* The key: six ruled entries, each drawing on its own plate, like a field guide's species pages. */
+    .species {
+      list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0 var(--space-5); border-top: 1px solid var(--rule);
+    }
+    .sp { display: flex; flex-direction: column; gap: var(--space-2); padding-block: var(--space-4); border-bottom: 1px solid var(--rule); min-width: 0; }
+    .sp :global(.sp-head) { display: flex; flex-direction: column; gap: var(--space-2); }
+    .sp :global(.sp-draw) { background: var(--card); border: 1px solid var(--rule); padding: var(--space-2); }
+    .sp :global(.sp-draw svg) { display: block; width: 100%; height: auto; }
+    /* An empty plate, the drawing's own shape (its viewBox is 230 by 160), for a bird not seen yet. */
+    .sp :global(.sp-blank) { background: none; }
+    .sp :global(.sp-blank-in) { aspect-ratio: 230 / 160; display: grid; place-items: center; text-align: center; }
+    .sp :global(:is(.sp-id, .sp-detail)) { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+    .sp :global(.sp-name) { font-size: var(--step-1); }
+    .sp :global(.sp-latin) { font-family: var(--display); font-style: italic; color: var(--magenta); font-size: var(--step--1); }
+    .sp :global(.sp-size) { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+    .sp :global(.sp-state) { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+    .sp :global(.sp-best) { display: flex; flex-direction: column; font-size: var(--step--1); }
+    .sp :global(.sp-recipe) { color: var(--muted); }
+    .sp :global(.sp-nums) { font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+    .sp :global(.sp-rule) { font-size: var(--step--2); color: var(--muted); }
+    .sp :global(.sp-again) { font-size: var(--step--1); }
+
+    :global(.lifelist .c-healthy) { color: var(--good); }
+    :global(.lifelist .c-emaciated) { color: var(--warn); }
+    :global(.lifelist .c-skeleton) { color: var(--bad); }
+
+    .sightings { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--rule); padding-top: var(--space-4); }
+    .filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+    .filter label { font-size: var(--step--1); font-weight: 600; }
+    .filter select {
+      min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--rule-strong); border-radius: var(--radius);
+      background: var(--card); color: var(--ink); max-width: 100%;
+    }
+    .shown { font-size: var(--step--1); color: var(--muted); }
+    .ll-table :global(td) { font-size: var(--step--1); }
+    .ll-table :global(.when) { white-space: nowrap; font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+    .ll-table :global(.row-bird) { font-weight: 600; }
+    .ll-table :global(.row-model) { min-width: 16ch; }
+    .ll-table :global(.row-recipe) { display: block; color: var(--muted); }
+    /* Pigeon's line reads two numbers: one a line, so the column stays narrow. */
+    .ll-table :global(.score span) { display: block; }
+    .ll-table :global(.rule) { white-space: nowrap; color: var(--muted); }
+    .table-note { font-size: var(--step--1); color: var(--muted); max-width: var(--measure); }
+
+    .clear { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--rule); align-items: flex-start; }
+    .confirm { display: flex; flex-direction: column; gap: var(--space-2); }
+    .confirm p { font-size: var(--step--1); }
+    .confirm-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    /* The one destructive button on the site: the bad color as its outline, not a fill. */
+    .btn.danger { background: var(--card); color: var(--bad); border-color: var(--bad); }
+
+    .empty { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--rule); padding-top: var(--space-4); max-width: var(--measure); }
+    .starts { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--space-2); }
+    .start-what { display: block; color: var(--muted); font-size: var(--step--1); }
+
+    @media (max-width: 860px) {
+      .species { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    /* Phones: one bird a line, its plate beside its name and the best sighting below both. */
+    @media (max-width: 540px) {
+      .species { grid-template-columns: minmax(0, 1fr); }
+      .sp :global(.sp-head) { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--space-3); align-items: center; }
+    }
+    @media (pointer: coarse), (max-width: 640px) {
+      .filter select { min-height: var(--tap); }
+      .sp :global(.sp-again a), .ll-table :global(.row-model a), .starts a { display: inline-flex; align-items: center; min-height: var(--tap); }
+    }
+  </style>
+</Base>

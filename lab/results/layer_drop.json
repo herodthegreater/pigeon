@@ -2,7 +2,7 @@
  "name": "layer_drop",
  "group": "4 \u00b7 Shrinking a trained model",
  "title": "Deleting whole layers: plain vs. residual",
- "question": "Remove k of 8 hidden layers from a deep teacher. Residual nets are said to behave like ensembles of shallow paths -- does that make depth removable? And is initializing a shallow student from the teacher's layers worth it?",
+ "question": "Remove k of 8 hidden layers from a deep teacher. Residual nets are said to behave like ensembles of shallow paths. Does that make depth removable? And is initializing a shallow student from the teacher's layers worth it?",
  "quick": false,
  "seconds": 138.0,
  "rows": [

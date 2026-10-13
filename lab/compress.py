@@ -8,6 +8,7 @@
                   kmeans_share             k shared values per layer (non-uniform)
     factorize     low_rank                 W ~= A B via truncated SVD
     depth         drop_layers              delete whole hidden layers
+    size          storage_bits             what a net costs to store, in bits
 """
 
 from __future__ import annotations
@@ -18,6 +19,61 @@ from .nn import MLP
 from .train import softmax
 
 F = np.float32
+
+
+# ---------------------------------------------------------------------------
+# storage
+# ---------------------------------------------------------------------------
+def storage_bits(m: MLP, bits: int = 32, group: int | None = None, sparse: bool = False, *,
+                 per_row: bool = False, codebook: int = 0, fp32_last: bool = False) -> int:
+    """Bytes-on-disk proxy, in bits: weights x ``bits``, + fp16 scales, + fp32
+    biases. The experiments' ``kbits`` columns and every method run use it.
+
+    The format is passed in, not read off the weights: quantization rounds
+    small weights to exactly zero, so counting nonzeros would make a quantized
+    net look pruned. Dense storage counts every position. ``sparse`` (for
+    pruned nets) counts only the nonzero weights, at ``bits`` each, plus a
+    1-bit-per-position occupancy bitmap that says where they go.
+
+    Scales (only when ``bits < 32``) are one per tensor (``group=None``), one
+    per ``group`` consecutive weights of each tensor (``fake_quantize``'s
+    layout, which pads the last group), or with ``per_row`` one per output
+    row, or per row x ``group`` input columns (``layerwise.quant_rows``'s
+    layout). ``codebook=k`` is k-means weight sharing instead: a k-entry fp32
+    codebook per layer and no scales. ``fp32_last`` keeps the output layer in
+    fp32, as the layer-wise quantizers do (``skip_last``)."""
+    total = sum(b.size for b in m.b) * 32
+    last = m.n_layers - 1
+    for i in range(m.n_layers):
+        w = m.eff(i)
+        size = w.size
+        lb = 32 if fp32_last and i == last else bits
+        total += (int((w != 0).sum()) if sparse else size) * lb
+        if sparse:
+            total += size
+        if lb >= 32:
+            continue
+        if codebook:
+            total += codebook * 32
+        elif per_row:
+            din, dout = w.shape
+            total += dout * (-(-din // group) if group else 1) * 16
+        else:
+            total += (-(-size // group) if group else 1) * 16
+    return int(total)
+
+
+def kbits(m: MLP, *args, **kw) -> float:
+    """``storage_bits`` in kilobits, with the format the net itself declares by
+    default: a net that still fake-quantizes (QAT) is stored at its ``qbits``
+    and ``qgroup``, a net with pruning masks is stored sparse. A net whose
+    quantization was baked in (``quantize``, ``kmeans_share``, the layer-wise
+    quantizers) or that was pruned without masks (Wanda, SparseGPT) no longer
+    says so, and its caller passes the format."""
+    if not args and not kw:
+        kw = dict(bits=m.qbits or 32, group=m.qgroup,
+                  sparse=any(mk is not None for mk in m.masks))
+    return storage_bits(m, *args, **kw) / 1000
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +123,7 @@ def neuron_importance(net: MLP, X: np.ndarray, y: np.ndarray | None = None,
     """One score per hidden neuron, per hidden layer (higher = keep).
 
     l1        -- L1 norm of the neuron's incoming weights (torch-pruning's
-                 GroupMagnitudeImportance, the criterion pigeon's cockpit uses)
+                 GroupMagnitudeImportance, the criterion the YOLOv8n cockpit uses)
     act       -- mean |activation| on data
     taylor    -- |a * dL/da| summed over data: first-order estimate of the loss
                  change if the neuron is removed (data- and task-aware)

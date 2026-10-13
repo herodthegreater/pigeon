@@ -52,7 +52,7 @@ The best chain is ahead by less than one standard deviation. The gap experiment 
 
 The 2x8 student gets about the same from a 16-wide teacher as from a 512-wide one; its best result comes from the 32-wide teacher, which is also the assistant in the best chain. The 2x32 student keeps improving up to the biggest teacher. The 2x8 student is limited by its own size: `size_ladder` gives 0.4428 for a 2x8 trained on labels alone. A TA cannot add capacity.
 
-This page's runs (1000 steps, seed 0) agree. Student 2x8, assistant 2x64: direct 0.3706, via assistant 0.3757. Student 2x4, assistant 2x32: 0.2267 and 0.2382. Student 2x16, assistant 2x128: 0.5854 and 0.5891. Single-seed gaps of this size are within noise. The assistant is weaker than the teacher (2x64 reached 0.8572 against 0.9139), so the student learns from a worse but simpler model. The toy cannot test the regime the paper studied, convolutional students many layers shallower than their teachers, where the mismatch is much larger.
+This page's runs (1000 steps, seed 0) agree. Student 2x8, assistant 2x64: direct 0.3718, via assistant 0.3745. Student 2x4, assistant 2x32: 0.2258 and 0.2369. Student 2x16, assistant 2x128: 0.5850 and 0.5888. Single-seed gaps of this size are within noise. The assistant is weaker than the teacher (2x64 reached 0.8596 against the teacher row's 0.9150; that teacher is the copy the Run button loads, trained again with the same recipe, while the experiment's earlier training scored 0.9139), so the student learns from a worse but simpler model. The toy cannot test the regime the paper studied, convolutional students many layers shallower than their teachers, where the mismatch is much larger.
 
 ## When it breaks
 

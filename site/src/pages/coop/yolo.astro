@@ -1,0 +1,388 @@
+---
+import Base from "../../layouts/Base.astro";
+import CoopPicker from "../../components/CoopPicker.astro";
+import { HEALTHY_KEEP, SKELETON_KEEP } from "../../lib/detector/score";
+import { QUICK } from "../../lib/detector/recipe";
+import { SPECIES_LADDER } from "../../lib/ui/coopbirds";
+import "../../styles/coop.css";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const testsets = import.meta.glob<{ images: unknown[] }>("/public/testset/testset.json", { eager: true, import: "default" });
+const photos = Object.values(testsets)[0]?.images?.length;
+if (!photos) throw new Error("public/testset/testset.json is missing or has no images");
+const models = import.meta.glob<{ imgsz: number; params: number; recorded: { ap: Record<string, { all: number }>; ultralytics: string; date: string } }>(
+  "/public/coop/yolov8n/model.json", { eager: true, import: "default" },
+);
+const model = Object.values(models)[0];
+if (!model) throw new Error("public/coop/yolov8n/model.json is missing: run cockpit/build_coop.py");
+const rec = model.recorded;
+const keepPct = (v: number) => `${Math.round(v * 100)}%`;
+// The life list is its own page; the cage links to it only when that page is in the build, so no build ships a dead link.
+const lifeList = Object.keys(import.meta.glob(["/src/pages/life-list.astro", "/src/pages/life-list/index.astro"], { query: "?raw", import: "default" })).length > 0;
+---
+<Base title="YOLOv8n · The Coop · Pigeon" active="coop" description="Compress YOLOv8n, a real bird-finding detector, in your browser and score it on 500 test photos.">
+  <main id="main" class="coop">
+    <CoopPicker active="yolo" />
+    <section class="hero" aria-labelledby="bird-title">
+      <div class="bird-card">
+        <div class="bird" id="bird"></div>
+        <div class="bird-meta">
+          <p class="condition" id="bird-condition">Loading YOLOv8n…</p>
+          <h1 id="bird-title"><span class="visually-hidden">The Coop, YOLOv8n: </span><span id="bird-name">YOLOv8n</span></h1>
+          <p class="latin" id="bird-latin"></p>
+          <p class="bird-note" id="bird-note">Fetching the detector and {photos} test photos.</p>
+          <noscript>
+            <p class="bird-note">The Coop runs YOLOv8n inside your browser, so it needs JavaScript. Turn JavaScript on and reload the page.</p>
+            <style is:inline>#bird-condition, #bird-note, #board, #work { display: none; }</style>
+          </noscript>
+          {lifeList && <p class="life"><a href={`${base}life-list/`}>Your life list</a> <span id="life-count"></span></p>}
+          <button type="button" class="btn retry" id="retry" hidden>Reload the page</button>
+        </div>
+      </div>
+
+      <div class="board" id="board" data-state="busy">
+        <div class="status"><span id="status">Starting the engine…</span><span class="bar" aria-hidden="true"><span id="bar"></span></span></div>
+        <dl class="metrics" id="metrics">
+          <div class="metric"><dt>Bird AP@50</dt><dd class="value num"><span id="m-ap">…</span><small id="m-ap-d"></small></dd><dd class="desc">1.0 finds every bird, boxed, with no false alarms</dd></div>
+          <div class="metric"><dt>AP kept</dt><dd class="value num"><span id="m-kept">…</span></dd><dd class="desc">of the native model's AP: the bird's health</dd></div>
+          <div class="metric"><dt>Size</dt><dd class="value num"><span id="m-size">…</span><small id="m-ratio"></small></dd><dd class="desc" id="m-size-desc">real bytes, scales included</dd></div>
+          <div class="metric"><dt>Compute</dt><dd class="value num"><span id="m-macs">…</span><small id="m-macs-d"></small></dd><dd class="desc">multiply-adds per photo, live channels only</dd></div>
+        </dl>
+        <p class="basis" id="basis"></p>
+        <p class="record rule-line" id="rule">
+          The bird's species follows how many times smaller the weights are than native ({SPECIES_LADDER}).
+          Its health follows AP kept: healthy at {keepPct(HEALTHY_KEEP)} of native or more, a skeleton at {keepPct(SKELETON_KEEP)} or less, starving in between.
+        </p>
+      </div>
+    </section>
+    <p class="visually-hidden" id="announce" role="status" aria-live="polite" aria-atomic="true"></p>
+
+    <div class="work" id="work">
+      <section class="recipe-col" aria-labelledby="recipe-title">
+        <div class="pane-head">
+          <h2 id="recipe-title">Recipe</h2>
+          <button type="button" class="btn secondary" id="reset" autocomplete="off" disabled>Reset to native</button>
+        </div>
+        <p class="intro">One precision for every weight, and a channel cut for each stage. Every change scores YOLOv8n again: first on {QUICK} photos for a quick estimate, then on all {photos}.</p>
+        <div id="recipe"><p class="waiting">The controls appear once native YOLOv8n has been scored.</p></div>
+      </section>
+
+      <div class="results">
+        <section class="pane" aria-labelledby="eyes-title">
+          <h2 id="eyes-title">Through YOLOv8n's eyes</h2>
+          <div class="specimens" id="tiles"><p class="waiting">Bird photos appear here with YOLOv8n's boxes once the engine has scored them.</p></div>
+          <p class="caption">Twelve bird photos from the test set. Teal boxes are where the birds really are. Magenta dashed boxes are what YOLOv8n reports with more than 25% confidence. A red border means this recipe finds fewer birds in the photo than native YOLOv8n did.</p>
+        </section>
+
+        <section class="pane" aria-labelledby="tried-title">
+          <div class="pane-head">
+            <h2 id="tried-title">Everything you've tried</h2>
+            <button type="button" class="btn secondary" id="clear" autocomplete="off" disabled>Clear history</button>
+          </div>
+          <div class="runs-scroll" id="runs" tabindex="0" role="region" aria-label="Every run, as a table"><p class="waiting">No runs yet: the first one is native YOLOv8n, scored as the page loads.</p></div>
+          <p class="caption">One row per full {photos}-photo scoring run, kept in this browser. The highlighted row is the recipe on screen now; the last column is the bird's condition.</p>
+          <p class="caption" id="store-note" hidden>This browser won't let the page save anything, so these runs will be gone when you leave or reload.</p>
+        </section>
+
+        <section class="pane about" aria-labelledby="about-title">
+          <h2 id="about-title">How this cage keeps score</h2>
+          <p>YOLOv8n runs here, in a background worker on your graphics chip (TensorFlow.js on WebGL), on the same {photos} Open Images photos as Pigeon, at {model.imgsz} × {model.imgsz} pixels. A detection counts when its box overlaps a real bird by at least half; the photos without birds count too, as places to raise false alarms. Native AP is measured once as the page loads and every recipe is compared with it. It won't match the COCO scores Ultralytics publishes, which use 640-pixel photos and all 80 classes.</p>
+          <p>When the weights were exported, the cockpit's PyTorch evaluator scored native YOLOv8n at {rec.ap.native.all.toFixed(3)} on these photos, INT8 per channel at {rec.ap.int8_channel.all.toFixed(3)} and INT4 per channel at {rec.ap.int4_channel.all.toFixed(3)} (recorded {rec.date} with Ultralytics {rec.ultralytics}, not measured on this page). Your browser's numbers should land within a few thousandths of these.</p>
+          <p>Size counts every stored bit: weights at the recipe's precision, one 16-bit number per shared scale, and biases kept at 16 bits. Native is Ultralytics' checkpoint with BatchNorm folded into the convolutions, stored as fp16: {(model.params * 2 / 1e6).toFixed(2)} MB for {(model.params / 1e6).toFixed(2)} million parameters. Precision never changes compute; only channel cuts do.</p>
+          <p class="credits">
+            YOLOv8n is by <a href="https://github.com/ultralytics/ultralytics">Ultralytics</a>, under the <a href="https://github.com/ultralytics/ultralytics/blob/main/LICENSE">AGPL-3.0 license</a>.
+            The photos come from Open Images. The twelve above link to their sources, as do the twenty-four in the <a href={`${base}coop/#drawer-title`}>specimen drawer on Pigeon's page</a>; every photo's author, source and license are listed in the <a href={`${base}testset/testset.json`}>test set's index</a> (JSON).
+          </p>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- YOLOv8n's own injected markup: the precision note, the stage sliders, the detections and the about notes. The shared look is in styles/coop.css. -->
+  <style is:global>
+    .coop .about { border-top: 1px solid var(--rule); padding-top: var(--space-4); }
+    .coop .about p { max-width: var(--measure); font-size: var(--step--1); }
+    .coop .about .credits { color: var(--muted); }
+
+    #recipe .seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #recipe fieldset:disabled { opacity: 0.6; }
+    #recipe fieldset:disabled .seg input { cursor: default; }
+    /* Stage cuts: one ruled line per stage, the label (layer, kind, share of compute), its slider, its value. */
+    #recipe .stages { display: flex; flex-direction: column; margin-top: var(--space-2); }
+    #recipe .stage {
+      display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 3em; align-items: center; gap: 0 var(--space-3);
+      padding-block: var(--space-1); border-top: 1px solid var(--rule); font-size: var(--step--1);
+    }
+    #recipe .stage label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); line-height: 1.3; }
+    #recipe .stage .st { font-weight: 600; }
+    #recipe .stage .kind { color: var(--muted); }
+    #recipe .stage .share { flex-basis: 100%; font-family: var(--mono); font-size: var(--step--2); color: var(--muted); }
+    #recipe .stage output { font-family: var(--mono); font-weight: 500; text-align: right; }
+
+    /* Detections: dashed magenta over the same dark keyline the teal truth boxes get. */
+    #tiles .boxes .found-boxes rect { stroke: var(--detect-box); stroke-width: 2; stroke-dasharray: 5 3; }
+    #tiles .specimen[data-lost="true"] .frame { border-color: var(--bad); }
+    #tiles .specimen[data-lost="true"] .verdict { color: var(--bad); }
+    #tiles .was { color: var(--muted); }
+    #tiles .was:empty { display: none; }
+
+    /* Touch: the credit links get a full tap target, even mid-sentence. */
+    @media (pointer: coarse), (max-width: 640px) {
+      .coop .about a { display: inline-flex; align-items: center; min-height: var(--tap); }
+    }
+    @media (max-width: 640px) {
+      #recipe .stage { grid-template-columns: 8.5em minmax(0, 1fr) 2.75em; gap: 0 var(--space-2); }
+    }
+  </style>
+
+  <script>
+    import { DetectorEngine, missingSupport, NoWebGL, NoWorker, type Boot, type Ready, type Result } from "../../lib/detector/client";
+    import { YoloRecipeEditor } from "../../lib/ui/yolorecipe";
+    import { Detections } from "../../lib/ui/detections";
+    import { detectorCondition } from "../../lib/detector/score";
+    import { describe, keyOf, linkQuery, nativeRecipe, recipeFromLink, QUICK } from "../../lib/detector/recipe";
+    import { sheetUrl } from "../../lib/detector/files";
+    import { mascotSVG, speciesNote, CONDITION_WORD, DODO, type Condition } from "../../lib/ui/mascot";
+    import { birdFor } from "../../lib/ui/birds";
+    import { bindLifeListCount, birdDrawer, cageHref, hatches, sight } from "../../lib/ui/coopbirds";
+    import { ratioShort } from "../../components/birds/format";
+
+    const $ = (id: string) => document.getElementById(id)!;
+    const STORE = "pigeon.coop.yolo.runs";
+    const CAGE = `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}coop/yolo/`;
+    const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+    const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
+    const size = (b: number) => (b >= 1e6 ? `${(b / 1e6).toFixed(2)} MB` : `${Math.round(b / 1e3)} KB`);
+    const gmacs = (m: number) => `${(m / 1e9).toFixed(3)} G`;
+    const secs = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+    // A run is identified by its recipe's key (keyOf); runs saved before keys were kept have only their label.
+    interface Run { key?: string; label: string; ap: number; kept: number; bytes: number; macs: number; condition: Condition }
+    let runs: Run[] = [];
+    let canStore = true;
+    try {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORE) ?? "[]");
+        runs = Array.isArray(saved)
+          ? saved.filter((a) => a && typeof a.label === "string" && (a.key === undefined || typeof a.key === "string") && a.condition in CONDITION_WORD)
+          : [];
+      } catch (err) {
+        if (!(err instanceof SyntaxError)) throw err; // a damaged list starts over
+      }
+      localStorage.setItem(STORE, JSON.stringify(runs)); // also proves this browser lets the page write
+    } catch {
+      canStore = false;
+    }
+    const save = () => { try { localStorage.setItem(STORE, JSON.stringify(runs.slice(-100))); } catch {} };
+    $("store-note").hidden = canStore;
+
+    const lifeCount = document.getElementById("life-count");
+    if (lifeCount) bindLifeListCount(lifeCount);
+
+    const bar = $("bar");
+    const status = (text: string, state: "busy" | "ok" | "error" = "busy") => {
+      $("status").textContent = text;
+      $("board").dataset.state = state;
+    };
+
+    // Screen readers hear one short line per finished 500-photo result or error, never the progress ticks.
+    let announceTimer: ReturnType<typeof setTimeout> | undefined;
+    function announce(text: string) {
+      const el = $("announce");
+      el.textContent = "";
+      clearTimeout(announceTimer);
+      announceTimer = setTimeout(() => { el.textContent = text; }, 100);
+    }
+
+    function onBoot(b: Boot) {
+      if (b.stage === "download") {
+        bar.style.width = b.total ? `${Math.min(1, b.got / b.total) * 100}%` : "0";
+        status(`Downloading YOLOv8n's weights and the test photos · ${mb(b.got)}${b.total ? ` of ${mb(b.total)}` : " so far"}`);
+      } else if (b.stage === "photos") {
+        bar.style.width = `${(b.done / b.total) * 100}%`;
+        status(`Cutting the test photos from their sheets · ${b.done}/${b.total}`);
+      } else if (b.stage === "gpu") {
+        bar.style.width = "0";
+        status("Starting WebGL and compiling YOLOv8n for your graphics chip (slowest on a first visit)…");
+      } else {
+        bar.style.width = `${(b.done / b.total) * 100}%`;
+        status(`Scoring native YOLOv8n on ${b.total} photos… ${b.done}/${b.total}`);
+      }
+    }
+
+    /**
+     * "browser": a missing API (Workers, OffscreenCanvas); only another browser helps, so there's no Reload button.
+     * "setting": WebGL is off, perhaps with hardware acceleration; turning it on and reloading can help.
+     * "load": a download or the engine itself failed; a reload can help.
+     */
+    function failLoad(err: unknown, kind: "browser" | "setting" | "load" = "load") {
+      const cond = $("bird-condition");
+      cond.dataset.c = "error";
+      cond.textContent = kind === "load" ? "Couldn't load" : "Can't run in this browser";
+      $("bird-note").textContent =
+        kind === "browser"
+          ? `YOLOv8n can't run here: ${errText(err)}. Open this page in a current Chrome, Edge, Firefox or Safari (17 or newer).`
+          : kind === "setting"
+            ? `YOLOv8n needs WebGL 2 in a background worker to run on your graphics chip, but ${errText(err)}. Turn on hardware acceleration in your browser's settings and reload, or open this page in a current Chrome, Edge, Firefox or Safari (17 or newer).`
+            : `The detector stopped: ${errText(err)}. Check your connection and reload. If it keeps failing, try a current Chrome, Edge, Firefox or Safari.`;
+      $("retry").hidden = kind === "browser";
+      for (const id of ["metrics", "basis", "rule", "work"]) $(id).hidden = true;
+      bar.style.width = "0";
+      status(kind === "load" ? "Engine stopped" : "Can't start in this browser", "error");
+      announce(`The detector couldn't start: ${errText(err)}`);
+      return null;
+    }
+    $("retry").addEventListener("click", () => location.reload());
+
+    const unsupported = missingSupport();
+    if (unsupported) failLoad(new Error(unsupported.reason), unsupported.setting ? "setting" : "browser");
+    else {
+      const engine = new DetectorEngine(onBoot);
+      const ready = await engine.ready.catch((err) => failLoad(err, err instanceof NoWebGL ? "setting" : err instanceof NoWorker ? "browser" : "load"));
+      if (ready) {
+        try { start(engine, ready); } catch (err) { failLoad(err); }
+      }
+    }
+
+    function start(engine: DetectorEngine, ready: Ready) {
+      const native = ready.native;
+      const tiles = new Detections($("tiles"), ready.previews, sheetUrl, ready.grid, 224);
+      tiles.update(native.previews, native.previews);
+      const drawBird = birdDrawer($("bird"));
+      let current: Run | null = null;
+      const warned = { blocked: false };
+
+      function delta(el: HTMLElement, v: number, ref: number) {
+        const d = v - ref;
+        el.textContent = Math.abs(d) < 0.0005 ? "±0.000" : `${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(3)}`;
+        el.className = Math.abs(d) < 0.0005 ? "flat" : d > 0 ? "up" : "down";
+      }
+
+      type Shown = Pick<Result, "ap" | "nativeAp" | "cost" | "n" | "final">;
+      // Quick results come from the first 100 photos: marked with ≈ until the full score lands.
+      // Returns the bird drawn and the one-line summary that is announced for a full result.
+      function show(r: Shown) {
+        const est = r.final ? "" : "≈ ";
+        const { condition, starve, kept } = detectorCondition(r.ap, r.nativeAp);
+        const ratio = native.cost.bytes / r.cost.bytes;
+        $("metrics").classList.toggle("estimate", !r.final);
+        $("basis").textContent = r.final
+          ? `Measured on all ${r.n} photos in this browser.${ready.float32 ? "" : " This graphics chip computes in 16-bit floats, so scores can differ slightly from other devices."}`
+          : `≈ Estimate from the first ${r.n} photos, against native AP on the same ${r.n}. Confirming on all ${ready.n}…`;
+        $("m-ap").textContent = est + r.ap.toFixed(3);
+        delta($("m-ap-d"), r.ap, r.nativeAp);
+        $("m-kept").textContent = `${est}${(kept * 100).toFixed(1)}%`;
+        $("m-size").textContent = size(r.cost.bytes);
+        $("m-ratio").textContent = ratioShort(ratio);
+        $("m-ratio").className = "flat";
+        const cut = r.cost.macs < native.cost.macs ? ", cut channels left out" : "";
+        $("m-size-desc").textContent = r.cost.effBits < 16 ? `${r.cost.effBits.toFixed(2)} bits per weight, scales included${cut}` : cut ? `16 bits per weight${cut}` : "16 bits per weight, as shipped";
+        $("m-macs").textContent = gmacs(r.cost.macs);
+        $("m-macs-d").textContent = `${((r.cost.macs / native.cost.macs) * 100).toFixed(1)}% of native`;
+        $("m-macs-d").className = "flat";
+
+        const m = mascotSVG({ ratio, starve });
+        drawBird(m.dodo ? "dodo" : m.species.id, m.svg);
+        const cond = $("bird-condition");
+        cond.dataset.c = condition;
+        const word = CONDITION_WORD[condition];
+        const words = condition === "healthy" ? `${word} · still finds the birds` : condition === "emaciated" ? `${word} · ${Math.round(starve * 100)}% of the way to a skeleton` : `${word} · lost the birds`;
+        cond.textContent = r.final ? words : `Early read · ${words}`;
+        const name = m.dodo ? DODO.name : m.species.name;
+        $("bird-name").textContent = name;
+        $("bird-latin").textContent = m.dodo ? DODO.latin : `${m.species.latin} · about ${m.species.grams} g`;
+        $("bird-note").textContent = m.dodo
+          ? DODO.note
+          : condition === "skeleton"
+            ? "This recipe broke YOLOv8n: it has lost most of the birds."
+            : speciesNote(m.species, ratio);
+        return { ratio, kept, summary: `Scored: bird AP ${r.ap.toFixed(3)}, ${Math.round(kept * 100)}% of native, ${size(r.cost.bytes)}, ${name}, ${word.toLowerCase()}` };
+      }
+
+      function drawRuns() {
+        if (!runs.length) {
+          $("runs").innerHTML = `<p class="waiting">No runs kept. Change the recipe to add one.</p>`;
+          return;
+        }
+        const rows = [...runs].reverse().map((a) => `<tr${current && a.key === current.key ? ' aria-current="true"' : ""}>
+          <td>${esc(a.label)}</td><td class="num">${a.ap.toFixed(3)}</td><td class="num">${(a.kept * 100).toFixed(1)}%</td>
+          <td class="num">${size(a.bytes)}</td><td class="num">${gmacs(a.macs)}</td><td class="c-${a.condition}">${CONDITION_WORD[a.condition]}</td></tr>`).join("");
+        $("runs").innerHTML = `<table><thead><tr><th scope="col">Recipe</th><th scope="col" class="num">Bird AP@50</th><th scope="col" class="num">AP kept</th><th scope="col" class="num">Size</th><th scope="col" class="num">Compute</th><th scope="col">Condition</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+
+      // The same recipe run again replaces its row. A row saved without a key is matched by its label,
+      // which named every setting whenever it had three cuts or fewer.
+      function record(r: Shown, label: string, key: string) {
+        const { condition, kept } = detectorCondition(r.ap, r.nativeAp);
+        current = { key, label, ap: r.ap, kept, bytes: r.cost.bytes, macs: r.cost.macs, condition };
+        runs = runs.filter((a) => (a.key === undefined ? a.label !== label : a.key !== key));
+        runs.push(current);
+        save();
+        drawRuns();
+      }
+
+      const nativeShown: Shown = { ap: native.ap, nativeAp: native.ap, cost: native.cost, n: ready.n, final: true };
+      let lastFinal: Shown = nativeShown; // what the board falls back to when a run fails
+
+      const reset = $("reset") as HTMLButtonElement, clear = $("clear") as HTMLButtonElement;
+      const editor = new YoloRecipeEditor($("recipe"), ready.stages, (recipe, label) => {
+        reset.disabled = keyOf(recipe) === keyOf(nativeRecipe());
+        let estimated = false;
+        bar.style.width = "0";
+        status(`Applying the recipe, then scoring on ${QUICK} photos…`);
+        engine.evaluate(recipe, {
+          onProgress: (done, total, final) => {
+            bar.style.width = `${(done / total) * 100}%`;
+            status(final ? `Quick estimate shown · confirming on all ${total}… ${done}/${total}` : `Scoring on ${total} photos… ${done}/${total}`);
+          },
+          onQuick: (r) => { estimated = true; show(r); },
+          onFull: (r) => {
+            const shown = show(r);
+            lastFinal = r;
+            if (r.previews) tiles.update(r.previews, native.previews);
+            const key = keyOf(recipe);
+            record(r, label, key);
+            // Only a YOLOv8n that came out smaller goes on the life list: never native, the reference, nor a recipe
+            // that leaves it as big as it was.
+            const life = !hatches(shown.ratio) ? { said: "", announce: false } : sight({
+              bird: birdFor(shown.ratio, shown.kept), model: "yolov8n", modelName: "YOLOv8n", recipe: label, recipeKey: key,
+              href: cageHref(CAGE, linkQuery(recipe)), rule: "keep",
+            }, warned);
+            const ran = r.ran === 0
+              ? `Scored on all ${r.n} photos · this recipe's detections were kept from earlier in this visit`
+              : `Scored on all ${r.n} photos · ${secs(r.ms.quantize)} to round the weights, ${secs(r.ms.infer)} to score`;
+            status(life.said ? `${ran} · ${life.said}` : ran, "ok");
+            announce(life.announce ? `${shown.summary}. ${life.said}` : shown.summary);
+          },
+          onError: (message) => {
+            // Put the board back on the last run that finished, so every number on it is one that was measured in full.
+            bar.style.width = "0";
+            show(lastFinal);
+            status(estimated
+              ? `Scoring failed on all ${ready.n} photos (${message}), so the quick estimate was dropped. The numbers below are from your last finished run. Change the recipe, or reload the page, to try again.`
+              : `Scoring failed (${message}). The numbers below are from your last finished run. Change the recipe, or reload the page, to try again.`, "error");
+            announce(`Scoring failed: ${message}. The board shows your last finished run again.`);
+          },
+        });
+      });
+
+      const summary = show(nativeShown).summary;
+      record(nativeShown, describe(nativeRecipe()), keyOf(nativeRecipe()));
+      status(`Scored native YOLOv8n on all ${ready.n} photos in ${(ready.ms / 1000).toFixed(1)} s · ready`, "ok");
+
+      reset.addEventListener("click", () => { editor.load(nativeRecipe()); reset.disabled = true; editor.focusFirst(); });
+      clear.addEventListener("click", () => { runs = current ? [current] : []; save(); drawRuns(); });
+      clear.disabled = false;
+
+      // A link can carry a recipe: ?preset=<id>, or every setting (a life-list sighting's link, see linkQuery).
+      // It loads as if each control had been set by hand, clamped to what the controls can set.
+      const link = recipeFromLink(new URLSearchParams(location.search), ready.stages.map((s) => s.stage));
+      if (link && "recipe" in link) editor.load(link.recipe);
+      else if (link) {
+        status(`This link's recipe couldn't be read (${link.error}), so the board shows native YOLOv8n. Pick a preset or set the controls below.`, "error");
+        announce("This link's recipe couldn't be read, so the cage shows native YOLOv8n.");
+      } else announce(`Ready. ${summary}`);
+    }
+  </script>
+</Base>

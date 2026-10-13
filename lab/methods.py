@@ -4,13 +4,13 @@ test suite.
 Every entry says which kind of model it belongs to (``family``), whether it
 runs here (``status``), which functions implement it (``code``, shown on the
 site), what knobs it has (``params``) and, if runnable, a ``run(params)`` that
-trains/compresses a real model in a few seconds and returns a comparison.
+trains/compresses a real model (most runs take seconds to a minute) and returns a comparison.
 The tests iterate over this registry, so a method cannot appear on the site
 without also being exercised by ``pytest``.
 
 status:
     runnable   runs here, on the toy MLP world (numpy only)
-    cockpit    real code for the YOLO detector; runs in pigeon's cockpit
+    cockpit    real code for the YOLO detector; runs in the YOLOv8n cockpit
                (``uvicorn server:app``) with torch + ultralytics installed
     reference  needs a kind of model this repo doesn't have (e.g. a sequence
                model); explained, with code pointers, but not runnable
@@ -26,28 +26,30 @@ import numpy as np
 from . import layerwise as lw
 from .common import (QUICK, STUDENT, cached, data, distill, ev, net, scratch, teacher, train,
                      transfer_X)
-from .compress import (collapse_head, drop_layers, kmeans_share, low_rank, magnitude_prune,
-                       neuron_importance, quantize, structured_prune)
+from .compress import (collapse_head, drop_layers, kbits, kmeans_share, low_rank,
+                       magnitude_prune, neuron_importance, quantize, storage_bits,
+                       structured_prune)
 from .nn import MLP
 from .train import CE, KD, SP, FixedSource, Hint, OnlineSource
 
-STEPS = 100 if QUICK else 1000     # web runs must finish in seconds
+STEPS = 100 if QUICK else 1000     # keeps most web runs under a minute
 FT = STEPS // 2
 FT_LR = 3e-3
 
 FAMILIES = {
     "small": dict(title="Small networks", blurb=(
         "Every method runs here on a toy 20-class problem with a known best-possible answer. "
-        "Start here: the ideas are the same at every scale, and each run takes seconds.")),
+        "Start here: the ideas are the same at every scale, and most runs finish in under a minute.")),
     "llm": dict(title="Language-model methods", blurb=(
         "Algorithms invented for large language models. The layer-by-layer ones (GPTQ, AWQ, "
         "SmoothQuant, Wanda, SparseGPT, QLoRA, ShortGPT) are pure linear algebra on one weight "
         "matrix at a time, so they run here on the same toy network. Methods that need text, "
         "tokens or a KV cache are explained but marked as reference.")),
-    "vision": dict(title="Vision / detector (pigeon)", blurb=(
+    "vision": dict(title="Vision / detector (YOLOv8n cockpit)", blurb=(
         "What changes when the model is a convolutional detector like YOLOv8: channels instead "
-        "of neurons, dependency groups, batch-norm. The cockpit methods run in pigeon's web UI "
-        "(cockpit/server.py) on a real model; the rest are explained for reference.")),
+        "of neurons, dependency groups, batch-norm. The cockpit methods run in the YOLOv8n "
+        "cockpit's web UI (cockpit/server.py) on a real model; the rest are explained for "
+        "reference.")),
 }
 
 CATEGORIES = {
@@ -125,18 +127,35 @@ def reference(**kw):
 
 # ---------------------------------------------------------------------------
 # result helpers
+#
+# A result is ready for the site to draw a bird per model ("bird-ready") when:
+#   - every model row has ``kbits``, its storage in kilobits (compress.storage_bits:
+#     weights at their format's bit width, fp32 biases, fp16 scales or fp32
+#     codebooks, and for pruned nets only the surviving weights plus a 1-bit
+#     occupancy bitmap);
+#   - exactly one row has ``ref: True``: the uncompressed model the others are
+#     measured against (species from its kbits / theirs, health from the
+#     accuracy they keep);
+#   - a row that isn't a model (the Bayes-optimal ceiling) has ``model: False``.
+# Results whose models are all the same size have ``bird: False`` and say why
+# in ``bird_reason``. lab/tests/test_birds.py checks all of this for every run.
 # ---------------------------------------------------------------------------
 def row(label: str, m: MLP, t: MLP | None = None, **extra) -> dict:
+    """One model's line. ``kbits`` comes from the format the net declares
+    (fake-quant bits, pruning masks; see ``compress.kbits``); a caller whose net
+    was stored some other way passes ``kbits=`` itself."""
     r = ev(m, t)
     out = dict(label=label, acc=r["acc"], target_ap=r["target_ap"], params=r["params"])
     if "fidelity" in r:
         out["fidelity"] = r["fidelity"]
+    if "kbits" not in extra:
+        out["kbits"] = kbits(m)
     out.update(extra)
     return out
 
 
 def teacher_row() -> dict:
-    return row("teacher 3x256 (reference)", teacher())
+    return row("teacher 3x256 (reference)", teacher(), ref=True)
 
 
 def kd_student() -> MLP:
@@ -144,8 +163,12 @@ def kd_student() -> MLP:
     return cached("student32_kdT1", lambda: distill(STUDENT, teacher(), 0))
 
 
-def result(rows, note: str = "", chart: dict | None = None, metric: str = "acc") -> dict:
-    return dict(rows=rows, note=note, chart=chart, metric=metric)
+def result(rows, note: str = "", chart: dict | None = None, metric: str = "acc",
+           bird_reason: str = "") -> dict:
+    out = dict(rows=rows, note=note, chart=chart, metric=metric, bird=not bird_reason)
+    if bird_reason:
+        out["bird_reason"] = bird_reason
+    return out
 
 
 W = lambda w: [w, w]  # noqa: E731  two hidden layers of width w
@@ -193,6 +216,7 @@ def run_kd_losses(p):
     t = teacher()
     hid = W(p["width"])
     return result([
+        teacher_row(),
         row("labels only", scratch(hid, 0, steps=STEPS), t),
         row("forward KL (standard KD)", distill(hid, t, 0, T=p["T"], steps=STEPS), t),
         row(f"{p['kind']}" + (f" k={p['k']}" if p["kind"] == "topk" else ""),
@@ -219,6 +243,7 @@ def run_feature_kd(p):
     term = (Hint(1, 2, w, 256, weight=p["weight"]) if p["term"] == "hint"
             else SP(1, 2, weight=p["weight"]))
     return result([
+        teacher_row(),
         row("labels only", scratch(hid, 0, steps=STEPS), t),
         row("KD", distill(hid, t, 0, steps=STEPS), t),
         row(f"KD + {p['term']}", distill(hid, t, 0, steps=STEPS, extra_terms=[term]), t),
@@ -314,7 +339,11 @@ def run_ensemble(p):
     probs = np.mean([softmax(t.logits(d.test.X)) for t in ts], 0)
     ens_acc = float((probs.argmax(1) == d.test.y).mean())
     m = train(net(STUDENT, 0), FixedSource(X, y, d.world.C, t_logits=tl), [KD(T=1)], steps=STEPS)
-    return result([dict(label=f"ensemble of {p['n']} teachers", acc=ens_acc),
+    # the reference is what gets distilled: all n teachers, stored side by side
+    return result([dict(label=f"ensemble of {p['n']} teachers", acc=ens_acc,
+                        params=sum(t.n_params() for t in ts),
+                        kbits=sum(storage_bits(t) for t in ts) / 1000,
+                        ref=True),
                    row("student from teacher #0 alone", distill(STUDENT, ts[0], 0, steps=STEPS)),
                    row(f"student from ensemble ({p['combine']} averaged)", m)])
 
@@ -335,7 +364,9 @@ def run_born_again(p):
         prev = distill(hid, prev, 100 * g, transfer="train", T=2, alpha=0.5, steps=STEPS)
         rows.append(row(f"generation {g}", prev))
     return result(rows, chart=dict(x="generation", series={"accuracy": [
-        [i, r["acc"]] for i, r in enumerate(rows)]}))
+        [i, r["acc"]] for i, r in enumerate(rows)]}),
+        bird_reason="Born-again networks retrain a copy of the same size: the aim is a "
+                    "better model, not a smaller one.")
 
 
 @method(id="bayes_teacher", name="The perfect teacher", family="small", category="distill",
@@ -353,7 +384,8 @@ def run_bayes(p):
     oracle = train(net(hid, 0), FixedSource(X, None, d.world.C, t_logits=soft), [KD(T=1)],
                    steps=STEPS)
     return result([dict(label="Bayes-optimal (ceiling)", acc=float(
-                       (d.test.bayes.argmax(1) == d.test.y).mean())),
+                       (d.test.bayes.argmax(1) == d.test.y).mean()), model=False),
+                   teacher_row(),
                    row("labels only", scratch(hid, 0, steps=STEPS)),
                    row("KD from trained teacher", distill(hid, t, 0, steps=STEPS)),
                    row("KD from exact posterior", oracle)])
@@ -435,7 +467,7 @@ def run_lottery(p):
                       callback=lambda ep, n: snap.setdefault("early", n.copy()) if ep == 1 else None)
     start = {"init": init, "early": snap.get("early", init), "random reinit": net(hid, seed=99)}[p["rewind"]]
     m = trained
-    rows = [row("dense 2x64", trained)]
+    rows = [row("dense 2x64", trained, ref=True)]
     for r in range(1, p["rounds"] + 1):
         mask_src = magnitude_prune(m, 1 - 0.5 ** r)
         m = start.copy()
@@ -464,7 +496,7 @@ def run_layer_drop(p):
     t = teacher(hidden=[128] * 8, res=p["arch"] == "residual")
     probe = d.train.take(2000)
     cut = drop_layers(t, _greedy_drop(t, p["k"], probe.X, probe.y))
-    rows = [row(f"{p['arch']} 8x128", t), row(f"{p['k']} layers deleted", cut)]
+    rows = [row(f"{p['arch']} 8x128", t, ref=True), row(f"{p['k']} layers deleted", cut)]
     if p["recovery"] == "kd":
         rows.append(row("+ KD recovery", distill(cut, t, 0, steps=FT, lr=FT_LR)))
     return result(rows)
@@ -474,8 +506,9 @@ def run_layer_drop(p):
 # SMALL NETWORKS -- quantization & factorization
 # ===========================================================================
 @method(id="ptq", name="Post-training quantization", family="small", category="quantize",
-        summary="Round every weight to one of 2^b levels after training. No data, no "
-                "gradients; how fine the scale groups are decides how low b can go.",
+        summary="Round every weight to one of 2^b − 1 evenly spaced levels, symmetric around "
+                "zero (two levels at 1 bit), after training. No data, no gradients; how fine the "
+                "scale groups are decides how low b can go.",
         code=["lab/nn.py:fake_quantize", "lab/compress.py:quantize", "cockpit/harness/quant.py:fake_quantize"],
         params=[P("bits", "bits", "int", 4, 1, 8, 1),
                 P("group", "scale shared by", "choice", "16",
@@ -487,10 +520,12 @@ def run_layer_drop(p):
 def run_ptq(p):
     m0 = teacher() if p["model"] == "teacher" else kd_student()
     g = None if p["group"] == "tensor" else int(p["group"])
-    rows = [row("fp32", m0)]
+    rows = [row("fp32", m0, ref=True)]
     for b in [8, 6, 4, 3, 2, 1]:
-        rows.append(row(f"{b}-bit", quantize(m0, b, g), bits=b))
-    chosen = row(f"chosen: {p['bits']}-bit, group {p['group']}", quantize(m0, p["bits"], g))
+        q = quantize(m0, b, g)
+        rows.append(row(f"{b}-bit", q, bits=b, kbits=kbits(q, b, g)))
+    q = quantize(m0, p["bits"], g)
+    chosen = row(f"chosen: {p['bits']}-bit, group {p['group']}", q, kbits=kbits(q, p["bits"], g))
     return result(rows + [chosen], chart=dict(x="bits", series={f"group {p['group']}": [
         [r["bits"], r["acc"]] for r in rows if "bits" in r]}))
 
@@ -512,7 +547,9 @@ def run_qat(p):
     m.qbits, m.qgroup = p["bits"], 16
     m = (scratch(m, 0, steps=FT, lr=FT_LR) if p["recovery"] == "labels"
          else distill(m, t, 0, steps=FT, lr=FT_LR))
-    return result([row("fp32", m0), row(f"PTQ {p['bits']}-bit", quantize(m0, p["bits"], 16)),
+    q = quantize(m0, p["bits"], 16)
+    return result([row("fp32", m0, ref=True),
+                   row(f"PTQ {p['bits']}-bit", q, kbits=kbits(q, p["bits"], 16)),
                    row(f"QAT {p['bits']}-bit with {p['recovery']}", m)])
 
 
@@ -530,13 +567,14 @@ def run_weight_sharing(p):
     k = p["k"]
     bits = int(np.ceil(np.log2(k)))
     km = kmeans_share(t, k)
-    rows = [teacher_row(), row(f"uniform {bits}-bit (per tensor)", quantize(t, bits)),
-            row(f"k-means, k={k}", km)]
+    q = quantize(t, bits)
+    rows = [teacher_row(), row(f"uniform {bits}-bit (per tensor)", q, kbits=kbits(q, bits)),
+            row(f"k-means, k={k}", km, kbits=kbits(km, bits, codebook=k))]
     if p["finetune"]:
         m = km
         for r in range(2):
             m = kmeans_share(distill(m, t, r, steps=FT // 2, lr=FT_LR), k)
-        rows.append(row("k-means + KD + re-snap", m))
+        rows.append(row("k-means + KD + re-snap", m, kbits=kbits(m, bits, codebook=k)))
     return result(rows)
 
 
@@ -582,7 +620,9 @@ def run_overparam(p):
     return result([row("plain", scratch(hid, 0, steps=STEPS)),
                    row(f"trained expanded ({trained.n_params(False):,} params)", trained),
                    row(f"collapsed back ({small.n_params(False):,} params)", small)],
-                  note="The collapsed network is exactly the expanded one, multiplied out.")
+                  note="The collapsed network is exactly the expanded one, multiplied out.",
+                  bird_reason="Over-parameterizing changes only how the network is trained: "
+                              "multiplied back together, it is the same size as the plain one.")
 
 
 @method(id="small_tricks", name="Regularizers & training tricks", family="small",
@@ -612,7 +652,9 @@ def run_tricks(p):
         m = scratch(hid, 0, steps=STEPS, ema=1 - 10 / STEPS)
     else:
         m = scratch(hid, 0, steps=4 * STEPS)
-    return result([row("baseline", scratch(hid, 0, steps=STEPS)), row(tr, m)])
+    return result([row("baseline", scratch(hid, 0, steps=STEPS)), row(tr, m)],
+                  bird_reason="These tricks change how a small network is trained, not its "
+                              "size: both rows are networks of the same shape.")
 
 
 @method(id="train_big_then_prune", name="Train big, then prune to size", family="small",
@@ -631,12 +673,15 @@ def run_big_then_prune(p):
     cut = structured_prune(big, W(p["target"]), neuron_importance(big, probe.X, probe.y, "taylor"))
     return result([row(f"2x{p['target']} trained directly",
                        scratch(W(p["target"]), 0, steps=STEPS + FT)),
-                   row(f"2x{p['start']} (before pruning)", big),
-                   row(f"pruned to 2x{p['target']} + self-KD", distill(cut, big, 0, steps=FT, lr=FT_LR))])
+                   row(f"2x{p['start']} (before pruning)", big, ref=True),
+                   row(f"pruned to 2x{p['target']} + self-KD", distill(cut, big, 0, steps=FT, lr=FT_LR))],
+                  bird_reason="" if p["start"] > p["target"] else (
+                      "The trained width is not larger than the final width, so there was "
+                      "nothing to prune."))
 
 
 # ===========================================================================
-# SMALL NETWORKS -- specialization (the pigeon question)
+# SMALL NETWORKS -- specialization (the bird-detector question)
 # ===========================================================================
 def _spec():
     from .experiments import specialist as S
@@ -662,11 +707,11 @@ def run_specialist_head(p):
     elif h == "binary labels":
         yb = (d.train.y != 0).astype(np.int64)
         m = train(S.spec_student(w, 2, 0), FixedSource(d.train.X, yb, 2), [CE()], steps=STEPS)
-        r = dict(label="binary, labels only", **S.spec_eval(m))
+        r = dict(label="binary, labels only", **S.spec_eval(m), kbits=kbits(m))
     else:
         Gm = G[h]
         m = S.spec_distill(S.spec_student(w, Gm.shape[1], 0), t, Gm, 0, steps=STEPS)
-        r = dict(label=f"{h} head ({Gm.shape[1]} outputs), KD", **S.spec_eval(m))
+        r = dict(label=f"{h} head ({Gm.shape[1]} outputs), KD", **S.spec_eval(m), kbits=kbits(m))
     tr = teacher_row()
     return result([tr, r], metric="target_ap")
 
@@ -690,8 +735,10 @@ def run_task_prune(p):
     cut = collapse_head(structured_prune(t, [w] * 3, sc), G["supers"])
     rec = S.spec_distill(cut.copy(), t, G["supers"], 0, steps=FT, lr=FT_LR)
     return result([teacher_row(),
-                   dict(label=f"3x{w}, {p['criterion']} importance, no recovery", **S.spec_eval(cut)),
-                   dict(label="+ grouped-KD recovery", **S.spec_eval(rec))], metric="target_ap")
+                   dict(label=f"3x{w}, {p['criterion']} importance, no recovery", **S.spec_eval(cut),
+                        kbits=kbits(cut)),
+                   dict(label="+ grouped-KD recovery", **S.spec_eval(rec), kbits=kbits(rec))],
+                  metric="target_ap")
 
 
 @method(id="specialist_data", name="Recovery data for a specialist", family="small",
@@ -716,8 +763,9 @@ def run_spec_data(p):
          "birds + noise": np.concatenate([bird, rng.standard_normal(bird.shape).astype(np.float32)])
          }[p["data"]]
     def fit_on(Xs):
-        return S.spec_eval(S.spec_distill(S.spec_student(16, G["supers"].shape[1], 0), t,
-                                          G["supers"], 0, X=Xs, steps=STEPS))
+        m = S.spec_distill(S.spec_student(16, G["supers"].shape[1], 0), t, G["supers"], 0,
+                           X=Xs, steps=STEPS)
+        return dict(**S.spec_eval(m), kbits=kbits(m))
     rows = [teacher_row()]
     if p["data"] != "everything":
         rows.append(dict(label=f"2x16 specialist on everything ({len(X_all)})", **fit_on(X_all)))
@@ -732,18 +780,37 @@ def _calib(n: int = 512) -> np.ndarray:
     return data().train.X[:n]
 
 
+def _lw_kbits(m: MLP, bits: int, group: int | None) -> float:
+    """Storage of a net quantized by ``apply_layerwise(..., skip_last=True)``:
+    every layer but the output one at ``bits``, one fp16 scale per output row
+    (per row x ``group`` input columns with groups). GPTQ and AWQ store exactly
+    what RTN stores: AWQ's per-channel scales fold into the layer before, and
+    GPTQ's error feedback only changes which integers are stored. Not counted:
+    with act-order and groups, a real GPTQ checkpoint also keeps each column's
+    group index."""
+    return kbits(m, bits, group, per_row=True, fp32_last=True)
+
+
 def _lw_quant_rows(fn_name: str, bits: int, group, **kw):
     t = teacher()
     X = _calib()
     g = None if group == "row" else int(group)
     rows = [teacher_row()]
-    rows.append(row(f"RTN {bits}-bit", lw.apply_layerwise(
-        t, X, lambda W_, h: lw.rtn(W_, h, bits, g), skip_last=True)))
+    q = lw.apply_layerwise(t, X, lambda W_, h: lw.rtn(W_, h, bits, g), skip_last=True)
+    rows.append(row(f"RTN {bits}-bit", q, kbits=_lw_kbits(q, bits, g)))
     if fn_name != "rtn":
         fn = getattr(lw, fn_name)
-        rows.append(row(f"{fn_name.upper()} {bits}-bit", lw.apply_layerwise(
-            t, X, lambda W_, h: fn(W_, h, bits=bits, group=g, **kw), skip_last=True)))
+        q = lw.apply_layerwise(t, X, lambda W_, h: fn(W_, h, bits=bits, group=g, **kw),
+                               skip_last=True)
+        rows.append(row(f"{fn_name.upper()} {bits}-bit", q, kbits=_lw_kbits(q, bits, g)))
     return rows
+
+
+def _sparse_row(label: str, m: MLP) -> dict:
+    """Wanda and SparseGPT zero weights in place instead of masking them, so the
+    net doesn't declare itself sparse: store it sparse explicitly (the fp32
+    weights that survive, plus a 1-bit-per-position bitmap)."""
+    return row(label, m, kbits=kbits(m, sparse=True))
 
 
 LW_QPARAMS = [P("bits", "bits", "int", 3, 2, 8, 1),
@@ -802,6 +869,7 @@ def run_smoothquant(p):
     X = _calib()
     m = lw.inject_outliers(t, 1, 3, p["factor"]) if p["outliers"] else t
     sm = lw.smoothquant(m, X, p["alpha"])
+    m_float = m
     if p["wbits"] < 16:  # quantize weights (per output row) after smoothing, as in W8A8
         wq = lambda W_, h: lw.rtn(W_, h, p["wbits"])  # noqa: E731
         m = lw.apply_layerwise(m, X, wq, skip_last=True)
@@ -809,17 +877,26 @@ def run_smoothquant(p):
 
     def acc(model, ab):
         return float((lw.forward_wa(model, d.test.X, ab).argmax(1) == d.test.y).mean())
+    # activations are rounded on the fly and never stored, so only the weight
+    # format sets a row's size; smoothing folds into the weights for free
     wl = f"W{p['wbits']}" if p["wbits"] < 16 else "float weights"
-    rows = [dict(label=f"{wl}, float activations", acc=acc(m, 16)),
-            dict(label=f"{wl}, A{p['abits']}", acc=acc(m, p["abits"])),
+    kb = _lw_kbits(m, p["wbits"], None) if p["wbits"] < 16 else kbits(m)
+    rows = [dict(label=f"{wl}, float activations", acc=acc(m, 16), kbits=kb),
+            dict(label=f"{wl}, A{p['abits']}", acc=acc(m, p["abits"]), kbits=kb),
             dict(label=f"SmoothQuant (alpha {p['alpha']:g}), {wl}, A{p['abits']}",
-                 acc=acc(sm, p["abits"]))]
+                 acc=acc(sm, p["abits"]), kbits=kb)]
+    if p["wbits"] < 16:  # the float model, before any rounding, is the reference
+        rows.insert(0, dict(label="float weights, float activations", acc=acc(m_float, 16),
+                            kbits=kbits(m_float), ref=True))
     chart = dict(x="activation bits", series={
         "plain": [[b, acc(m, b)] for b in (4, 5, 6, 8, 16)],
         "SmoothQuant": [[b, acc(sm, b)] for b in (4, 5, 6, 8, 16)]})
     return result(rows, chart=chart, note=(
         "Injected outliers don't change the function (full precision is identical); "
-        "they only change how quantizable the activations are." if p["outliers"] else ""))
+        "they only change how quantizable the activations are." if p["outliers"] else ""),
+        bird_reason="" if p["wbits"] < 16 else (
+            "With float weights nothing stored gets smaller: activations are rounded while "
+            "the model runs, and every weight keeps its 32 bits."))
 
 
 @method(id="wanda", name="Wanda", family="llm", category="prune",
@@ -837,8 +914,8 @@ def run_wanda(p):
         t = lw.inject_outliers(t, 1, p["outliers"], 30.0)
     s = p["sparsity"]
     return result([teacher_row(),
-                   row("magnitude, per row", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, np.ones_like(h), s), skip_last=True)),
-                   row("Wanda", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, h, s), skip_last=True))])
+                   _sparse_row("magnitude, per row", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, np.ones_like(h), s), skip_last=True)),
+                   _sparse_row("Wanda", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, h, s), skip_last=True))])
 
 
 @method(id="sparsegpt", name="SparseGPT", family="llm", category="prune",
@@ -853,9 +930,9 @@ def run_sparsegpt(p):
     t, X = teacher(), _calib()
     s = p["sparsity"]
     return result([teacher_row(),
-                   row("magnitude, per row", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, np.ones_like(h), s), skip_last=True)),
-                   row("Wanda", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, h, s), skip_last=True)),
-                   row("SparseGPT", lw.apply_layerwise(t, X, lambda W_, h: lw.sparsegpt(W_, h, s, p["block"]), skip_last=True))])
+                   _sparse_row("magnitude, per row", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, np.ones_like(h), s), skip_last=True)),
+                   _sparse_row("Wanda", lw.apply_layerwise(t, X, lambda W_, h: lw.wanda(W_, h, s), skip_last=True)),
+                   _sparse_row("SparseGPT", lw.apply_layerwise(t, X, lambda W_, h: lw.sparsegpt(W_, h, s, p["block"]), skip_last=True))])
 
 
 @method(id="qlora", name="QLoRA (low-rank adapters on a quantized model)", family="llm",
@@ -870,9 +947,14 @@ def run_sparsegpt(p):
 def run_qlora(p):
     t, s = teacher(), kd_student()
     m, n = lw.qlora(s, t, data().pool.X, bits=p["bits"], rank=p["rank"], steps=FT)
-    return result([row("student 2x32, fp32", s),
-                   row(f"quantized to {p['bits']} bits", quantize(s, p["bits"], 16)),
-                   row(f"+ rank-{p['rank']} adapters ({n} trainable params)", m)])
+    base = quantize(s, p["bits"], 16)
+    base_bits = storage_bits(base, p["bits"], 16)
+    # ``m`` has the adapters merged back in, which makes it fp32 again; what
+    # QLoRA keeps is the frozen quantized base plus the adapters (fp32, as trained)
+    return result([row("student 2x32, fp32", s, ref=True),
+                   row(f"quantized to {p['bits']} bits", base, kbits=base_bits / 1000),
+                   row(f"+ rank-{p['rank']} adapters ({n} trainable params)", m,
+                       kbits=(base_bits + n * 32) / 1000)])
 
 
 @method(id="block_influence", name="ShortGPT (block influence)", family="llm", category="depth",
@@ -895,7 +977,7 @@ def run_block_influence(p):
     rng = np.random.default_rng(0)
     rand = list(rng.choice(sorted(bi), k, replace=False))
     probe = d.train.take(2000)
-    return result([row("residual 8x128", t),
+    return result([row("residual 8x128", t, ref=True),
                    row(f"drop {k} lowest-influence layers {sorted(by_bi)}", drop_layers(t, by_bi)),
                    row(f"drop {k} random layers {sorted(int(x) for x in rand)}", drop_layers(t, rand)),
                    row(f"drop {k} chosen by trial and error", drop_layers(t, _greedy_drop(t, k, probe.X, probe.y)))],
@@ -953,7 +1035,7 @@ reference(id="conv_quantization", name="Quantizing a detector", family="vision",
           papers=["Nagel et al. A White Paper on Neural Network Quantization (2021)"])
 reference(id="prune_and_regrow", name="Prune, then fine-tune (cut and regrow)", family="vision",
           category="prune", status="cockpit",
-          summary="pigeon's core loop: remove channels, then fine-tune the survivor on bird "
+          summary="The cockpit's core loop: remove channels, then fine-tune the survivor on bird "
                   "images until mAP climbs back.",
           code=["cockpit/harness/prune.py:removal_plan", "cockpit/harness/mask.py:apply_plan", "cockpit/recover_job.py:main"],
           experiments=["prune_structured", "specialist_data"],

@@ -1,34 +1,45 @@
 ---
 // Engine diagnostics: parity with PyTorch and speed. Not linked from the site.
+import Base from "../../layouts/Base.astro";
+import "../../styles/page.css";
+import "../../styles/prose.css";
 ---
-<html lang="en">
-  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Pigeon engine lab</title></head>
-  <body style="font: 14px ui-monospace, monospace; padding: 16px">
-    <h1>Engine lab</h1>
-    <pre id="log" style="overflow-x: auto">starting…</pre>
-    <script>
-      import type { Message, Result } from "../../lib/engine/worker";
-      import type { Recipe } from "../../lib/engine/pipeline";
-      const log = document.getElementById("log")!;
-      const out = (s: string) => (log.textContent += "\n" + s);
+<Base title="Engine check (dev) · Pigeon" description="Engine diagnostics: parity with PyTorch and speed.">
+  <main id="main" class="page">
+    <header>
+      <h1>Engine check</h1>
+      <p class="lede">A development check for the Coop's engine: it scores the original Pigeon, compares every prediction with PyTorch's, then times three recipes. This page isn't linked from the site.</p>
+    </header>
+    <pre id="log">Starting the engine…</pre>
+  </main>
+  <script>
+    import type { Message, Result } from "../../lib/engine/worker";
+    import type { Recipe } from "../../lib/engine/pipeline";
+    const log = document.getElementById("log")!;
+    const out = (s: string) => (log.textContent += "\n" + s);
+    const fmt = (r: Result) =>
+      `acc ${(r.score.accuracy * 100).toFixed(1)}%  pointing ${(r.score.pointing * 100).toFixed(1)}%  agree ${(r.score.agreement * 100).toFixed(1)}%  ` +
+      `size ${(r.totalBytes / 1e3).toFixed(0)} KB (${(r.originalBytes / r.totalBytes).toFixed(2)}x)  compress ${r.ms.compress.toFixed(0)} ms  infer ${r.ms.infer.toFixed(0)} ms`;
+    const ALL = ["conv", "depthwise", "pointwise", "squeeze_excite", "head"] as const;
+    const tests: [string, Recipe][] = [
+      ["int8 per-channel", { steps: [{ op: "int", parts: [...ALL], bits: 8, granularity: { kind: "channel" }, symmetric: true }] }],
+      ["int8 per-tensor", { steps: [{ op: "int", parts: [...ALL], bits: 8, granularity: { kind: "tensor" }, symmetric: true }] }],
+      ["int4 SE only + int8 rest", { steps: [
+        { op: "int", parts: ["conv", "depthwise", "pointwise", "head"], bits: 8, granularity: { kind: "channel" }, symmetric: true },
+        { op: "int", parts: ["squeeze_excite"], bits: 4, granularity: { kind: "channel" }, symmetric: true },
+      ] }],
+    ];
+
+    if (typeof Worker === "undefined" || typeof WebAssembly === "undefined") {
+      out("Error: this browser can't run Web Workers with WebAssembly, so the engine can't start.");
+    } else {
       const worker = new Worker(new URL("../../lib/engine/worker.ts", import.meta.url), { type: "module" });
-      const fmt = (r: Result) =>
-        `acc ${(r.score.accuracy * 100).toFixed(1)}%  pointing ${(r.score.pointing * 100).toFixed(1)}%  agree ${(r.score.agreement * 100).toFixed(1)}%  ` +
-        `size ${(r.totalBytes / 1e3).toFixed(0)} KB (${(r.originalBytes / r.totalBytes).toFixed(2)}x)  compress ${r.ms.compress.toFixed(0)} ms  infer ${r.ms.infer.toFixed(0)} ms`;
-      const ALL = ["conv", "depthwise", "pointwise", "squeeze_excite", "head"] as const;
-      const tests: [string, Recipe][] = [
-        ["int8 per-channel", { steps: [{ op: "int", parts: [...ALL], bits: 8, granularity: { kind: "channel" }, symmetric: true }] }],
-        ["int8 per-tensor", { steps: [{ op: "int", parts: [...ALL], bits: 8, granularity: { kind: "tensor" }, symmetric: true }] }],
-        ["int4 SE only + int8 rest", { steps: [
-          { op: "int", parts: ["conv", "depthwise", "pointwise", "head"], bits: 8, granularity: { kind: "channel" }, symmetric: true },
-          { op: "int", parts: ["squeeze_excite"], bits: 4, granularity: { kind: "channel" }, symmetric: true },
-        ] }],
-      ];
+      worker.onerror = (e) => { e.preventDefault(); out(`Error: the engine worker stopped (${e.message || "no message"}). Reload to try again.`); };
       let i = 0;
       const t0 = performance.now();
       worker.onmessage = (e: MessageEvent<Message>) => {
         const m = e.data;
-        if (m.type === "error") out("ERROR " + m.message);
+        if (m.type === "error") out(`Error: ${m.message}`);
         if (m.type === "ready") {
           out(`ready in ${(performance.now() - t0).toFixed(0)} ms   crossOriginIsolated=${crossOriginIsolated}`);
           const b = m.baseline;
@@ -48,6 +59,6 @@
         }
       };
       worker.postMessage({ type: "init" });
-    </script>
-  </body>
-</html>
+    }
+  </script>
+</Base>

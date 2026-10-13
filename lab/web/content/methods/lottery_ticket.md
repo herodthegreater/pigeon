@@ -37,17 +37,17 @@ From `lottery_ticket` (2x128, mean of 2 seeds; dense accuracy 0.904):
 
 This is the lottery-ticket pattern. Rewound tickets hold up best at every sparsity, and the gap grows as the net gets sparser. At 96.9% (640 weights), with the original init, the ticket mask scores 0.6118 and a random mask 0.3219. With the ticket mask, the original init scores 0.6118 and a fresh one 0.4801. So both the mask and its initial values matter. Rewinding to init and to the early snapshot are indistinguishable here. Fine-tuning the trained weights, what most pruning pipelines do, lands with the controls once sparsity passes 90%.
 
-Page runs (2x64, one seed; dense 0.8511):
+Page runs (2x64, one seed, **prune rounds** 6; dense 0.8514):
 
 | round (removed) | rewind to early | rewind to init | random reinit |
 |---|---|---|---|
-| 1 (50%) | 0.8501 | 0.8403 | 0.7875 |
-| 2 (75%) | 0.7968 | 0.7771 | 0.7633 |
-| 3 (87.5%) | 0.6505 | 0.6493 | 0.6380 |
-| 4 (93.8%) | 0.4159 | 0.4747 | 0.4470 |
-| 6 (98.4%) | 0.2299 | 0.2098 | 0.1911 |
+| 1 (50%) | 0.8502 | 0.8417 | 0.7872 |
+| 2 (75%) | 0.7934 | 0.7757 | 0.7586 |
+| 3 (87.5%) | 0.6421 | 0.6621 | 0.6489 |
+| 4 (93.8%) | 0.4524 | 0.4751 | 0.4551 |
+| 6 (98.4%) | 0.1889 | 0.2219 | 0.2030 |
 
-In the smaller, shorter-trained net, rewinding beats a random reinit by 0.06 at 50%, and the gap narrows to about 0.01 by 87.5%. At 93.8% the order changes, within one-seed noise.
+In the smaller, shorter-trained net, rewinding beats a random reinit by 0.055 to 0.063 at 50% and by 0.017 to 0.035 at 75%. From 87.5% on the three arms sit within 0.035 of each other and swap order from round to round: one seed cannot separate them.
 
 The toy cannot test large vision models, where Frankle et al. found that rewinding to init stops working and an early rewind point is needed.
 
@@ -55,7 +55,7 @@ The toy cannot test large vision models, where Frankle et al. found that rewindi
 
 - **Compounding schedules.** If a pruning function ranks only survivors, a schedule of total sparsities overshoots. An earlier version of this experiment did that: its "75%" round was really 87.5%. Check the nonzero count.
 - **Tickets are expensive to find.** You need a full training run per round. It is a probe, not a shortcut.
-- **Small or briefly trained nets** show little ticket effect, as the page runs do.
+- **Small or briefly trained nets** show little ticket effect where it should matter most, at high sparsity: in the page runs, rewound and randomly reinitialized tickets sit within 0.035 of each other from 87.5% on.
 - **Masks are unstructured**, so there is no speedup without sparse kernels.
 
 ## Try this
@@ -66,4 +66,4 @@ The toy cannot test large vision models, where Frankle et al. found that rewindi
 
 ## Going further
 
-Frankle et al. (2020) showed that rewinding to an early iteration makes tickets work at scale, and linked it to *linear mode connectivity*: past that point, retraining with a different data order ends in the same basin. pigeon never rewinds. Its loop fine-tunes the trained weights (the "fine-tune trained" arm), the practical choice when the original training run cannot be repeated, as with a pretrained YOLOv8n. A ticket experiment on it would need the COCO training recipe and many full trainings.
+Frankle et al. (2020) showed that rewinding to an early iteration makes tickets work at scale, and linked it to *linear mode connectivity*: past that point, retraining with a different data order ends in the same basin. The YOLOv8n cockpit never rewinds. Its loop fine-tunes the trained weights (the "fine-tune trained" arm), the practical choice when the original training run cannot be repeated, as with a pretrained YOLOv8n. A ticket experiment on it would need the COCO training recipe and many full trainings.

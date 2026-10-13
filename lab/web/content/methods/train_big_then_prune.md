@@ -34,7 +34,7 @@ From `train_big_then_compress` (accuracy on 20 classes, mean of 2 seeds; every f
 
 Every pruned arm is worse than training the small net directly: by at least 0.04 for 2x16 and 0.02 for 2x32. Most of the loss comes at the first doubling. Self-KD beats labels from 4x up, but never reaches the direct baseline. In `small_tricks`, the same recipe (2x128 → 2x16 or 2x32) with a full 3,000-step recovery landed close to plain training: 0.6568 against 0.6637 for 2x16, 0.8225 against 0.8170 for 2x32. Given enough recovery, the pruned start neither helps nor hurts much.
 
-Page runs (1,000 + 500 steps, one seed): at the defaults (128 → 16) the 2x128 net reaches 0.9008, but pruned to 2x16 and recovered it scores 0.5043, against 0.6249 for 2x16 trained directly. Starting from 32 gives 0.5499, and from 256, 0.5073. A mild cut from 128 to 64 nearly ties: 0.8649 pruned against 0.8672 direct.
+Page runs (1,000 + 500 steps, one seed): at the defaults (128 to 16) the 2x128 net reaches 0.9010, but pruned to 2x16 and recovered it scores 0.5037, against 0.6249 for 2x16 trained directly. Starting from 32 gives 0.5499, and from 256, 0.5024. A mild cut from 128 to 64 nearly ties: 0.8649 pruned against 0.8672 direct.
 
 The toy does not test Li et al.'s regime: big, compute-limited models whose faster learning per step dominates, compressed lightly.
 
@@ -52,4 +52,4 @@ The toy does not test Li et al.'s regime: big, compute-limited models whose fast
 
 ## Going further
 
-Li et al.'s result rests on two facts about large transformers: bigger models reach a given loss in fewer steps, and they are more robust to quantization and pruning, so mild compression costs little. The toy reproduces neither. pigeon is train-big-then-prune by construction: it starts from a pretrained YOLOv8n and fine-tunes on only 400 bird images, so most of what the small model knows must come from the big one. Its measured cuts were mild: a ~12% channel cut recovered to 91% of native mAP@50, and a 20% cut recovered only to 0.0706 after 40 epochs. The toy's lesson is about how deep a cut goes. On the Structured pruning page, a 2x cut per layer recovered to within 0.005 of the teacher and an 8x cut never came close.
+Li et al.'s result rests on two facts about large transformers: bigger models reach a given loss in fewer steps, and they are more robust to quantization and pruning, so mild compression costs little. The toy reproduces neither. The YOLOv8n cockpit is train-big-then-prune by construction: it starts from a pretrained YOLOv8n and fine-tunes on only 400 bird images, so most of what the small model knows must come from the big one. Its measured cuts were mild: a ~12% channel cut recovered to 91% of native mAP@50, and a 20% cut recovered only to 0.0706 after 40 epochs. The toy's lesson is about how deep a cut goes. On the Structured pruning page, a 2x cut per layer recovered to within 0.005 of the teacher and an 8x cut never came close.

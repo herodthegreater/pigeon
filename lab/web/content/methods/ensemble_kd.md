@@ -48,7 +48,7 @@ NLL is the mean negative log-probability of the true class. With one teacher bot
 
 The teacher is not the bottleneck: one 3x256 teacher already knows far more than a 2x32 student can hold, so a better teacher has little to add.
 
-This page's runs (1000 steps, seed 0) agree. With 3 teachers: student from teacher 0 alone 0.7465, from averaged logits 0.7463, from averaged probabilities 0.7463. With 4 teachers and probabilities: 0.7476. With 1 teacher, both ways of combining give 0.7465, the same as the single-teacher row.
+This page's runs (1000 steps, seed 0) agree. With 3 teachers: student from teacher 0 alone 0.7455, from averaged logits 0.7465, from averaged probabilities 0.7471. With 4 teachers and probabilities: 0.7482. With 1 teacher, averaged logits give 0.7455, the same as the single-teacher row. Averaged probabilities give 0.7453, two test inputs away: with one teacher the target is the same distribution, but it goes through `log_mean_softmax`, and rounding at the last float digit nudges 1,000 steps of training.
 
 The toy cannot show where ensembles help most: members that learned genuinely different features. Here they differ only by seed.
 
@@ -61,7 +61,7 @@ The toy cannot show where ensembles help most: members that learned genuinely di
 
 ## Try this
 
-- Set **teachers** to 1 and switch **combine by averaging** between `logits` and `probs`. Both should match the "teacher #0 alone" row exactly.
+- Set **teachers** to 1 and switch **combine by averaging** between `logits` and `probs`. `logits` matches the "teacher #0 alone" row exactly; `probs` lands within a few test inputs of it, from float rounding alone.
 - With `probs`, step **teachers** from 1 to 4 and watch whether the student moves more than the ensemble does.
 - Compare the "ensemble of n teachers" row with the student rows to see how much of the ensemble's accuracy is lost in distillation.
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import fixture from "./__fixtures__/python_quant.json";
-import { distinctValues, mse, quantizeFloat, quantizeInt, roundMiniFloat, FORMATS } from "./quant";
+import pigeonTensors from "../../../public/model/weights.json";
+import { distinctValues, mse, quantizeFloat, quantizeInt, roundMiniFloat, scaleGroups, FORMATS } from "./quant";
 import { kmeansCluster, pruneChannels, pruneMagnitude, pruneNM, sparsity } from "./prune";
-import { tensorBits } from "./size";
+import { scaleCount, tensorBits } from "./size";
 
 const W = Float32Array.from(fixture.w);
 const SHAPE = fixture.shape;
@@ -95,5 +96,31 @@ describe("size accounting", () => {
   });
   it("2:4 sparsity stores half the weights plus 2-bit indices", () => {
     expect(tensorBits(t, { kind: "fp32" }, { kind: "nm", n: 2, m: 4 })).toBe(128 * (32 + 2));
+  });
+  it("counts MX and NV block scales per output-channel row, the way the quantizer cuts the blocks", () => {
+    const mx = { kind: "float", bits: 4, block: 32, scaleBitsPerBlock: 8 } as const;
+    const nv = { kind: "float", bits: 4, block: 16, scaleBitsPerBlock: 8, tensorScaleBits: 32 } as const;
+    // A depthwise 3x3 with 4 channels: rows of 9 weights, so each row is one short block.
+    expect(tensorBits({ numel: 36, outChannels: 4 }, mx)).toBe(36 * 4 + 4 * 8);
+    // Rows of 40: a block of 32 and a block of 8 in every row, not ceil(160 / 32) = 5 blocks.
+    expect(tensorBits({ numel: 160, outChannels: 4 }, mx)).toBe(160 * 4 + 8 * 8);
+    expect(tensorBits({ numel: 160, outChannels: 4 }, nv)).toBe(160 * 4 + 12 * 8 + 32);
+  });
+  it("counts every MX and NV scale Pigeon's real weights need", () => {
+    // Pigeon's rows are 8 to 25 weights long, so most rows are one short block. Recounted by hand from
+    // weights.json: 31,034 MX blocks of up to 32 and 58,844 NV blocks of up to 16. A flat ceil(numel / block)
+    // gives 28,522 and 57,038, which is how the Coop undercounted MXFP4 by 2,512 bytes before.
+    const weights = (pigeonTensors as { shape: number[]; numel: number; role: string }[]).filter((t) => t.role === "weight");
+    const blocks = (size: number) => weights.reduce((a, t) => a + scaleCount({ numel: t.numel, outChannels: t.shape[0] }, { kind: "group", size }), 0);
+    expect(blocks(32)).toBe(31_034);
+    expect(blocks(16)).toBe(58_844);
+  });
+  it("stores one scale for every range the quantizer scales on its own", () => {
+    for (const [out, per] of [[4, 64], [16, 9], [8, 25], [24, 8], [3, 40]]) {
+      const shape = [out, per], n = out * per;
+      for (const g of [{ kind: "tensor" }, { kind: "channel" }, { kind: "group", size: 16 }, { kind: "group", size: 32 }] as const) {
+        expect(scaleCount({ numel: n, outChannels: out }, g)).toBe(scaleGroups(n, shape, g).length);
+      }
+    }
   });
 });

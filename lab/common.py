@@ -19,6 +19,7 @@ from .world import Data, Split, make_data
 
 LAB = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(LAB, ".cache")
+MODELS = os.path.join(LAB, "models")     # the trained models the website ships (tracked)
 RESULTS = os.path.join(LAB, "results")
 
 QUICK = os.environ.get("LAB_QUICK") == "1"
@@ -61,21 +62,39 @@ def net(hidden: list[int], seed: int = 0, **kw) -> MLP:
     return MLP([d.world.spec.d] + list(hidden) + [d.world.C], seed=seed, **kw)
 
 
+def shipped_path(key: str) -> str:
+    return os.path.join(MODELS, key + ".npz")
+
+
+def load_npz(path: str):
+    """A model saved with ``MLP.save_npz``, or a single array saved under ``array``."""
+    with np.load(path) as z:
+        if "array" in z.files:
+            return z["array"]
+    return MLP.load_npz(path)
+
+
 def cached(key: str, build):
-    """Build once, then load from lab/.cache. A ``<key>.npz`` (a model saved
-    with ``MLP.save_npz`` or a single array under ``array``) takes precedence
-    over the pickle; that's how the static website ships pre-trained models."""
+    """Build once, then load from lab/.cache: a ``<key>.npz`` there (a model
+    saved with ``MLP.save_npz`` or a single array under ``array``), else the
+    pickle.
+
+    Before training anything with full budgets, look in ``lab/models``: the
+    committed models the website ships, the exact ones behind every Run
+    button and every number a write-up quotes from one. A fresh clone, CI and
+    the browser bundle (which has no lab/.cache) all load those instead of
+    retraining, so they get the same weights. LAB_QUICK models never come from
+    lab/models; they have their own ``q_`` files in lab/.cache."""
     os.makedirs(CACHE, exist_ok=True)
     stem = os.path.join(CACHE, ("q_" if QUICK else "") + key)
     if os.path.exists(stem + ".npz"):
-        with np.load(stem + ".npz") as z:
-            if "array" in z.files:
-                return z["array"]
-        return MLP.load_npz(stem + ".npz")
+        return load_npz(stem + ".npz")
     path = stem + ".pkl"
     if os.path.exists(path):
         with open(path, "rb") as f:
             return pickle.load(f)
+    if not QUICK and os.path.exists(shipped_path(key)):
+        return load_npz(shipped_path(key))
     obj = build()
     tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "wb") as f:

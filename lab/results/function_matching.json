@@ -2,7 +2,7 @@
  "name": "function_matching",
  "group": "3 \u00b7 What the student sees (transfer data)",
  "title": "Patient & consistent teaching",
- "question": "Beyer et al.: treat KD as *function matching* -- query the teacher on fresh augmented inputs every step and train for a long time. Does it keep paying?",
+ "question": "Beyer et al.: treat KD as *function matching*: query the teacher on fresh augmented inputs every step and train for a long time. Does it keep paying?",
  "quick": false,
  "seconds": 302.4,
  "rows": [

@@ -1,47 +1,134 @@
 ---
 import "../styles/tokens.css";
-interface Props { title: string; description?: string; active?: "school" | "coop" | "guide" }
+export type Section = "school" | "coop" | "guide" | "results" | "lifelist";
+interface Props { title: string; description?: string; active?: Section }
 const { title, description = "Learn model compression by shrinking a real bird-spotting model.", active } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+// [section, the word dropped on narrow phones, the word always shown, href]. The dropped word stays in
+// the link's accessible name, so "Coop" still reads as "The Coop". Both words sit in one inner span:
+// the link is a flex box, and a flex item's trailing space would be dropped ("FlightSchool").
+const nav: [Section, string, string, string][] = [
+  ["school", "Flight ", "School", "school/"],
+  ["coop", "The ", "Coop", "coop/"],
+  ["guide", "Field ", "Guide", "guide/"],
+  ["results", "", "Results", "results/"],
+  ["lifelist", "", "Life list", "life-list/"],
+];
 ---
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- No viewport-fit=cover: Safari keeps the page inside the safe area and fills a notch's insets with the paper color. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <title>{title}</title>
+    <slot name="head" />
     <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" />
+    <!-- Without JavaScript the theme control can't do anything, so it isn't shown; the page follows the system. -->
+    <noscript><style>.theme { display: none !important; }</style></noscript>
+    <!-- The theme, all in the head so it works the moment the control exists: a remembered choice is
+         applied before first paint (no flash), a pick is caught by one listener on the document (no dead
+         moment while the page's other scripts load), and the control is kept in step with the page on
+         load, on Back (bfcache or reload) and when another tab changes it. With site storage blocked
+         nothing can be remembered, so the page follows whatever the control shows, and a pick storage
+         refused to save holds for this visit. An inline call right after the control shows the remembered
+         choice as soon as the control is parsed. -->
+    <script is:inline>
+      (function () {
+        var KEY = "pigeon.theme", root = document.documentElement;
+        var BLOCKED = {};
+        var picked = null; // a pick this visit that storage refused to save
+        function read() { try { return localStorage.getItem(KEY); } catch (e) { return BLOCKED; } }
+        function apply(v) { if (v === "light" || v === "dark") root.dataset.theme = v; else delete root.dataset.theme; }
+        function sync() {
+          var sel = document.getElementById("theme"), s = read();
+          var v = picked !== null ? picked : s === BLOCKED ? (sel ? sel.value : "system") : s === "light" || s === "dark" ? s : "system";
+          apply(v);
+          if (sel) sel.value = v;
+        }
+        var first = read();
+        if (first === "light" || first === "dark") apply(first);
+        document.addEventListener("change", function (e) {
+          var t = e.target;
+          if (!t || t.id !== "theme") return;
+          apply(t.value);
+          try { t.value === "system" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, t.value); picked = null; } catch (err) { picked = t.value; }
+        });
+        addEventListener("pageshow", sync);
+        addEventListener("storage", function (e) { if (e.key === KEY || e.key === null) sync(); });
+        window.pigeonThemeSync = sync;
+      })();
+    </script>
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
     <header class="top">
       <a class="brand" href={base}><span class="wordmark">Pigeon</span><span class="latin">Columba compressa</span></a>
       <nav aria-label="Sections">
-        <a href={`${base}school/`} aria-current={active === "school" ? "page" : undefined}>Flight School</a>
-        <a href={`${base}coop/`} aria-current={active === "coop" ? "page" : undefined}>The Coop</a>
-        <a href={`${base}guide/`} aria-current={active === "guide" ? "page" : undefined}>Field Guide</a>
-        <a href={`${base}lab/`}>Lab</a>
+        {nav.map(([key, drop, word, href]) => (
+          <a href={`${base}${href}`} aria-current={active === key ? "page" : undefined}><span>{drop && <span class="drop">{drop}</span>}{word}</span></a>
+        ))}
       </nav>
+      <label class="theme">
+        <span>Theme</span>
+        <select id="theme" autocomplete="off">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select><script is:inline>window.pigeonThemeSync && window.pigeonThemeSync();</script>
+      </label>
     </header>
     <slot />
     <style>
-      .top {
-        display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px;
-        padding-inline: 20px; padding-block: 14px; border-bottom: 1px solid var(--rule);
+      .skip {
+        position: absolute; left: var(--space-2); top: -100px; z-index: 10; padding: var(--space-2) var(--space-3);
+        background: var(--ink); color: var(--paper); border-radius: var(--radius);
       }
-      .brand { display: flex; align-items: baseline; gap: 10px; text-decoration: none; color: var(--ink); }
+      .skip:focus { top: var(--space-2); }
+      /* Wide screens: brand, sections and theme on one line. */
+      .top {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-5);
+        padding-inline: var(--gutter); padding-block: var(--space-3); border-bottom: 1px solid var(--rule);
+      }
+      .brand { display: flex; align-items: baseline; gap: var(--space-2); text-decoration: none; color: var(--ink); }
       .wordmark { font-family: var(--display); font-weight: 600; font-size: var(--step-2); }
       .latin { font-family: var(--display); font-style: italic; color: var(--magenta); }
-      nav { display: flex; flex-wrap: wrap; gap: 4px 18px; }
-      nav a { color: var(--muted); text-decoration: none; font-size: 0.95rem; padding-block: 2px; border-bottom: 2px solid transparent; }
+      nav { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin-inline-end: auto; }
+      nav a {
+        color: var(--muted); text-decoration: none; font-size: var(--step-0); white-space: nowrap;
+        display: inline-flex; align-items: center; justify-content: center; min-height: 36px; border-bottom: 2px solid transparent;
+      }
       nav a:hover { color: var(--ink); }
       nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--teal); }
+      .theme { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--step--1); color: var(--muted); }
+      .theme select {
+        min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--rule-strong); border-radius: var(--radius);
+        background: var(--card); color: var(--ink);
+      }
       @media (pointer: coarse), (max-width: 640px) {
-        .brand { padding-block: 4px; }
-        nav a { display: inline-flex; align-items: center; min-height: 44px; }
+        .skip { display: inline-flex; align-items: center; min-height: var(--tap); }
+        .brand { padding-block: var(--space-1); }
+        nav a, .theme select { min-height: var(--tap); }
+        nav a { min-width: var(--tap); }
+      }
+      /* Up to tablet width: brand and theme share the first line, the sections take the whole second line. */
+      @media (max-width: 960px) {
+        .top { gap: var(--space-1) var(--space-4); }
+        .theme { order: 2; margin-inline-start: auto; }
+        nav { order: 3; flex-basis: 100%; gap: 0 var(--space-4); margin-inline-end: 0; }
+      }
+      /* Phones: the brand drops its Latin name, and each section keeps one word, so all five fit on one line at 320px. */
+      @media (max-width: 480px) {
+        .latin { display: none; }
+        nav { justify-content: space-between; gap: 0 var(--space-1); }
+        .drop {
+          position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+          clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
       }
     </style>
   </body>

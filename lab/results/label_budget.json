@@ -2,7 +2,7 @@
  "name": "label_budget",
  "group": "1 \u00b7 Distillation fundamentals",
  "title": "Distillation as a substitute for labels",
- "question": "With only a few hundred labels, how much do a strong teacher and unlabeled inputs buy -- and does the teacher need the big labeled set?",
+ "question": "With only a few hundred labels, how much do a strong teacher and unlabeled inputs buy? And does the teacher need the big labeled set?",
  "quick": false,
  "seconds": 197.0,
  "rows": [

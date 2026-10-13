@@ -27,17 +27,23 @@ export interface Species {
   };
 }
 
+/** The ratio at which a rock pigeon becomes a mourning dove. */
+const DOVE_AT = 1.8;
+
+// Plumage colors are each real bird's colors: illustration data for the plate,
+// not UI colors, so they live here rather than in tokens.css.
 export const SPECIES: Species[] = [
   {
     id: "pigeon", name: "Rock Pigeon", latin: "Columba livia", grams: 350, minRatio: 0,
-    note: "Full-precision Pigeon. Well fed. Waddles.",
+    // Every model under the dove's ratio is a rock pigeon, so the note must hold at 1.0x and 1.7x alike (speciesNote has the 1.0x one).
+    note: `Still a rock pigeon: it takes ${DOVE_AT} times smaller to make a dove.`,
     scale: 1, body: { l: 58, h: 40 }, head: 14.5, beak: { l: 11, h: 5 },
     wing: { reach: 20, shape: "round" }, tail: { kind: "fan", l: 30 }, leg: 20,
     c: { body: "#8f99a6", belly: "#a7b0bb", head: "#737d8b", wing: "#9aa4b0", mark: "#2f3540", tail: "#6d7582",
       beak: "#3d4047", eye: "#d4572a", ring: "#e9e3d6", leg: "#c8606c", neckA: "#3f9b7f", neckB: "#8e4c8f" },
   },
   {
-    id: "dove", name: "Mourning Dove", latin: "Zenaida macroura", grams: 120, minRatio: 1.8,
+    id: "dove", name: "Mourning Dove", latin: "Zenaida macroura", grams: 120, minRatio: DOVE_AT,
     note: "Slimmer, with a long pointed tail.",
     scale: 0.9, body: { l: 52, h: 29 }, head: 13, beak: { l: 9, h: 3.5 },
     wing: { reach: 26, shape: "pointed" }, tail: { kind: "pointed", l: 50 }, leg: 16,
@@ -70,7 +76,13 @@ export const SPECIES: Species[] = [
   },
 ];
 
-export const DODO = { name: "Dodo", latin: "Raphus cucullatus", note: "You broke the uncompressed model. Impressive." };
+/** Drawn for any model broken before it got much lighter (under 1.3x), so the note can't say "uncompressed". */
+export const DODO = { name: "Dodo", latin: "Raphus cucullatus", note: "You broke it before it got much lighter. Impressive." };
+
+/** A species' note, true at the ratio it is shown for: only a model that lost nothing is called full weight. */
+export function speciesNote(sp: Species, ratio: number): string {
+  return sp.id === SPECIES[0].id && ratio <= 1 ? "Full weight: nothing has come off yet. Waddles." : sp.note;
+}
 
 export function speciesFor(ratio: number): Species {
   let s = SPECIES[0];
@@ -84,6 +96,9 @@ export type Condition = "healthy" | "emaciated" | "skeleton";
 export const WORKS = { accuracy: 0.9, pointing: 0.75 };
 export const BROKEN = { accuracy: 0.6, pointing: 0.35 };
 
+/** The "still works" line in words, so every page quotes the same threshold. */
+export const WORKS_LINE = `≥ ${Math.round(WORKS.accuracy * 100)}% accuracy and ≥ ${Math.round(WORKS.pointing * 100)}% pointing`;
+
 export function starvation(accuracy: number, pointing: number): number {
   const a = (WORKS.accuracy - accuracy) / (WORKS.accuracy - BROKEN.accuracy);
   const p = (WORKS.pointing - pointing) / (WORKS.pointing - BROKEN.pointing);
@@ -93,6 +108,9 @@ export function starvation(accuracy: number, pointing: number): number {
 export function conditionOf(starve: number): Condition {
   return starve <= 0 ? "healthy" : starve >= 1 ? "skeleton" : "emaciated";
 }
+
+/** What a reader sees for each condition: the same three words on the bird card, the chart and the run tables. */
+export const CONDITION_WORD: Record<Condition, string> = { healthy: "Healthy", emaciated: "Starving", skeleton: "Skeleton" };
 
 /* ------------------------------------------------------------ drawing */
 
@@ -104,8 +122,11 @@ function mix(a: string, b: string, t: number): string {
   return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("");
 }
 
+/** Mirrors --bird-dull in tokens.css. It is mixed into hex colors here, so it can't be a var(). */
+const BIRD_DULL = "#8a8176";
+
 /** Pull colours toward a dull grey-brown as the bird starves. */
-const dull = (col: string, s: number) => mix(col, "#8a8176", 0.45 * s);
+const dull = (col: string, s: number) => mix(col, BIRD_DULL, 0.45 * s);
 
 function bodyPath(cx: number, cy: number, l: number, h: number, s: number): string {
   const belly = h * (1 - 0.55 * s); // belly sinks in
@@ -213,12 +234,12 @@ function drawLiving(sp: Species, s: number): string {
   if (c.throat) parts.push(`<path d="M ${hx - hr * 0.2} ${hy + hr * 0.55} q ${hr * 0.5} ${hr * 0.6} ${hr * 0.95} ${-hr * 0.1}" fill="${c.throat}"/>`);
   const bx = hx + hr * 0.9, by = hy + hr * 0.05;
   parts.push(`<path d="M ${bx - 1} ${by - sp.beak.h} L ${bx + sp.beak.l} ${by + droop * 0.15} L ${bx - 1} ${by + sp.beak.h} Z" fill="${c.beak}" stroke="var(--bird-line)" stroke-width="0.8" stroke-linejoin="round"/>`);
-  if (sp.id === "pigeon") parts.push(`<ellipse cx="${bx + 1}" cy="${by - sp.beak.h + 0.5}" rx="3.2" ry="1.8" fill="#eeeae2"/>`);
+  if (sp.id === "pigeon") parts.push(`<ellipse cx="${bx + 1}" cy="${by - sp.beak.h + 0.5}" rx="3.2" ry="1.8" fill="var(--bird-beak-cere)"/>`);
   const ex = hx + hr * 0.3, ey = hy - hr * 0.2;
   if (c.ring) parts.push(`<circle cx="${ex}" cy="${ey}" r="${3.6 + s}" fill="${c.ring}"/>`);
   if (s > 0) parts.push(`<circle cx="${ex}" cy="${ey}" r="${3.2 + 2.2 * s}" fill="var(--bird-rib)" opacity="${0.5 * s}"/>`);
   parts.push(`<circle cx="${ex}" cy="${ey}" r="${2.4 * (1 - 0.3 * s)}" fill="${c.eye}"/>`);
-  parts.push(`<circle cx="${ex + 0.8}" cy="${ey - 0.8}" r="0.8" fill="#fff" opacity="${1 - s}"/>`);
+  parts.push(`<circle cx="${ex + 0.8}" cy="${ey - 0.8}" r="0.8" fill="var(--plate)" opacity="${1 - s}"/>`);
   return parts.join("");
 }
 
@@ -273,6 +294,12 @@ export interface MascotState {
   pointing: number;
 }
 
+/** A model scored some other way (the Coop's detector, by AP kept) brings its own starvation in [0, 1]. */
+export interface StarveState {
+  ratio: number;
+  starve: number;
+}
+
 let halos = 0;
 
 /** A light rim around the bird's silhouette (only visible where --bird-halo is set, i.e. dark mode). */
@@ -285,15 +312,15 @@ function haloFilter(id: string, k: number): string {
   </filter>`;
 }
 
-export function mascotSVG(state: MascotState): { svg: string; species: Species; condition: Condition; starve: number; dodo: boolean } {
+export function mascotSVG(state: MascotState | StarveState): { svg: string; species: Species; condition: Condition; starve: number; dodo: boolean } {
   const species = speciesFor(state.ratio);
-  const starve = starvation(state.accuracy, state.pointing);
+  const starve = "starve" in state ? Math.max(0, Math.min(1, state.starve)) : starvation(state.accuracy, state.pointing);
   const condition = conditionOf(starve);
   const dodo = condition === "skeleton" && state.ratio < 1.3;
   const inner = condition === "skeleton" ? drawSkeleton(species, dodo) : drawLiving(species, starve);
   const k = dodo ? 1 : species.scale;
   const halo = `halo-${++halos}`;
-  const svg = `<svg viewBox="22 38 ${W - 30} ${H - 30}" role="img" aria-label="${dodo ? "Dodo" : species.name}, ${condition}">
+  const svg = `<svg viewBox="22 38 ${W - 30} ${H - 30}" role="img" aria-label="${dodo ? "Dodo" : species.name}, ${CONDITION_WORD[condition].toLowerCase()}">
     <defs>${haloFilter(halo, k)}</defs>
     <ellipse cx="135" cy="${GROUND + 2}" rx="${70 * k}" ry="5" fill="var(--bird-shadow)"/>
     <line x1="30" x2="230" y1="${GROUND + 2}" y2="${GROUND + 2}" stroke="var(--rule)" stroke-width="1"/>

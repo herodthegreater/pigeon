@@ -80,7 +80,8 @@ export function applyRecipe(tensors: TensorMeta[], original: Weights, recipe: Re
           w = kmeansCluster(w, step.k).w;
           break;
         case "prune":
-          if (step.amount <= 0) break;
+          // 2:4 always removes half, whatever amount the step last had (its label names no amount).
+          if (step.method !== "nm" && step.amount <= 0) break;
           if (step.method === "magnitude") {
             w = pruneMagnitude(w, step.amount);
             sp = { kind: "unstructured", nonzero: 1 - step.amount };
