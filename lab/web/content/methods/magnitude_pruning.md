@@ -15,7 +15,10 @@ $$
 4. Use $W \odot M$ from now on, and multiply the gradient by $M$ too, so dead weights stay dead:
 
 $$
-W \leftarrow W \odot M, \qquad \nabla_W L \leftarrow \nabla_W L \odot M .
+\begin{aligned}
+W &\leftarrow W \odot M \\
+\nabla_W L &\leftarrow \nabla_W L \odot M
+\end{aligned}
 $$
 
 5. Recover with labels or *knowledge distillation* (KD), where the pruned net learns to match the unpruned net's output probabilities.
@@ -41,7 +44,7 @@ In the global branch, `flat = np.concatenate([np.abs(net.eff(i)).ravel() for i i
 `run_magnitude` in `lab/methods.py` calls `magnitude_prune(m, 1 - (1 - sp) ** (i / k))` for gradual step $i$ of $k$. With final sparsity $s$, the target after step $i$ is
 
 $$
-s_i = 1 - (1 - s)^{i/k}, \qquad i = 1, \dots, k .
+s_i = 1 - (1 - s)^{i/k}
 $$
 
 That is a geometric schedule: the surviving fraction $1 - s_i = (1 - s)^{i/k}$ shrinks by the same factor $(1 - s)^{1/k}$ at every step, so each step removes the same share of the survivors. For `sp = 0.9`, `k = 5` the targets are about 0.37, 0.60, 0.75, 0.84 and 0.90. Each step is followed by `scratch` (labels) or `distill` (KD from the unpruned teacher) for `FT // k` steps, so the total recovery budget is fixed.

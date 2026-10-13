@@ -11,7 +11,10 @@ FitNets hint, for a batch of $N$ inputs:
 3. Loss: the mean squared entry of $h_s P - h_t$. Train $P$ and the student together.
 
 $$
-\mathcal{L}_{\text{hint}} = \frac{1}{N d_t} \left\lVert h_s P - h_t \right\rVert_F^2 = \frac{1}{N d_t} \sum_{i=1}^{N} \sum_{j=1}^{d_t} \left( (h_s P)_{ij} - (h_t)_{ij} \right)^2
+\begin{aligned}
+\mathcal{L}_{\text{hint}} &= \frac{1}{N d_t} \left\lVert h_s P - h_t \right\rVert_F^2 \\
+&= \frac{1}{N d_t} \sum_{i=1}^{N} \sum_{j=1}^{d_t} \left( (h_s P)_{ij} - (h_t)_{ij} \right)^2
+\end{aligned}
 $$
 
 Similarity-preserving, for the same batch:
@@ -22,8 +25,10 @@ Similarity-preserving, for the same batch:
 
 $$
 \begin{aligned}
-A &= h h^\top, \qquad G_{ij} = \frac{A_{ij}}{\lVert A_{i,:} \rVert_2} \\
-\mathcal{L}_{\text{SP}} &= \frac{1}{N^2} \left\lVert G_s - G_t \right\rVert_F^2 = \frac{1}{N^2} \sum_{i=1}^{N} \sum_{j=1}^{N} \left( G_{s,ij} - G_{t,ij} \right)^2
+A &= h h^\top \\
+G_{ij} &= \frac{A_{ij}}{\lVert A_{i,:} \rVert_2} \\
+\mathcal{L}_{\text{SP}} &= \frac{1}{N^2} \left\lVert G_s - G_t \right\rVert_F^2 \\
+&= \frac{1}{N^2} \sum_{i=1}^{N} \sum_{j=1}^{N} \left( G_{s,ij} - G_{t,ij} \right)^2
 \end{aligned}
 $$
 
@@ -36,9 +41,10 @@ Both are added to the KD loss with a weight, and both need the teacher's hidden 
 `Hint.__call__`: `hs, ht = hid[self.s], b.t_hidden[self.t]` picks the two layers; `b.t_hidden` exists because `distill` passes `hidden=bool(extra_terms)` to `FixedSource`. `r = hs @ self.P - ht` is the residual $R = h_s P - h_t$, `n = r.size` is $N d_t$. The gradient for $P$ is `self.dP = self.w * hs.T @ (2 * r / n)`, and the gradient flowing into the student's hidden layer is `dh = self.w * (2 * r / n) @ self.P.T`. With loss weight $w$:
 
 $$
-\frac{\partial \mathcal{L}}{\partial P} = \frac{2w}{N d_t} \, h_s^\top R,
-\qquad
-\frac{\partial \mathcal{L}}{\partial h_s} = \frac{2w}{N d_t} \, R P^\top
+\begin{aligned}
+\frac{\partial \mathcal{L}}{\partial P} &= \frac{2w}{N d_t} \, h_s^\top R \\[4pt]
+\frac{\partial \mathcal{L}}{\partial h_s} &= \frac{2w}{N d_t} \, R P^\top
+\end{aligned}
 $$
 
 It returns `np.zeros_like(z)` for the logits and `{self.s: dh}`. In `lab/nn.py`, `MLP.backward` adds `dhid[i - 1]` when it reaches layer `i`, which injects `dh` exactly at hidden layer `s`. `fit` appends `t.dP` to the gradients in the same order it added $P$ to the optimizer.
@@ -48,7 +54,8 @@ It returns `np.zeros_like(z)` for the logits and `{self.s: dh}`. In `lab/nn.py`,
 $$
 \begin{aligned}
 \bar{G} &= \frac{2}{N^2} (G_s - G_t) \\
-\bar{A}_{ij} &= \frac{1}{\lVert A_{i,:} \rVert_2} \left( \bar{G}_{ij} - G_{s,ij} \sum_{k=1}^{N} G_{s,ik} \bar{G}_{ik} \right) \\
+\bar{A}_{ij} &= \frac{1}{\lVert A_{i,:} \rVert_2} \Big( \bar{G}_{ij} \\
+&\qquad - G_{s,ij} \sum_{k=1}^{N} G_{s,ik} \bar{G}_{ik} \Big) \\
 \bar{h}_s &= \left( \bar{A} + \bar{A}^\top \right) h_s
 \end{aligned}
 $$

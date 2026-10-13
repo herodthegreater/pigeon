@@ -6,20 +6,26 @@ In an LLM, a small share of input channels (0.1% to 1%) carry much larger activa
 
 Paper orientation: $y = Wx$, $W$ is (out, in), and $X$ holds calibration inputs.
 
-1. Per input channel $j$, measure the average activation size: $s_{X,j} = \operatorname{mean}_{x \in X} \lvert x_j \rvert$.
+1. Per input channel $j$, measure the average activation size:
+
+$$
+s_{X,j} = \operatorname{mean}_{x \in X} \lvert x_j \rvert
+$$
+
 2. For each $\alpha$ on a grid in $[0, 1]$, set $s = s_X^{\alpha}$. $\alpha = 0$ means no scaling, which is plain RTN. $\alpha = 1$ scales fully by activation size.
-3. Quantize the scaled weights, $Q(W \diag(s))$, and feed them scaled-down inputs $\diag(s)^{-1} x$. Measure the output error $\lVert Q(W \diag(s)) \diag(s)^{-1} X - WX \rVert^2$ on calibration data.
-4. Keep the $\alpha$ with the smallest error.
+3. Quantize the scaled weights, $Q(W \diag(s))$, and feed them scaled-down inputs $\diag(s)^{-1} x$. Measure the output error on calibration data:
+
+$$
+\mathcal{L}(\alpha) = \bigl\lVert Q\bigl(W \diag(s)\bigr) \diag(s)^{-1} X - W X \bigr\rVert^2
+$$
+
+4. Keep the $\alpha$ with the smallest error:
+
+$$
+\alpha^* = \argmin_{\alpha \in [0, 1]} \mathcal{L}(\alpha)
+$$
+
 5. At deployment, fold $\diag(s)^{-1}$ into whatever produces $x$, so the scaling costs nothing at run time.
-
-Steps 1 to 4 together are a one-parameter search:
-
-$$
-\begin{aligned}
-s_{X,j} &= \operatorname{mean}_{x \in X} \lvert x_j \rvert, \qquad s = s_X^{\alpha}, \\
-\alpha^* &= \argmin_{\alpha \in [0, 1]} \bigl\lVert Q\bigl(W \diag(s)\bigr) \diag(s)^{-1} X - W X \bigr\rVert^2 .
-\end{aligned}
-$$
 
 **Why scaling helps.** RTN's error on $w \cdot x$ is up to $\Delta \cdot x / 2$, with $\Delta$ the step size. After scaling, $w \cdot s$ is rounded with step $\Delta'$ and multiplied by $x / s$, so the error is up to $\Delta' \cdot x / (2s)$:
 

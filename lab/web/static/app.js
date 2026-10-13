@@ -107,7 +107,7 @@ const MATH_MACROS = {
   "\\relu": "\\operatorname{ReLU}", "\\rank": "\\operatorname{rank}", "\\argmax": "\\operatorname*{arg\\,max}",
   "\\argmin": "\\operatorname*{arg\\,min}", "\\R": "\\mathbb{R}", "\\E": "\\mathbb{E}",
 };
-const INLINE_MATH = /(?<![\\\w$])\$(?=[^\s$])((?:\\.|[^$\\\n])*?[^\s\\])\$(?![\w$])/g;
+const INLINE_MATH = /(?<![\\\w$])\$(?=[^\s$])((?:\\.|[^$\\\n])*?(?:\\.|[^\s\\]))\$(?![\w$])/g;
 function renderMath(tex, display = false) {
   if (!window.katex) return `<code>${esc(tex)}</code>`;  // vendor/katex didn't load: show the source
   try {

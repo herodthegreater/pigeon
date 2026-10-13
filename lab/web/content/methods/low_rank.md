@@ -9,7 +9,10 @@ $$
 gives the best rank-$r$ approximation of $W$ in squared error (the Eckart-Young theorem):
 
 $$
-\lVert W - W_r \rVert_F^2 = \min_{\rank(X) \le r} \lVert W - X \rVert_F^2 = \sum_{i > r} \sigma_i^2 .
+\begin{aligned}
+\lVert W - W_r \rVert_F^2 &= \min_{\rank(X) \le r} \lVert W - X \rVert_F^2 \\
+&= \sum_{i > r} \sigma_i^2
+\end{aligned}
 $$
 
 It is best for the weights, not the outputs, so recovery still helps.
@@ -26,7 +29,11 @@ $$
 3. Keep the top $r$ and split $\Sigma_r^{1/2}$ between the two factors, which keeps them at similar scales. Their product is exactly the truncation $W_r$:
 
 $$
-A = U_r \Sigma_r^{1/2}, \qquad B = \Sigma_r^{1/2} V_r^\top, \qquad AB = U_r \Sigma_r V_r^\top = W_r
+\begin{aligned}
+A &= U_r \Sigma_r^{1/2} \\
+B &= \Sigma_r^{1/2} V_r^\top \\
+AB &= U_r \Sigma_r V_r^\top = W_r
+\end{aligned}
 $$
 
 4. Replace the layer by two layers, $x \mapsto xA \mapsto (xA)B + b$, with no nonlinearity in between.

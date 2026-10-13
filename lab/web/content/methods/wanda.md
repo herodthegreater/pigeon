@@ -6,23 +6,29 @@ Magnitude pruning deletes the weights with the smallest absolute value. But a we
 
 Paper orientation: $W$ is (out, in). $X$ holds calibration inputs, one row per token.
 
-1. Run the calibration data and take each input channel's L2 norm across all tokens: $n_j = \sqrt{\sum_t X_{tj}^2}$.
-2. Score every weight: $S_{ij} = \lvert W_{ij} \rvert \cdot n_j$.
+1. Run the calibration data and take each input channel's L2 norm across all tokens:
+
+$$
+n_j = \lVert X_{:,j} \rVert_2 = \sqrt{\sum_t X_{tj}^2}
+$$
+
+2. Score every weight:
+
+$$
+S_{ij} = \lvert W_{ij} \rvert \cdot n_j
+$$
+
 3. For each output row $i$, sort that row's scores and zero the lowest $k = \round(\text{sparsity} \cdot d_{\text{in}})$.
 4. Move to the next layer, feeding it outputs from the layers already pruned.
-
-Steps 1 and 2 are the whole criterion:
-
-$$
-n_j = \lVert X_{:,j} \rVert_2 = \sqrt{\sum_t X_{tj}^2}, \qquad S_{ij} = \lvert W_{ij} \rvert \cdot n_j .
-$$
 
 **Where the score comes from.** Optimal Brain Surgeon rates removing weight $j$ by $w_j^2 / [H^{-1}]_{jj}$, where $H = X^\top X$ (see SparseGPT). If you approximate $H$ by its diagonal, $[H^{-1}]_{jj} = 1 / \sum_t x_{tj}^2$. The saliency becomes $w_j^2 \cdot n_j^2$, whose square root is Wanda's score:
 
 $$
 \begin{aligned}
-H \approx \diag(H) \quad\Longrightarrow\quad [H^{-1}]_{jj} &= \frac{1}{\sum_t x_{tj}^2} = \frac{1}{n_j^2}, \\
-\frac{w_j^2}{[H^{-1}]_{jj}} &= w_j^2\, n_j^2 = \bigl( \lvert w_j \rvert \cdot n_j \bigr)^2 .
+H &\approx \diag(H) \\
+[H^{-1}]_{jj} &\approx \frac{1}{\sum_t x_{tj}^2} = \frac{1}{n_j^2} \\
+\frac{w_j^2}{[H^{-1}]_{jj}} &\approx w_j^2\, n_j^2 \\
+&= \bigl( \lvert w_j \rvert \cdot n_j \bigr)^2
 \end{aligned}
 $$
 

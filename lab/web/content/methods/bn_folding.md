@@ -16,14 +16,18 @@ Why it is exact: channel $o$ of the conv computes $W_o \circledast x + b_o$ ($\c
 $$
 \begin{aligned}
 y_o &= \gamma_o \, \frac{W_o \circledast x + b_o - \mu_o}{\sqrt{\sigma_o^2 + \epsilon}} + \beta_o \\
-&= \left( W_o \, \frac{\gamma_o}{\sqrt{\sigma_o^2 + \epsilon}} \right) \circledast x + (b_o - \mu_o) \, \frac{\gamma_o}{\sqrt{\sigma_o^2 + \epsilon}} + \beta_o
+&= \left( W_o \, \frac{\gamma_o}{\sqrt{\sigma_o^2 + \epsilon}} \right) \circledast x \\
+&\quad + (b_o - \mu_o) \, \frac{\gamma_o}{\sqrt{\sigma_o^2 + \epsilon}} + \beta_o
 \end{aligned}
 $$
 
 so the folded conv has, per output channel $o$,
 
 $$
-W'_o = W_o \, \frac{\gamma_o}{\sqrt{\sigma_o^2 + \epsilon}}, \qquad b'_o = (b_o - \mu_o) \, \frac{\gamma_o}{\sqrt{\sigma_o^2 + \epsilon}} + \beta_o
+\begin{aligned}
+W'_o &= W_o \, \frac{\gamma_o}{\sqrt{\sigma_o^2 + \epsilon}} \\
+b'_o &= (b_o - \mu_o) \, \frac{\gamma_o}{\sqrt{\sigma_o^2 + \epsilon}} + \beta_o
+\end{aligned}
 $$
 
 Example: $\gamma = 1$, $\sigma^2 + \epsilon = 4$, $\mu = 1$, $\beta = 0.2$, no bias. Then $s = 0.5$, $W' = 0.5 \, W$, $b' = -0.3$. Check: BN of $x$ is $(x - 1) / 2 + 0.2 = 0.5x - 0.3$.

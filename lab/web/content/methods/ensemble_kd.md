@@ -10,13 +10,19 @@ Networks trained from different random starts make different mistakes, so averag
 4. **Average probabilities**: $\bar{p} = \frac{1}{n} \sum_i \softmax(z_i)$, then use $\log \bar{p}$ as the logits. This is the *arithmetic* mean: a class keeps mass if any teacher gives it some, so the target preserves the teachers' disagreement.
 5. Distill one student on the combined target with ordinary KD.
 
-With $p_i = \softmax(z_i / T)$ the $i$-th teacher's probabilities, the two targets for class $c$ are
+With $p_i = \softmax(z_i / T)$ the $i$-th teacher's probabilities, averaging logits gives, for class $c$, the normalized geometric mean
 
 $$
 \begin{aligned}
-\text{average logits:} \quad \softmax\!\Big( \frac{1}{n} \sum_{i=1}^{n} \frac{z_i}{T} \Big)_c &= \frac{\big( \prod_{i=1}^{n} p_{i,c} \big)^{1/n}}{\sum_{c'} \big( \prod_{i=1}^{n} p_{i,c'} \big)^{1/n}} \\
-\text{average probabilities:} \quad \bar{p}_c &= \frac{1}{n} \sum_{i=1}^{n} p_{i,c}
+\softmax\!\Big( \frac{1}{n} \sum_{i=1}^{n} \frac{z_i}{T} \Big)_c
+&= \frac{\big( \prod_{i=1}^{n} p_{i,c} \big)^{1/n}}{\sum_{c'} \big( \prod_{i=1}^{n} p_{i,c'} \big)^{1/n}}
 \end{aligned}
+$$
+
+and averaging probabilities gives the arithmetic mean
+
+$$
+\bar{p}_c = \frac{1}{n} \sum_{i=1}^{n} p_{i,c}
 $$
 
 Feeding $\log \bar{p}$ back in as logits works because $\softmax(\log p) = p$ for a probability vector $p$.
@@ -24,8 +30,11 @@ Feeding $\log \bar{p}$ back in as logits works because $\softmax(\log p) = p$ fo
 Computing $\log \bar{p}$ naively fails when probabilities underflow to 0, so the code uses the log-sum-exp trick, here a log-mean-exp:
 
 $$
-\log \frac{1}{n} \sum_{i=1}^{n} p_i = m + \log \frac{1}{n} \sum_{i=1}^{n} \exp\big( \log p_i - m \big),
-\qquad m = \max_i \log p_i
+\begin{aligned}
+\log \frac{1}{n} \sum_{i=1}^{n} p_i
+&= m + \log \frac{1}{n} \sum_{i=1}^{n} \exp\big( \log p_i - m \big) \\
+m &= \max_i \log p_i
+\end{aligned}
 $$
 
 taken per class, so $m$ is the largest $\log p_i$.

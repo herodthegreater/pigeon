@@ -47,7 +47,18 @@ export function renderMath(tex: string, display = false): string {
 
 // $...$ : not opened by a space or closed after one, never touching a word or a
 // digit outside, so "$5 and $10" stays money and `$x$-th` still works.
-const INLINE_MATH = /(?<![\\\w$])\$(?=[^\s$])((?:\\.|[^$\\\n])*?[^\s\\])\$(?![\w$])/g;
+const INLINE_MATH = /(?<![\\\w$])\$(?=[^\s$])((?:\\.|[^$\\\n])*?(?:\\.|[^\s\\]))\$(?![\w$])/g;
+
+/** Math-looking `$...$` left in rendered HTML (outside code and KaTeX output): a
+ *  formula the parser didn't pick up, which would otherwise show as raw TeX. */
+export function untypesetMath(html: string): string[] {
+  const text = html
+    .replace(/<pre[\s\S]*?<\/pre>/g, "")
+    .replace(/<code[\s\S]*?<\/code>/g, "")
+    .replace(/<span class="katex[\s\S]*?<\/math><\/span>/g, "")
+    .replace(/<[^>]+>/g, " ");
+  return text.match(/\$[^$\n]*[\\^_{}][^$\n]*\$/g) ?? [];
+}
 
 export const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

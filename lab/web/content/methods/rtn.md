@@ -13,10 +13,13 @@ $$
 s_r = \frac{\max_c \lvert W_{rc} \rvert}{q_{\max}}
 $$
 
-3. Replace each weight $W_{rc}$ with its rounded value:
+3. Replace each weight $W_{rc}$ with its rounded value: an integer $q_{rc}$ times the scale.
 
 $$
-\hat W_{rc} = s_r \cdot \clip\!\left( \round\!\left( \frac{W_{rc}}{s_r} \right),\, -q_{\max},\, q_{\max} \right)
+\begin{aligned}
+q_{rc} &= \clip\!\left( \round\!\left( \frac{W_{rc}}{s_r} \right),\, -q_{\max},\, q_{\max} \right) \\
+\hat W_{rc} &= s_r \cdot q_{rc}
+\end{aligned}
 $$
 
 4. Store the integers and one scale per row (or per group).

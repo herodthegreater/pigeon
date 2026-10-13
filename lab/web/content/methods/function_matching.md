@@ -5,23 +5,28 @@ Standard KD precomputes the teacher's answers on fixed inputs, so the student on
 ## How it works
 
 1. Keep the teacher available during training, not just its stored outputs.
-2. For each batch, draw real inputs and augment them. *Mixup* replaces each input by a random blend with another input in the batch: $x' = \lambda x_i + (1 - \lambda) x_j$, $\lambda \sim \operatorname{Beta}(1, 1)$ (uniform on 0 to 1). *Jitter* adds Gaussian noise: $x' = x + 0.3 \, \epsilon$.
+2. For each batch, draw real inputs and augment them. *Mixup* replaces each input by a random blend with another input in the batch, with a weight $\lambda$ drawn uniformly on 0 to 1. *Jitter* adds Gaussian noise $\epsilon$ scaled by 0.3. Mixup is the first pair of lines below, jitter the second:
+
+$$
+\begin{aligned}
+x' &= \lambda x_i + (1 - \lambda) x_j \\
+\lambda &\sim \operatorname{Beta}(1, 1) \\[4pt]
+x' &= x + 0.3 \, \epsilon \\
+\epsilon &\sim \mathcal{N}(0, I)
+\end{aligned}
+$$
+
 3. Run the teacher on $x'$ to get fresh targets.
 4. Train the student on $x'$ with KD against those targets.
 5. Train for many more steps than you would on fixed targets.
 
-The two augmentations, with $\epsilon$ standard Gaussian noise:
-
-$$
-x' = \lambda x_i + (1 - \lambda) x_j, \quad \lambda \sim \operatorname{Beta}(1, 1)
-\qquad\qquad
-x' = x + \sigma \epsilon, \quad \epsilon \sim \mathcal{N}(0, I), \ \sigma = 0.3
-$$
-
 Fixed-target KD minimizes the loss on the stored inputs only. Function matching minimizes it in expectation over augmented inputs, with the teacher queried on the same $x'$ as the student:
 
 $$
-\mathcal{L} = \E_{x} \, \E_{x' \sim \operatorname{aug}(x)} \Big[ T^2 \, \KL\big( p_t(x') \,\|\, p_s(x') \big) \Big]
+\begin{aligned}
+\mathcal{L} &= \E_{x} \, \E_{x' \sim \operatorname{aug}(x)} \big[ \ell(x') \big] \\
+\ell(x') &= T^2 \, \KL\big( p_t(x') \,\|\, p_s(x') \big)
+\end{aligned}
 $$
 
 ```python

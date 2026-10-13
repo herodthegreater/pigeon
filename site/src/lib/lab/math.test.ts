@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { inline, mathErrors, md } from "./markdown";
+import { inline, mathErrors, md, untypesetMath } from "./markdown";
 
 describe("math", () => {
   it("typesets inline $...$ with MathML for screen readers", () => {
@@ -10,6 +10,12 @@ describe("math", () => {
     expect(h).toContain("<math");
     expect(h.startsWith("the loss ")).toBe(true);
     expect(h.endsWith(" grows")).toBe(true);
+  });
+
+  it("typesets inline math that ends in an escaped symbol", () => {
+    expect(inline("levels $\\{-s, 0, s\\}$ here")).toContain('class="katex"');
+    expect(untypesetMath(md("levels $\\{-s, 0, s\\}$ here"))).toEqual([]);
+    expect(untypesetMath("<p>raw $x_i$ left</p>")).toEqual(["$x_i$"]);
   });
 
   it("leaves money, code and escaped dollars alone", () => {
@@ -50,24 +56,24 @@ const DATA = join(__dirname, "../../data/lab");
 const REPO = join(__dirname, "../../../..");
 describe.skipIf(!existsSync(DATA))("math in the lab's content", () => {
   const read = (p: string) => JSON.parse(readFileSync(p, "utf8"));
-  const sources: [string, () => void][] = [];
+  const sources: [string, () => string][] = [];
   for (const f of readdirSync(join(DATA, "methods")).filter((f) => f.endsWith(".json"))) {
     sources.push([`write-up ${f}`, () => md(read(join(DATA, "methods", f)).page)]);
   }
   for (const f of readdirSync(join(DATA, "lessons")).filter((f) => f.endsWith(".json"))) {
     sources.push([`lesson ${f}`, () => {
       const L = read(join(DATA, "lessons", f));
-      md(L.intro);
-      (L.hints || []).forEach((h: string) => inline(h));
+      return md(L.intro) + (L.hints || []).map((h: string) => inline(h)).join("");
     }]);
   }
   sources.push(["REPORT.md", () => md(readFileSync(join(REPO, "lab/REPORT.md"), "utf8"))]);
 
   it.each(sources)("%s typesets cleanly", (_, render) => {
     const before = mathErrors.length;
-    render();
+    const html = render();
     const bad = mathErrors.splice(before);
     expect(bad, bad.map((e) => `${e.tex}\n  ${e.message}`).join("\n")).toEqual([]);
+    expect(untypesetMath(html), "math the parser didn't pick up").toEqual([]);
   });
 });
 

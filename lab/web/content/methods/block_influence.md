@@ -6,15 +6,14 @@ In a residual network each layer *adds* to a running vector, the *residual strea
 
 1. Run calibration data through the model. For each residual layer $i$, record the hidden state entering it ($x_i$) and leaving it ($x_{i+1}$), one vector per token.
 2. For each token, compute the cosine similarity $\cos(x_i, x_{i+1}) = x_i^\top x_{i+1} / (\lVert x_i \rVert_2 \cdot \lVert x_{i+1} \rVert_2)$.
-3. $\operatorname{BI}_i = 1 - \operatorname{mean}(\cos)$ over all tokens.
-4. Sort layers by BI and delete the $k$ lowest. Deleting a residual layer just means skipping it, since the stream passes through unchanged.
-5. Optionally, fine-tune briefly to heal the damage.
-
-Steps 2 and 3 together, with $x_{i,t}$ the hidden state of token $t$:
+3. Average over all tokens, with $x_{i,t}$ the hidden state of token $t$:
 
 $$
 \operatorname{BI}_i = 1 - \E_t \left[ \frac{x_{i,t}^\top \, x_{i+1,t}}{\lVert x_{i,t} \rVert_2 \, \lVert x_{i+1,t} \rVert_2} \right]
 $$
+
+4. Sort layers by BI and delete the $k$ lowest. Deleting a residual layer just means skipping it, since the stream passes through unchanged.
+5. Optionally, fine-tune briefly to heal the damage.
 
 **In a transformer**, a "layer" is a whole decoder block (attention plus MLP, each with its own residual add). $x_i$ is the residual stream at the block boundary. The paper reports that on LLaMA-2 the low-BI blocks sit mostly in the later half. Removing about a quarter of them keeps most of the MMLU score, but hurts generation tasks more. Gromov et al. use a related score, the angular distance between $x_i$ and $x_{i+n}$. They remove the most similar run of $n$ consecutive blocks, then heal with QLoRA.
 

@@ -8,41 +8,57 @@ Draft model $q$, target model $p$, current prefix $x$.
 
 1. The draft generates $\gamma$ tokens one by one: $x_1 \sim q(\cdot \mid x)$, $x_2 \sim q(\cdot \mid x, x_1)$, and so on, saving each $q(x_i)$.
 2. The target runs once on $x, x_1, \dots, x_\gamma$, giving $p(\cdot \mid \dots)$ at all $\gamma + 1$ positions.
-3. For $i = 1, \dots, \gamma$, accept $x_i$ with probability $\min(1, p(x_i) / q(x_i))$.
-4. At the first rejection, sample a replacement from $\operatorname{norm}(\max(0, p - q))$ at that position and stop.
+3. For $i = 1, \dots, \gamma$, accept $x_i$ with probability
+
+$$
+P(\text{accept } x_i) = \min\!\left( 1, \frac{p(x_i)}{q(x_i)} \right)
+$$
+
+4. At the first rejection, sample a replacement from $\operatorname{norm}(\max(0, p - q))$, the residual distribution, at that position and stop:
+
+$$
+p_{\text{res}}(t) = \frac{\max(0,\, p(t) - q(t))}{\sum_{t'} \max(0,\, p(t') - q(t'))}
+$$
+
 5. If all $\gamma$ are accepted, sample one bonus token from $p$ at position $\gamma + 1$.
-
-The acceptance rule of step 3 and the residual distribution of step 4:
-
-$$
-\begin{aligned}
-P(\text{accept } x_i) &= \min\!\left( 1, \frac{p(x_i)}{q(x_i)} \right), \\
-p_{\text{res}}(t) &= \frac{\max(0,\, p(t) - q(t))}{\sum_{t'} \max(0,\, p(t') - q(t'))} .
-\end{aligned}
-$$
 
 **Why the output is exactly $p$.** A token $t$ is emitted either as an accepted draft or as a replacement after a rejection. Let $\beta = \sum_t \min(p(t), q(t))$ be the total acceptance probability. Since $\max(0, p - q) = p - \min(p, q)$, the residual's normalizer is
 
 $$
-\sum_t \max(0,\, p(t) - q(t)) = \sum_t \bigl( p(t) - \min(p(t), q(t)) \bigr) = 1 - \beta ,
+\begin{aligned}
+&\sum_t \max(0,\, p(t) - q(t)) \\
+&\quad = \sum_t p(t) - \sum_t \min(p(t), q(t)) \\
+&\quad = 1 - \beta ,
+\end{aligned}
 $$
 
 so the probability of emitting token $t$ is
 
 $$
 \begin{aligned}
-P(\text{emit } t) &= q(t) \cdot \min\!\left( 1, \frac{p(t)}{q(t)} \right) + (1 - \beta) \cdot \frac{\max(0,\, p(t) - q(t))}{1 - \beta} \\
-&= \min(p(t), q(t)) + \max(0,\, p(t) - q(t)) \\
-&= p(t) .
+&P(\text{emit } t) \\
+&\quad = q(t) \cdot \min\!\left( 1, \frac{p(t)}{q(t)} \right) \\
+&\qquad + (1 - \beta) \cdot \frac{\max(0,\, p(t) - q(t))}{1 - \beta} \\
+&\quad = \min(p(t), q(t)) + \max(0,\, p(t) - q(t)) \\
+&\quad = p(t) .
 \end{aligned}
 $$
 
-**Speed.** The per-token acceptance rate is $\alpha$, below, where TV is total variation distance. The expected number of tokens per target pass is a geometric sum in $\alpha$:
+**Speed.** The per-token acceptance rate is one minus the total variation distance (TV) between $p$ and $q$:
 
 $$
 \begin{aligned}
-\alpha &= \sum_t \min(p(t), q(t)) = 1 - \operatorname{TV}(p, q), \\
-\E[\text{tokens per target pass}] &= \sum_{k=0}^{\gamma} \alpha^k = \frac{1 - \alpha^{\gamma+1}}{1 - \alpha} .
+\alpha &= \sum_t \min(p(t), q(t)) \\
+&= 1 - \operatorname{TV}(p, q)
+\end{aligned}
+$$
+
+The expected number of tokens per target pass is a geometric sum in $\alpha$:
+
+$$
+\begin{aligned}
+\E[\text{tokens per pass}] &= \sum_{k=0}^{\gamma} \alpha^k \\
+&= \frac{1 - \alpha^{\gamma+1}}{1 - \alpha}
 \end{aligned}
 $$
 

@@ -6,19 +6,23 @@ Pruning is quantization to a single level, zero. SparseGPT therefore reuses GPTQ
 
 Notation as on the GPTQ page: one output row $w$, calibration inputs $X$ ($n \times d$), Hessian $H = 2 X^\top X / n$, and $U$, the upper Cholesky factor of $H^{-1}$.
 
-1. **Cost of removing a weight.** OBS says forcing coordinate $j$ from $w_j$ to 0 (the minimum-error forced change, derived on the GPTQ page with $e = w_j$) raises the error by $w_j^2 / (2 [H_F^{-1}]_{jj})$, after the other weights are optimally adjusted. Here $F$ is the set of columns not yet processed. Since $[H_F^{-1}]_{jj} = U_{jj}^2$, the *saliency* is $w_j^2 / U_{jj}^2$.
-2. **Choose the mask a block at a time.** For columns $b_0, \dots, b_0 + B - 1$, compute the saliency of every weight in the block from the *current* weights, which already include the compensation from earlier blocks. Mark the lowest-saliency fraction for removal.
-3. **Prune and compensate, column by column.** For $j$ in the block: set the marked weights to zero, with $e = w_j$ where pruned and 0 where kept. Then apply the GPTQ update $W_{:,\,j+1:} \leftarrow W_{:,\,j+1:} - (e / U_{jj}) \otimes U_{j,\,j+1:}$.
-4. Repeat for the next block, then the next layer, which is fed outputs of the already-pruned layers.
-
-In symbols, step 1's cost and saliency, and step 3's update for all rows at once ($e$ is the column of per-row errors):
+1. **Cost of removing a weight.** OBS says forcing coordinate $j$ from $w_j$ to 0 (the minimum-error forced change, derived on the GPTQ page with $e = w_j$) raises the error by $w_j^2 / (2 [H_F^{-1}]_{jj})$, after the other weights are optimally adjusted. Here $F$ is the set of columns not yet processed. Since $[H_F^{-1}]_{jj} = U_{jj}^2$, the cost and the *saliency* are
 
 $$
 \begin{aligned}
-\Delta E_j &= \frac{w_j^2}{2\, [H_F^{-1}]_{jj}} = \frac{w_j^2}{2\, U_{jj}^2}, \qquad \text{saliency}_j = \frac{w_j^2}{U_{jj}^2}, \\
-W_{:,\,j+1:} &\leftarrow W_{:,\,j+1:} - \frac{e}{U_{jj}}\, U_{j,\,j+1:} .
+\Delta E_j &= \frac{w_j^2}{2\, [H_F^{-1}]_{jj}} = \frac{w_j^2}{2\, U_{jj}^2} \\
+\text{saliency}_j &= \frac{w_j^2}{U_{jj}^2}
 \end{aligned}
 $$
+
+2. **Choose the mask a block at a time.** For columns $b_0, \dots, b_0 + B - 1$, compute the saliency of every weight in the block from the *current* weights, which already include the compensation from earlier blocks. Mark the lowest-saliency fraction for removal.
+3. **Prune and compensate, column by column.** For $j$ in the block: set the marked weights to zero, with $e = w_j$ where pruned and 0 where kept. Then apply the GPTQ update to all rows at once, with $e$ the column of per-row errors (an outer product with row $j$ of $U$):
+
+$$
+W_{:,\,j+1:} \leftarrow W_{:,\,j+1:} - \frac{e}{U_{jj}}\, U_{j,\,j+1:}
+$$
+
+4. Repeat for the next block, then the next layer, which is fed outputs of the already-pruned layers.
 
 Choosing the mask per block, not all at once, is the paper's *adaptive mask selection*. Weights get reshaped by compensation as you go, so a mask fixed up front would be stale. The paper uses blocks of 128 columns.
 

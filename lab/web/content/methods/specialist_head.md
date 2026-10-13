@@ -9,13 +9,20 @@ A generalist spends capacity telling 20 classes apart. If you only need "bird or
 3. Distill: compute the teacher's probabilities $p_t$ over 20 classes at temperature $T$ (here $T = 1$) from its logits $z_t$, and sum them into groups $q_t$, adding up the probabilities of the classes in each group:
 
 $$
-p_t = \softmax(z_t / T), \qquad q_t = p_t \, G, \qquad (q_t)_k = \sum_{c \,:\, G_{ck} = 1} (p_t)_c
+\begin{aligned}
+p_t &= \softmax(z_t / T) \\
+q_t &= p_t \, G \\
+(q_t)_k &= \sum_{c \,:\, G_{ck} = 1} (p_t)_c
+\end{aligned}
 $$
 
 Then train the student's $K$ outputs, with logits $z_s$, to match $q_t$ with the usual KD loss:
 
 $$
-L = T^2 \, \KL(q_t \,\|\, p_s), \qquad p_s = \softmax(z_s / T)
+\begin{aligned}
+L &= T^2 \, \KL(q_t \,\|\, p_s) \\
+p_s &= \softmax(z_s / T)
+\end{aligned}
 $$
 
 4. Score by average precision (AP) of output 0 on the test set, the same single-class ranking measure the YOLOv8n cockpit uses for birds. Sort the test examples by output 0, most bird-like first. With $\operatorname{pos}_k = 1$ if the $k$-th example is a bird and $N_+$ birds in all, AP averages the precision at the rank of each bird:

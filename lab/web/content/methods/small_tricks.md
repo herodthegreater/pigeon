@@ -13,7 +13,10 @@ $$
 2. **Mixup**: pair each example with a random partner, draw $\lambda \sim \operatorname{Beta}(1, 1)$ (uniform on $[0, 1]$), and train on the blend of the two inputs with the same blend of their targets.
 
 $$
-\tilde x = \lambda x_a + (1 - \lambda) x_b, \qquad \tilde y = \lambda y_a + (1 - \lambda) y_b
+\begin{aligned}
+\tilde x &= \lambda x_a + (1 - \lambda) x_b \\
+\tilde y &= \lambda y_a + (1 - \lambda) y_b
+\end{aligned}
 $$
 
 3. **EMA**: after every optimizer step, update a shadow copy $\bar W$ of the weights with decay $d$ close to 1. At the end, replace $W$ by $\bar W$.
@@ -29,7 +32,10 @@ $$
 `CE` in `lab/train.py` is cross-entropy against `b.Y`, a matrix of target probabilities (one-hot, or soft for mixup). With smoothing, `Y = Y * (1 - self.ls) + self.ls / Y.shape[1]` mixes in the uniform distribution. `m = b.lab.astype(F)[:, None]` masks out unlabeled rows and `n` counts the labeled ones. The loss is `-(m * Y * log_softmax(z)).sum() / n`, with logit gradient `(softmax(z) - Y) * m / n`. For example $i$ with mask $m_i$, target row $Y_i$ and logits $z_i$:
 
 $$
-L = -\frac{1}{n} \sum_i m_i \sum_c Y_{ic} \log \softmax(z_i)_c, \qquad \frac{\partial L}{\partial z_i} = \frac{m_i}{n} \left( \softmax(z_i) - Y_i \right)
+\begin{aligned}
+L &= -\frac{1}{n} \sum_i m_i \sum_c Y_{ic} \log \softmax(z_i)_c \\
+\frac{\partial L}{\partial z_i} &= \frac{m_i}{n} \left( \softmax(z_i) - Y_i \right)
+\end{aligned}
 $$
 
 Mixup lives in `OnlineSource.batches`. `k = rng.permutation(len(j))` pairs examples within the batch, `lam = rng.beta(1.0, 1.0, size=(len(j), 1))` draws one $\lambda$ per example, and `X` and `Y` are blended with it. `lab = lab & lab[k]` keeps a row labeled only if both parents were.

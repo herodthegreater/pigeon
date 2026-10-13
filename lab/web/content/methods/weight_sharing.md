@@ -6,10 +6,13 @@ Uniform quantization spaces its levels evenly between $-\max \lvert w \rvert$ an
 
 1. Take each layer's weights as a 1-D list (skipping pruned zeros).
 2. Initialise $k$ centroids evenly spaced from the smallest to the largest value (*linear init*).
-3. Repeat: assign each weight to its nearest centroid, move each centroid to its weights' mean (Lloyd's algorithm). With $S_j$ the set of weights assigned to centroid $j$:
+3. Repeat: assign each weight to its nearest centroid, move each centroid to its weights' mean (Lloyd's algorithm). With $a_i$ the centroid weight $i$ is assigned to, and $S_j = \lbrace i : a_i = j \rbrace$ the set of weights assigned to centroid $j$:
 
 $$
-a_i = \argmin_j \, \lvert w_i - c_j \rvert, \qquad c_j \leftarrow \frac{1}{\lvert S_j \rvert} \sum_{i \in S_j} w_i, \quad S_j = \{ i : a_i = j \}
+\begin{aligned}
+a_i &= \argmin_j \, \lvert w_i - c_j \rvert \\
+c_j &\leftarrow \frac{1}{\lvert S_j \rvert} \sum_{i \in S_j} w_i
+\end{aligned}
 $$
 
 4. Replace each weight by its centroid, $\hat w_i = c_{a_i}$.

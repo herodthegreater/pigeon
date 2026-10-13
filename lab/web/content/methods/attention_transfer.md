@@ -8,7 +8,10 @@ A conv layer's output is a feature map of shape $C \times H \times W$: $C$ chann
 2. For a feature map $A$ (batch $B \times C \times H \times W$): $Q = \sum_c A_{:,c}^2$, shape $B \times H \times W$. Flatten to $B \times HW$ and normalize each row: $q = Q / \lVert Q \rVert_2$. For one image, the normalized attention map is
 
 $$
-Q_{hw} = \sum_{c=1}^{C} A_{chw}^2, \qquad q = \frac{\operatorname{vec}(Q)}{\lVert \operatorname{vec}(Q) \rVert_2} \in \R^{HW}
+\begin{aligned}
+Q_{hw} &= \sum_{c=1}^{C} A_{chw}^2 \\
+q &= \frac{\operatorname{vec}(Q)}{\lVert \operatorname{vec}(Q) \rVert_2} \in \R^{HW}
+\end{aligned}
 $$
 
 3. Pair loss: $\lVert q_S - q_T \rVert_2^2$, averaged over the batch.

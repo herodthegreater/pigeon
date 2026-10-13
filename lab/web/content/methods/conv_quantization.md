@@ -10,7 +10,11 @@ Quantization stores each weight in fewer bits, for example as an 8-bit integer i
 4. $q = \clip(\round(w / s), -q_{\max}, q_{\max})$ is the integer a real file would store, and $\hat{w} = q \cdot s$ is the float the model uses.
 
 $$
-\hat{w} = s \cdot \clip\!\left(\round\!\left(\frac{w}{s}\right), -q_{\max}, q_{\max}\right), \qquad s = \frac{\max_i \lvert w_i \rvert}{q_{\max}}, \qquad q_{\max} = 2^{b-1} - 1
+\begin{aligned}
+q_{\max} &= 2^{b-1} - 1 \\
+s &= \frac{\max_i \lvert w_i \rvert}{q_{\max}} \\
+\hat{w} &= s \cdot \clip\!\left(\round(w / s), -q_{\max}, q_{\max}\right)
+\end{aligned}
 $$
 
 5. At 1 bit there is no zero level: $\hat{w}_i = \sign(w_i) \cdot \frac{1}{n} \sum_j \lvert w_j \rvert$ over the group's $n$ weights.

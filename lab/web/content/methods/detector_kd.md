@@ -8,7 +8,11 @@ A classifier's teacher gives one probability vector per image. A detector like Y
 2. Class term: YOLOv8 scores each class with an independent sigmoid, not a softmax, so use binary cross-entropy against the teacher's sigmoid scores, weighted per cell by the teacher's top score $w$. With $\sigma$ the sigmoid and $z^t_{ik}$, $z^s_{ik}$ the teacher's and student's logits for class $k$ at cell $i$:
 
 $$
-w_i = \max_k \sigma(z^t_{ik}), \qquad \mathcal{L}_{\text{cls}} = \frac{\sum_i w_i \sum_k \operatorname{BCE}\!\left(\sigma(z^s_{ik}), \sigma(z^t_{ik})\right)}{\sum_i w_i}
+\begin{aligned}
+w_i &= \max_k \sigma(z^t_{ik}) \\
+\ell_i &= \sum_k \operatorname{BCE}\big(\sigma(z^s_{ik}), \sigma(z^t_{ik})\big) \\
+\mathcal{L}_{\text{cls}} &= \frac{1}{\sum_i w_i} \sum_i w_i \, \ell_i
+\end{aligned}
 $$
 
 where $\operatorname{BCE}(p, q) = -q \log p - (1 - q) \log (1 - p)$ scores the student's $p$ against the teacher's $q$.
@@ -16,14 +20,21 @@ where $\operatorname{BCE}(p, q) = -q \log p - (1 - q) \log (1 - p)$ scores the s
 3. Box term: YOLOv8 predicts each box edge as a distribution over 16 bins (its DFL head). On cells where $w$ is high, match the student's bin distribution to the teacher's with KL divergence at temperature $T$. With $b^t_{ie}$, $b^s_{ie}$ the 16 bin logits for edge $e$ of cell $i$, and $F$ the foreground cells ($w_i > 0.25$ in the sketch below):
 
 $$
-\mathcal{L}_{\text{box}} = \frac{T^2}{\lvert F \rvert} \sum_{i \in F} \sum_{e=1}^{4} \KL\!\left(\softmax(b^t_{ie} / T) \,\Big\|\, \softmax(b^s_{ie} / T)\right)
+\begin{aligned}
+p^t_{ie} &= \softmax(b^t_{ie} / T) \\
+p^s_{ie} &= \softmax(b^s_{ie} / T) \\
+\mathcal{L}_{\text{box}} &= \frac{T^2}{\lvert F \rvert} \sum_{i \in F} \sum_{e=1}^{4} \KL\big(p^t_{ie} \,\|\, p^s_{ie}\big)
+\end{aligned}
 $$
 
 4. Feature term: at the three neck outputs, a $1 \times 1$ conv adapter maps student features to the teacher's width, then mean-squared error, ideally masked to foreground.
 5. $\mathcal{L} = \mathcal{L}_{\text{det}} + \mathcal{L}_{\text{cls}} + \mathcal{L}_{\text{box}} + \mathcal{L}_{\text{feat}}$, with $\mathcal{L}_{\text{det}}$ the usual loss on the labels and each distillation term with its own weight. With adapters $g_j$ and neck features $\phi^s_j$, $\phi^t_j$ at outputs $j$:
 
 $$
-\mathcal{L} = \mathcal{L}_{\text{det}} + \lambda_{\text{cls}} \mathcal{L}_{\text{cls}} + \lambda_{\text{box}} \mathcal{L}_{\text{box}} + \lambda_{\text{feat}} \sum_{j} \operatorname{MSE}\!\left(g_j(\phi^s_j), \phi^t_j\right)
+\begin{aligned}
+\mathcal{L} = {} &\mathcal{L}_{\text{det}} + \lambda_{\text{cls}} \mathcal{L}_{\text{cls}} + \lambda_{\text{box}} \mathcal{L}_{\text{box}} \\
+&+ \lambda_{\text{feat}} \sum_{j} \operatorname{MSE}\big(g_j(\phi^s_j), \phi^t_j\big)
+\end{aligned}
 $$
 
 ```python
@@ -45,7 +56,10 @@ loss = det_loss(student_out, targets) + a * l_cls + b * l_box + c * l_feat
 This method has no code entry; the closest is `KD` in lab/train.py. `_teacher_probs` computes `softmax(tl, T)`, the teacher's softened distribution $p^t = \softmax(z^t / T)$. With a `group` matrix, `p = p @ self.G` sums teacher probabilities into a coarser label space, such as 20 classes into {bird, other}: $p^t G$, where $G_{kc} = 1$ when fine class $k$ belongs to coarse class $c$. That is how a bird-only detector would fold the teacher's 80 COCO scores. For `kind="kl"`, the loss is `T * T * (pt * (lt - ls)).sum() / N` and the logit gradient is `T * (ps - pt) / N`. Over a batch of $N$ examples $n$, with $p^s = \softmax(z^s / T)$:
 
 $$
-\mathcal{L}_{\text{KD}} = \frac{T^2}{N} \sum_{n=1}^{N} \KL\!\left(p^t_n \,\|\, p^s_n\right), \qquad \frac{\partial \mathcal{L}_{\text{KD}}}{\partial z^s_n} = \frac{T}{N} \left(p^s_n - p^t_n\right)
+\begin{aligned}
+\mathcal{L}_{\text{KD}} &= \frac{T^2}{N} \sum_{n=1}^{N} \KL\big(p^t_n \,\|\, p^s_n\big) \\
+\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z^s_n} &= \frac{T}{N} \big(p^s_n - p^t_n\big)
+\end{aligned}
 $$
 
 A detector applies the same idea per cell, with sigmoid targets, plus the box and feature terms.

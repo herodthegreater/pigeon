@@ -7,29 +7,34 @@ To run a matrix multiply on 8-bit integer hardware, both the weights and the *ac
 SmoothQuant writes $Y = XW$ with $X$ (tokens $\times$ in) and $W$ (in $\times$ out), the same orientation this repo stores.
 
 1. On calibration data, record each input channel's maximum activation $\max \lvert X_j \rvert$ and maximum weight $\max \lvert W_j \rvert$ (row $j$ of $W$).
-2. Set $s_j = (\max \lvert X_j \rvert)^{\alpha} / (\max \lvert W_j \rvert)^{1-\alpha}$. The *migration strength* $\alpha$ sets how much difficulty moves. At $\alpha = 0.5$, both sides end up with the same per-channel maximum $\sqrt{\max \lvert X_j \rvert \cdot \max \lvert W_j \rvert}$.
-3. Divide input channel $j$ by $s_j$ and multiply weight row $j$ by $s_j$. The product is unchanged.
-4. Fold $1/s$ into whatever produced $X$, offline, so no extra work happens at run time.
-5. Quantize weights per output channel and activations per tensor (or per token) to 8 bits.
-
-Steps 2 and 3 in symbols. The scale is
+2. Set the scale of channel $j$; the *migration strength* $\alpha$ sets how much difficulty moves:
 
 $$
-s_j = \frac{(\max \lvert X_j \rvert)^{\alpha}}{(\max \lvert W_j \rvert)^{1-\alpha}},
+s_j = \frac{(\max \lvert X_j \rvert)^{\alpha}}{(\max \lvert W_j \rvert)^{1-\alpha}}
 $$
 
-and the rescaled pair $\hat X = X \diag(s)^{-1}$, $\hat W = \diag(s) W$ gives exactly the same product:
+At $\alpha = 0.5$, both sides end up with the same per-channel maximum $\sqrt{\max \lvert X_j \rvert \cdot \max \lvert W_j \rvert}$ (derived below).
 
-$$
-Y = XW = \bigl(X \diag(s)^{-1}\bigr)\bigl(\diag(s)\, W\bigr) = \hat X \hat W .
-$$
-
-Per channel, the two maxima after smoothing are
+3. Divide input channel $j$ by $s_j$ and multiply weight row $j$ by $s_j$. The product is unchanged:
 
 $$
 \begin{aligned}
-\max \lvert \hat X_j \rvert &= \frac{\max \lvert X_j \rvert}{s_j} = (\max \lvert X_j \rvert)^{1-\alpha} \, (\max \lvert W_j \rvert)^{1-\alpha}, \\
-\max \lvert \hat W_j \rvert &= s_j \max \lvert W_j \rvert = (\max \lvert X_j \rvert)^{\alpha} \, (\max \lvert W_j \rvert)^{\alpha},
+Y = XW &= \bigl(X \diag(s)^{-1}\bigr)\bigl(\diag(s)\, W\bigr) \\
+&= \hat X \hat W
+\end{aligned}
+$$
+
+4. Fold $1/s$ into whatever produced $X$, offline, so no extra work happens at run time.
+5. Quantize weights per output channel and activations per tensor (or per token) to 8 bits.
+
+With $\hat X = X \diag(s)^{-1}$ and $\hat W = \diag(s) W$, the per-channel maxima after smoothing are
+
+$$
+\begin{aligned}
+\max \lvert \hat X_j \rvert &= \frac{\max \lvert X_j \rvert}{s_j} \\
+&= (\max \lvert X_j \rvert)^{1-\alpha} \, (\max \lvert W_j \rvert)^{1-\alpha}, \\
+\max \lvert \hat W_j \rvert &= s_j \max \lvert W_j \rvert \\
+&= (\max \lvert X_j \rvert)^{\alpha} \, (\max \lvert W_j \rvert)^{\alpha},
 \end{aligned}
 $$
 

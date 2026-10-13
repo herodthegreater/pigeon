@@ -7,23 +7,33 @@ Hinton KD is one way to compare student and teacher outputs. The variants change
 Let $p_t = \softmax(z_t / T)$ and $p_s = \softmax(z_s / T)$ be the teacher's and student's tempered probabilities over $C$ classes ($z_t$ and $z_s$ are the logits, raw scores; temperature $T$ flattens the probabilities).
 
 1. **Forward KL** (`kl`): $T^2 \cdot \KL(p_t \,\|\, p_s)$. Punishes missing mass where the teacher has some, so the student covers every plausible class ("mode-covering").
-2. **Reverse KL** (`rkl`): $T^2 \cdot \KL(p_s \,\|\, p_t)$. Punishes mass the teacher lacks, so a weak student commits to the main answer ("mode-seeking").
-3. **Logit MSE** (`mse`): the mean of $(z_s - z_t)^2$. No softmax, no temperature. Hinton showed KD approaches this as $T$ grows, if logits are zero-mean.
-4. **Hard** (`hard`): replace $p_t$ by a one-hot vector at the teacher's top class and use cross-entropy. No information about other classes.
-5. **Top-k** (`topk`): take the teacher's $k$ largest probabilities at $T = 1$ (what an API would return), spread the remaining mass evenly over the other classes, then soften the result with $T$ and apply forward KL.
 
-Written out, per input:
+$$
+\mathcal{L}_{\text{kl}} = T^2 \sum_{c=1}^{C} p_{t,c} \left( \log p_{t,c} - \log p_{s,c} \right)
+$$
+
+2. **Reverse KL** (`rkl`): $T^2 \cdot \KL(p_s \,\|\, p_t)$. Punishes mass the teacher lacks, so a weak student commits to the main answer ("mode-seeking").
+
+$$
+\mathcal{L}_{\text{rkl}} = T^2 \sum_{c=1}^{C} p_{s,c} \left( \log p_{s,c} - \log p_{t,c} \right)
+$$
+
+3. **Logit MSE** (`mse`): the mean of $(z_s - z_t)^2$. No softmax, no temperature. Hinton showed KD approaches this as $T$ grows, if logits are zero-mean.
+
+$$
+\mathcal{L}_{\text{mse}} = \frac{1}{C} \sum_{c=1}^{C} \left( z_{s,c} - z_{t,c} \right)^2
+$$
+
+4. **Hard** (`hard`): replace $p_t$ by a one-hot vector at the teacher's top class and use cross-entropy. No information about other classes.
 
 $$
 \begin{aligned}
-\mathcal{L}_{\text{kl}} &= T^2 \sum_{c=1}^{C} p_{t,c} \left( \log p_{t,c} - \log p_{s,c} \right) \\
-\mathcal{L}_{\text{rkl}} &= T^2 \sum_{c=1}^{C} p_{s,c} \left( \log p_{s,c} - \log p_{t,c} \right) \\
-\mathcal{L}_{\text{mse}} &= \frac{1}{C} \sum_{c=1}^{C} \left( z_{s,c} - z_{t,c} \right)^2 \\
-\mathcal{L}_{\text{hard}} &= -\log \softmax(z_s)_{\hat{y}}, \qquad \hat{y} = \argmax_c z_{t,c}
+\hat{y} &= \argmax_c z_{t,c} \\
+\mathcal{L}_{\text{hard}} &= -\log \softmax(z_s)_{\hat{y}}
 \end{aligned}
 $$
 
-For top-k, let $p = \softmax(z_t)$ and $K$ be the set of its $k$ largest entries. The kept and filled-in target, and its softened version, are
+5. **Top-k** (`topk`): take the teacher's $k$ largest probabilities at $T = 1$ (what an API would return), spread the remaining mass evenly over the other classes, then soften the result with $T$ and apply forward KL. With $p = \softmax(z_t)$ and $K$ the set of its $k$ largest entries, the kept and filled-in target is
 
 $$
 \tilde{p}_c =
@@ -31,8 +41,15 @@ $$
 p_c & c \in K \\[4pt]
 \dfrac{1 - \sum_{c' \in K} p_{c'}}{C - \lvert K \rvert} & c \notin K
 \end{cases}
-\qquad
-p_{t,c} = \frac{\tilde{p}_c^{\,1/T}}{\sum_{c'} \tilde{p}_{c'}^{\,1/T}} = \softmax\!\left( \frac{\log \tilde{p}}{T} \right)_c
+$$
+
+and its softened version is
+
+$$
+\begin{aligned}
+p_{t,c} &= \frac{\tilde{p}_c^{\,1/T}}{\sum_{c'} \tilde{p}_{c'}^{\,1/T}} \\[4pt]
+&= \softmax\!\left( \frac{\log \tilde{p}}{T} \right)_c
+\end{aligned}
 $$
 
 ## The code, line by line
@@ -46,7 +63,10 @@ $$
 - `rkl`: `per = (ps * (ls - lt)).sum(1, keepdims=True)` is the per-row reverse KL; differentiating through the softmax gives `dz = T * ps * (ls - lt - per) / N`:
 
 $$
-\frac{\partial \mathcal{L}_{\text{rkl}}}{\partial z_{s,c}} = T \, p_{s,c} \left( \log p_{s,c} - \log p_{t,c} - \KL(p_s \,\|\, p_t) \right)
+\begin{aligned}
+\frac{\partial \mathcal{L}_{\text{rkl}}}{\partial z_{s,c}} = T \, p_{s,c} \big( &\log p_{s,c} - \log p_{t,c} \\
+&- \KL(p_s \,\|\, p_t) \big)
+\end{aligned}
 $$
 
 - `kl` and `topk` share the forward-KL branch: `loss = T * T * (pt * (lt - ls)).sum() / N`, `dz = T * (ps - pt) / N`, the gradient $T (p_s - p_t) / N$. For `kl`, `lt = log_softmax(b.t_logits, T)` is exact; otherwise `np.log(pt + 1e-12)`.

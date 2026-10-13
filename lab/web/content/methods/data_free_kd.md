@@ -16,13 +16,19 @@ Teacher inversion:
 With teacher logits $f_t(x)$, inversion minimizes over the inputs alone:
 
 $$
-\min_{x_1, \ldots, x_n} \; \frac{1}{n} \sum_{i=1}^{n} \left( -\log \softmax\big(f_t(x_i)\big)_{c_i} + \frac{\lambda}{2} \lVert x_i \rVert_2^2 \right)
+\begin{aligned}
+\min_{x_1, \ldots, x_n} \; \frac{1}{n} \sum_{i=1}^{n} \Big( &-\log \softmax\big(f_t(x_i)\big)_{c_i} \\
+&+ \frac{\lambda}{2} \lVert x_i \rVert_2^2 \Big)
+\end{aligned}
 $$
 
 with gradient
 
 $$
-\frac{\partial \mathcal{L}}{\partial x_i} = \frac{1}{n} \left( J_{f_t}(x_i)^\top \big( \softmax(f_t(x_i)) - e_{c_i} \big) + \lambda x_i \right)
+\begin{aligned}
+\frac{\partial \mathcal{L}}{\partial x_i} = \frac{1}{n} \Big( &J_{f_t}(x_i)^\top \big( \softmax(f_t(x_i)) - e_{c_i} \big) \\
+&+ \lambda x_i \Big)
+\end{aligned}
 $$
 
 where $J_{f_t}$ is the teacher's Jacobian and $e_{c_i}$ the one-hot target. Noise baselines skip steps 2-5 and draw $X$ from a Gaussian or a uniform distribution.

@@ -10,7 +10,8 @@ $$
 \begin{aligned}
 E(w') &= \lVert X (w' - w)^\top \rVert^2 \\
 &= (w' - w)\, X^\top X\, (w' - w)^\top \\
-&= \frac{n}{2}\, (w' - w)\, H\, (w' - w)^\top, \qquad H = \frac{2}{n} X^\top X.
+&= \frac{n}{2}\, (w' - w)\, H\, (w' - w)^\top, \\
+H &= \frac{2}{n}\, X^\top X.
 \end{aligned}
 $$
 
@@ -36,7 +37,10 @@ $$
 3. The constraint $\delta_j = -e$ gives $\lambda$:
 
 $$
-\delta_j = -\lambda\, [H^{-1}]_{jj} = -e \quad\Longrightarrow\quad \lambda = \frac{e}{[H^{-1}]_{jj}}
+\begin{aligned}
+\delta_j = -\lambda\, [H^{-1}]_{jj} &= -e \\
+\lambda &= \frac{e}{[H^{-1}]_{jj}}
+\end{aligned}
 $$
 
 4. So the update, and the amount $\Delta E$ the error grows by, are
@@ -44,7 +48,10 @@ $$
 $$
 \begin{aligned}
 \delta &= -\frac{e}{[H^{-1}]_{jj}}\, [H^{-1}]_{j,:}, \\
-\Delta E = \tfrac{1}{2}\, \delta H \delta^\top &= \frac{\lambda^2}{2}\, [H^{-1}]_{j,:}\, H\, [H^{-1}]_{:,j} = \frac{e^2}{2\, [H^{-1}]_{jj}}.
+\Delta E &= \tfrac{1}{2}\, \delta H \delta^\top \\
+&= \frac{\lambda^2}{2}\, [H^{-1}]_{j,:}\, H\, [H^{-1}]_{:,j} \\
+&= \frac{\lambda^2}{2}\, [H^{-1}]_{jj} \\
+&= \frac{e^2}{2\, [H^{-1}]_{jj}}.
 \end{aligned}
 $$
 

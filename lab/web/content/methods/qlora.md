@@ -9,24 +9,30 @@ For each linear layer, with weight stored as (in, out) as in this repo:
 1. Quantize the original weights once: $W_q = Q(W_0)$. Freeze them.
 2. Add two trainable matrices: $A$ ($\text{in} \times r$), random, and $B$ ($r \times \text{out}$), zeros. The layer's weight becomes $W = W_q + AB$. Since $B = 0$, training starts exactly at the quantized model.
 3. Forward and backward as usual, giving $\partial L / \partial W$ for each layer.
-4. Since $W = W_q + AB$, the chain rule gives $\partial L / \partial A = (\partial L / \partial W)\, B^\top$ and $\partial L / \partial B = A^\top (\partial L / \partial W)$. Update only $A$ and $B$.
+4. Since $W = W_q + AB$, the chain rule gives the adapters' gradients from the full-weight gradient. Update only $A$ and $B$:
+
+$$
+\begin{aligned}
+\frac{\partial L}{\partial A} &= \frac{\partial L}{\partial W}\, B^\top \\
+\frac{\partial L}{\partial B} &= A^\top \frac{\partial L}{\partial W}
+\end{aligned}
+$$
+
 5. Afterwards, either keep $A$, $B$ separate (base stays 4-bit, plus one small extra matmul) or merge $W_q + AB$ into a dense weight.
 
 Step 4 in full. Write $G = \partial L / \partial W$ and $\langle P, Q \rangle = \operatorname{tr}(P^\top Q)$ for the inner product of matrices. A small change $\mathrm{d}A$, $\mathrm{d}B$ moves the weight by $\mathrm{d}W = \mathrm{d}A\, B + A\, \mathrm{d}B$ ($W_q$ is frozen), so
 
 $$
 \begin{aligned}
-\mathrm{d}L &= \langle G,\, \mathrm{d}W \rangle = \langle G,\, \mathrm{d}A\, B \rangle + \langle G,\, A\, \mathrm{d}B \rangle \\
+\mathrm{d}L &= \langle G,\, \mathrm{d}W \rangle \\
+&= \langle G,\, \mathrm{d}A\, B \rangle + \langle G,\, A\, \mathrm{d}B \rangle \\
 &= \operatorname{tr}(G^\top \mathrm{d}A\, B) + \operatorname{tr}(G^\top A\, \mathrm{d}B) \\
+&= \operatorname{tr}(B G^\top \mathrm{d}A) + \operatorname{tr}(G^\top A\, \mathrm{d}B) \\
 &= \langle G B^\top,\, \mathrm{d}A \rangle + \langle A^\top G,\, \mathrm{d}B \rangle ,
 \end{aligned}
 $$
 
-and reading off the coefficients of $\mathrm{d}A$ and $\mathrm{d}B$:
-
-$$
-\frac{\partial L}{\partial A} = \frac{\partial L}{\partial W}\, B^\top, \qquad \frac{\partial L}{\partial B} = A^\top \frac{\partial L}{\partial W} .
-$$
+and the coefficients of $\mathrm{d}A$ and $\mathrm{d}B$ are the two gradients of step 4.
 
 Adapter size per layer is $r \cdot (\text{in} + \text{out})$ instead of $\text{in} \cdot \text{out}$. For a 4096 x 4096 projection at $r = 16$, that is 131,072 instead of 16.8 million.
 

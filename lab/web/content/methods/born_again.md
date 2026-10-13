@@ -13,7 +13,11 @@ Distillation does not need a bigger teacher. Furlanello et al. trained a network
 With $z_g$ the logits of generation $g$ and $y$ the label, generation $g$ minimizes
 
 $$
-\mathcal{L}_g = \alpha \, T^2 \, \KL\big( \softmax(z_{g-1} / T) \,\|\, \softmax(z_g / T) \big) + (1 - \alpha) \big( -\log \softmax(z_g)_y \big)
+\begin{aligned}
+\mathcal{L}_g &= \alpha \, T^2 \, \KL\big( p_{g-1} \,\|\, p_g \big) \\
+&\quad + (1 - \alpha) \big( -\log \softmax(z_g)_y \big) \\
+p_g &= \softmax(z_g / T)
+\end{aligned}
 $$
 
 with the parent $z_{g-1}$ held fixed.

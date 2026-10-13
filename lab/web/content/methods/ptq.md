@@ -9,7 +9,10 @@ A trained network stores 32-bit floats but rarely needs that much precision. *Po
 3. Per group, set the scale from the largest weight, then round each weight to the nearest level:
 
 $$
-s = \frac{\max_i \lvert w_i \rvert}{q_{\max}}, \qquad q_i = \clip\!\left( \round\!\left( \frac{w_i}{s} \right), -q_{\max}, q_{\max} \right)
+\begin{aligned}
+s &= \frac{\max_i \lvert w_i \rvert}{q_{\max}} \\
+q_i &= \clip\!\left( \round\!\left( \frac{w_i}{s} \right), -q_{\max}, q_{\max} \right)
+\end{aligned}
 $$
 
 4. The stored model is $q$ ($b$ bits each) plus one scale per group. The weight used at inference is $\hat w_i = s \, q_i$.

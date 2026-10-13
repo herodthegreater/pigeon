@@ -8,7 +8,10 @@ Ordinary importance scores ask which neurons matter for everything the network d
 2. Score each hidden neuron with the Taylor criterion, the sum over examples of $\lvert a \cdot \partial L / \partial a \rvert$, where $L$ is the negative log-probability of the example's true group. For an example of class $y$ in group $g(y)$ with logits $z$:
 
 $$
-q = \softmax(z) \, G, \qquad L = -\log q_{g(y)}
+\begin{aligned}
+q &= \softmax(z) \, G \\
+L &= -\log q_{g(y)}
+\end{aligned}
 $$
 
 3. Keep the top $w$ neurons per layer (structured pruning).

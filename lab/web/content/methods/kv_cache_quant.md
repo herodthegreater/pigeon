@@ -14,25 +14,24 @@ The recipe follows KIVI; KVQuant's refinements come after.
 
 1. **Keys per channel.** Key vectors have a few fixed channels with large magnitude, the same kind of outlier SmoothQuant deals with. Quantize keys with one scale and zero point *per channel*, computed over a group of $G$ tokens (for example 32).
 2. **Values per token.** Values have no fixed outlier channels, and attention mixes them per token. Quantize each token's value vector with its own scale and zero point.
-3. **Asymmetric, low-bit.** Use $q = \round((x - x_{\min}) / \Delta)$ with $\Delta = (x_{\max} - x_{\min}) / (2^b - 1)$ at $b$ = 2 to 4.
-4. **Full-precision residual window.** Per-channel key scales need a full group of tokens. Keep the most recent $R$ tokens in fp16, and quantize them once a group fills.
-5. **Attention.** Compute $\softmax(q K^\top / \sqrt{d})\, V$ with $K$ and $V$ dequantized group by group. Fused kernels do this on the fly, without materializing fp16 copies.
-
-The quantizer of step 3, over one group (a key channel or a value token), and its dequantized value $\hat x$:
+3. **Asymmetric, low-bit.** Quantize each group (a key channel or a value token) with its own minimum and step, at $b$ = 2 to 4 bits, and dequantize to $\hat x$:
 
 $$
 \begin{aligned}
-\Delta &= \frac{x_{\max} - x_{\min}}{2^b - 1}, \\
-q &= \round\!\left( \frac{x - x_{\min}}{\Delta} \right), \\
-\hat x &= x_{\min} + q\, \Delta .
+\Delta &= \frac{x_{\max} - x_{\min}}{2^b - 1} \\
+q &= \round\!\left( \frac{x - x_{\min}}{\Delta} \right) \\
+\hat x &= x_{\min} + q\, \Delta
 \end{aligned}
 $$
 
-Attention in step 5 then runs on the dequantized cache:
+4. **Full-precision residual window.** Per-channel key scales need a full group of tokens. Keep the most recent $R$ tokens in fp16, and quantize them once a group fills.
+5. **Attention.** Compute attention with $K$ and $V$ dequantized group by group:
 
 $$
 \operatorname{Attention}(q, \hat K, \hat V) = \softmax\!\left( \frac{q \hat K^\top}{\sqrt{d}} \right) \hat V
 $$
+
+Fused kernels do this on the fly, without materializing fp16 copies.
 
 KVQuant adds:
 

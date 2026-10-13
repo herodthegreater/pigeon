@@ -7,34 +7,42 @@ A classifier outputs a probability for every class. Those probabilities say whic
 1. Train the teacher on labeled data.
 2. Choose a *transfer set*: inputs on which to query the teacher. They need no labels.
 3. For a batch, compute teacher logits $z_t$ and student logits $z_s$ (raw scores before softmax).
-4. Soften both: $p_t = \softmax(z_t / T)$, $p_s = \softmax(z_s / T)$. Larger $T$ flattens them so runner-up classes get visible mass.
-5. KD loss: $T^2 \cdot \KL(p_t \,\|\, p_s)$, written out below. KL divergence is zero when they agree.
-6. Mix with cross-entropy (CE) on rows that have a label: $\mathcal{L} = \alpha \cdot \mathcal{L}_{\text{KD}} + (1 - \alpha) \cdot \mathcal{L}_{\text{CE}}$.
-7. Use the student at $T = 1$ at test time.
-
-Written out for $C$ classes, the softened probabilities are
-
-$$
-p_{t,c} = \frac{\exp(z_{t,c} / T)}{\sum_{c'=1}^{C} \exp(z_{t,c'} / T)},
-\qquad
-p_{s,c} = \frac{\exp(z_{s,c} / T)}{\sum_{c'=1}^{C} \exp(z_{s,c'} / T)}
-$$
-
-and the loss on one input with label $y$ is
+4. Soften both: $p_t = \softmax(z_t / T)$, $p_s = \softmax(z_s / T)$. Larger $T$ flattens them so runner-up classes get visible mass. For $C$ classes:
 
 $$
 \begin{aligned}
-\mathcal{L}_{\text{KD}} &= T^2 \cdot \KL(p_t \,\|\, p_s) = T^2 \sum_{c=1}^{C} p_{t,c} \left( \log p_{t,c} - \log p_{s,c} \right) \\
-\mathcal{L} &= \alpha \cdot \mathcal{L}_{\text{KD}} + (1 - \alpha) \cdot \left( -\log \softmax(z_s)_y \right)
+p_{t,c} &= \frac{\exp(z_{t,c} / T)}{\sum_{c'=1}^{C} \exp(z_{t,c'} / T)} \\[4pt]
+p_{s,c} &= \frac{\exp(z_{s,c} / T)}{\sum_{c'=1}^{C} \exp(z_{s,c'} / T)}
 \end{aligned}
 $$
+
+5. KD loss: $T^2 \cdot \KL(p_t \,\|\, p_s)$. KL divergence is zero when they agree.
+
+$$
+\begin{aligned}
+\mathcal{L}_{\text{KD}} &= T^2 \cdot \KL(p_t \,\|\, p_s) \\
+&= T^2 \sum_{c=1}^{C} p_{t,c} \left( \log p_{t,c} - \log p_{s,c} \right)
+\end{aligned}
+$$
+
+6. Mix with cross-entropy (CE) on rows that have a label $y$:
+
+$$
+\begin{aligned}
+\mathcal{L} &= \alpha \cdot \mathcal{L}_{\text{KD}} + (1 - \alpha) \cdot \mathcal{L}_{\text{CE}} \\
+\mathcal{L}_{\text{CE}} &= -\log \softmax(z_s)_y
+\end{aligned}
+$$
+
+7. Use the student at $T = 1$ at test time.
 
 The gradient of the KL term with respect to $z_s$ is $(p_s - p_t) / T$; the $T^2$ factor keeps its size comparable across temperatures:
 
 $$
-\frac{\partial}{\partial z_s} \KL(p_t \,\|\, p_s) = \frac{1}{T} (p_s - p_t),
-\qquad
-\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_s} = T \, (p_s - p_t)
+\begin{aligned}
+\frac{\partial}{\partial z_s} \KL(p_t \,\|\, p_s) &= \frac{1}{T} (p_s - p_t) \\[4pt]
+\frac{\partial \mathcal{L}_{\text{KD}}}{\partial z_s} &= T \, (p_s - p_t)
+\end{aligned}
 $$
 
 ```python

@@ -10,12 +10,13 @@ A very small student can fail to absorb a very large teacher: the teacher's outp
 4. Optionally chain more assistants, each smaller than the last.
 5. Compare against distilling the student directly from the teacher with the same budget.
 
-Each link is ordinary KD, with the assistant's output replacing the teacher's in the second one. Writing $p_\theta(x) = \softmax(z_\theta(x) / T)$ for a network with weights $\theta$:
+Each link is ordinary KD, with the assistant's output replacing the teacher's in the second one. Writing $p_\theta(x) = \softmax(z_\theta(x) / T)$ for a network with weights $\theta$, and $\ell(q, \theta)$ for the KD loss of that network against a target $q$:
 
 $$
 \begin{aligned}
-\theta_{\text{TA}} &= \argmin_{\theta} \; \E_x \Big[ T^2 \, \KL\big( p_{\text{teacher}}(x) \,\|\, p_\theta(x) \big) \Big] \\
-\theta_{\text{student}} &= \argmin_{\theta} \; \E_x \Big[ T^2 \, \KL\big( p_{\theta_{\text{TA}}}(x) \,\|\, p_\theta(x) \big) \Big]
+\ell(q, \theta) &= \E_x \Big[ T^2 \, \KL\big( q(x) \,\|\, p_\theta(x) \big) \Big] \\
+\theta_{\text{TA}} &= \argmin_{\theta} \; \ell(p_{\text{teacher}}, \theta) \\
+\theta_{\text{student}} &= \argmin_{\theta} \; \ell(p_{\theta_{\text{TA}}}, \theta)
 \end{aligned}
 $$
 

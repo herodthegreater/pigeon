@@ -7,9 +7,10 @@ Menon et al. argue a teacher's soft labels help because they approximate the *Ba
 The world generates data in two stages: pick a class $y$ uniformly from 20 and one of its 8 *modes* (sub-clusters) uniformly; draw a latent point $z$ from a Gaussian around that mode (standard deviation 1.5 in every direction); then map it to the input with an invertible warp $x = R_1 z + 0.5 \sin(R_2 z)$. With $\mu_{c,m}$ the centre of mode $m$ of class $c$ and $\sigma = 1.5$:
 
 $$
-z \mid (y = c, \text{mode } m) \sim \mathcal{N}\big( \mu_{c,m}, \, \sigma^2 I \big),
-\qquad
-x = R_1 z + 0.5 \sin(R_2 z)
+\begin{aligned}
+z \mid (y = c, m) &\sim \mathcal{N}\big( \mu_{c,m}, \, \sigma^2 I \big) \\
+x &= R_1 z + 0.5 \sin(R_2 z)
+\end{aligned}
 $$
 
 The posterior over classes is then

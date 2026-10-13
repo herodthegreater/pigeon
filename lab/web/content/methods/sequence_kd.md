@@ -11,13 +11,14 @@ A language model produces a sequence one token at a time. Ordinary (word-level) 
 3. Train the student by ordinary cross-entropy on $(x, \hat{y})$, summed over the tokens of $\hat{y}$.
 4. Variants: combine it with word-level KD, a KL term at every position, or train on the beam hypothesis closest to $y$ instead of the top one (*sequence-level interpolation*).
 
-With $p_t$ the teacher, $p_s$ the student, and $i$ indexing the $L$ tokens of a sequence:
+With $p_t$ the teacher, $p_s$ the student, and $i$ indexing the $L$ tokens of a sequence, beam search approximates the teacher's most probable sequence $\hat{y}$, and the two losses are:
 
 $$
 \begin{aligned}
-\hat{y} &\approx \argmax_{y} \, p_t(y \mid x) \quad \text{(beam search)} \\
+\hat{y} &\approx \argmax_{y} \, p_t(y \mid x) \\
 \mathcal{L}_{\text{seq}} &= -\sum_{i=1}^{L} \log p_s\big( \hat{y}_i \mid \hat{y}_{<i}, x \big) \\
-\mathcal{L}_{\text{word}} &= \sum_{i=1}^{L} \KL\big( p_t(\cdot \mid y_{<i}, x) \,\|\, p_s(\cdot \mid y_{<i}, x) \big)
+\mathcal{L}_{\text{word}} &= \sum_{i=1}^{L} \KL\big( p_t(\cdot \mid y_{<i}, x) \\
+&\qquad\qquad \,\|\, p_s(\cdot \mid y_{<i}, x) \big)
 \end{aligned}
 $$
 
@@ -31,13 +32,20 @@ $$
 For on-policy samples the objective is
 
 $$
-\mathcal{L}_{\text{GKD}} = \E_{\hat{y} \sim p_s(\cdot \mid x)} \left[ \sum_{i=1}^{L} D\big( p_t(\cdot \mid \hat{y}_{<i}, x) \,\|\, p_s(\cdot \mid \hat{y}_{<i}, x) \big) \right]
+\begin{aligned}
+\mathcal{L}_{\text{GKD}} &= \E_{\hat{y} \sim p_s(\cdot \mid x)} \Big[ \sum_{i=1}^{L} D_i \Big] \\
+D_i &= D\big( p_t(\cdot \mid \hat{y}_{<i}, x) \\
+&\qquad \,\|\, p_s(\cdot \mid \hat{y}_{<i}, x) \big)
+\end{aligned}
 $$
 
 where $D$ is forward KL, reverse KL, or the generalized Jensen-Shannon divergence
 
 $$
-\operatorname{JSD}_\beta(p \,\|\, q) = \beta \, \KL\big( p \,\|\, \beta p + (1 - \beta) q \big) + (1 - \beta) \, \KL\big( q \,\|\, \beta p + (1 - \beta) q \big)
+\begin{aligned}
+\operatorname{JSD}_\beta(p \,\|\, q) &= \beta \, \KL(p \,\|\, r) + (1 - \beta) \, \KL(q \,\|\, r) \\
+r &= \beta p + (1 - \beta) q
+\end{aligned}
 $$
 
 ## The code, line by line

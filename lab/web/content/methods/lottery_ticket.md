@@ -9,7 +9,10 @@ When a pruned network recovers well, is that because its trained weights were go
 3. Reset, keeping the mask and throwing away the trained values: rewind to init, or to the early snapshot (late rewinding).
 
 $$
-W \leftarrow W_0 \odot M \quad \text{(rewind to init)}, \qquad W \leftarrow W_k \odot M \quad \text{(late rewinding)}
+\begin{aligned}
+\text{rewind to init:} \quad W &\leftarrow W_0 \odot M \\
+\text{late rewinding:} \quad W &\leftarrow W_k \odot M
+\end{aligned}
 $$
 
 4. Retrain with the mask fixed.
