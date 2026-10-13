@@ -4,8 +4,8 @@ A generalist cut down to a bird specialist has to be fine-tuned back to health. 
 
 ## How it works
 
-1. Build recovery sets from the 28,000 available inputs (8,000 labeled plus 20,000 unlabeled), using the true class only to filter: everything; birds only (the 1,403 inputs of class 0); birds plus the 3 sibling classes; birds plus an equal number of random non-birds; birds plus the same number of Gaussian noise vectors; and 2 x 1,403 random inputs with no filter.
-2. Recover a specialist on each set with grouped KD: the teacher's probabilities (T=1) summed into 8 groups (bird, 3 siblings, 4 other superclasses).
+1. Build recovery sets from the 28,000 available inputs (8,000 labeled plus 20,000 unlabeled), using the true class only to filter: everything; birds only (the 1,403 inputs of class 0); birds plus the 3 sibling classes; birds plus an equal number of random non-birds; birds plus the same number of Gaussian noise vectors; and 2,806 random inputs (twice 1,403) with no filter.
+2. Recover a specialist on each set with grouped KD: the teacher's probabilities $p_t$ (at $T = 1$) summed into 8 groups (bird, 3 siblings, 4 other superclasses), $q_t = p_t G$.
 3. Two specialists: the teacher pruned to 3x32 with bird-aware importance and a collapsed head, and a fresh 2x16 net.
 4. Score both by bird average precision (AP) on the full 10,000-example test set.
 

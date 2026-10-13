@@ -5,10 +5,19 @@ A very small student can fail to absorb a very large teacher: the teacher's outp
 ## How it works
 
 1. Train the large teacher on labels.
-2. Distill a mid-sized assistant from the teacher with ordinary KD (soft targets at temperature `T`).
+2. Distill a mid-sized assistant from the teacher with ordinary KD (soft targets at temperature $T$).
 3. Distill the small student from the assistant, not from the teacher.
 4. Optionally chain more assistants, each smaller than the last.
 5. Compare against distilling the student directly from the teacher with the same budget.
+
+Each link is ordinary KD, with the assistant's output replacing the teacher's in the second one. Writing $p_\theta(x) = \softmax(z_\theta(x) / T)$ for a network with weights $\theta$:
+
+$$
+\begin{aligned}
+\theta_{\text{TA}} &= \argmin_{\theta} \; \E_x \Big[ T^2 \, \KL\big( p_{\text{teacher}}(x) \,\|\, p_\theta(x) \big) \Big] \\
+\theta_{\text{student}} &= \argmin_{\theta} \; \E_x \Big[ T^2 \, \KL\big( p_{\theta_{\text{TA}}}(x) \,\|\, p_\theta(x) \big) \Big]
+\end{aligned}
+$$
 
 ```python
 ta = distill(width=64, teacher=big)
@@ -22,7 +31,7 @@ The method adds one full distillation run per assistant. Whether it pays depends
 
 `capacity_gap` in `lab/experiments/teacher.py` runs two experiments.
 
-First, the gap itself. `teachers = {w: teacher(hidden=[w, w, w]) for w in [16, 32, 64, 128, 256, 512]}` builds six three-layer teachers of growing width. `teacher()` in `lab/common.py` caches each one on disk, so all experiments reuse the same trained models. For each teacher, `tr = ev(t)` records its own test metrics, then `distill([sw, sw], t, s)` trains a 2x8 and a 2x32 student from it for every seed (`distill` defaults: KD at `T = 1` on the 8k labeled plus 20k unlabeled inputs). Each row stores `teacher_acc`, so the student's accuracy can be plotted against the teacher's.
+First, the gap itself. `teachers = {w: teacher(hidden=[w, w, w]) for w in [16, 32, 64, 128, 256, 512]}` builds six three-layer teachers of growing width. `teacher()` in `lab/common.py` caches each one on disk, so all experiments reuse the same trained models. For each teacher, `tr = ev(t)` records its own test metrics, then `distill([sw, sw], t, s)` trains a 2x8 and a 2x32 student from it for every seed (`distill` defaults: KD at $T = 1$ on the 8k labeled plus 20k unlabeled inputs). Each row stores `teacher_acc`, so the student's accuracy can be plotted against the teacher's.
 
 Second, the chains. `big = teachers[512]`. For every seed it records `"512 -> 8 (direct)"` from `distill([8, 8], big, s)`, then for `ta in [128, 32]` it builds `mid = distill([ta, ta], big, s)` and records `distill([8, 8], mid, s)`. Every link uses the same step budget, so the chained student gets no extra training of its own; the extra cost is the assistant's run.
 
@@ -32,13 +41,13 @@ Second, the chains. `big = teachers[512]`. For every seed it records `"512 -> 8 
 
 ## What the simulations show
 
-`capacity_gap`, chains to a 2x8 student (3 seeds, 3000 steps, KD at `T = 1`):
+`capacity_gap`, chains to a 2x8 student (3 seeds, 3000 steps, KD at $T = 1$):
 
 | path | accuracy |
 |---|---|
-| 512 -> 8 (direct) | 0.4556 ± 0.015 |
-| 512 -> 128 -> 8 | 0.4579 ± 0.015 |
-| 512 -> 32 -> 8 | 0.4680 ± 0.014 |
+| 512 -> 8 (direct) | 0.4556 $\pm$ 0.015 |
+| 512 -> 128 -> 8 | 0.4579 $\pm$ 0.015 |
+| 512 -> 32 -> 8 | 0.4680 $\pm$ 0.014 |
 
 The best chain is ahead by less than one standard deviation. The gap experiment shows why there is little to fix:
 

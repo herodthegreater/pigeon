@@ -4,18 +4,30 @@ When a pruned network recovers well, is that because its trained weights were go
 
 ## How it works
 
-1. Initialise a network, save its weights `W0`, train it, and also save an early snapshot `Wk` (the *rewind point*).
-2. Prune the trained net by magnitude to get a 0/1 mask `m`.
-3. Reset: `W = W0 * m` (rewind to init) or `W = Wk * m` (late rewinding).
+1. Initialise a network, save its weights $W_0$, train it, and also save an early snapshot $W_k$ (the *rewind point*).
+2. Prune the trained net by magnitude to get a 0/1 mask $M$.
+3. Reset to the masked init (rewind to init) or the masked snapshot (late rewinding).
 4. Retrain with the mask fixed.
 5. Repeat steps 2-4, pruning more each round (*iterative magnitude pruning*).
 6. Controls at the same sparsity: the ticket mask with a new random init, and a random mask on the original init.
 
+The reset in step 3 keeps the mask and throws away the trained values:
+
+$$
+W \leftarrow W_0 \odot M \quad \text{(rewind to init)}, \qquad W \leftarrow W_k \odot M \quad \text{(late rewinding)}.
+$$
+
 ## The code, line by line
 
-`lottery_ticket` in `lab/experiments/shrink.py` uses a 2x128 net with 20,480 weights. `init = net(hid, seed=s)` is `W0`. `scratch(init.copy(), s, callback=...)` trains a copy for 3,000 steps, and `snap.setdefault("early", n.copy()) if ep == 1` keeps the weights after the second epoch: step 126, about 4% of training.
+`lottery_ticket` in `lab/experiments/shrink.py` uses a 2x128 net with 20,480 weights. `init = net(hid, seed=s)` is $W_0$. `scratch(init.copy(), s, callback=...)` trains a copy for 3,000 steps, and `snap.setdefault("early", n.copy()) if ep == 1` keeps the weights after the second epoch: step 126, about 4% of training.
 
-`branches` maps each arm to its starting weights: `init`, `early`, or `None` (keep the trained weights and fine-tune). Each round sets `sp = 1 - 0.5 ** rnd` and calls `mask_src = magnitude_prune(state[name], sp)` on that arm's net from the previous round. `magnitude_prune` counts `sp` over all weights, so each round halves the survivors and each mask is a subset of the last.
+`branches` maps each arm to its starting weights: `init`, `early`, or `None` (keep the trained weights and fine-tune). Each round sets `sp = 1 - 0.5 ** rnd`, that is
+
+$$
+s_r = 1 - 2^{-r}
+$$
+
+for round $r$, and calls `mask_src = magnitude_prune(state[name], sp)` on that arm's net from the previous round. `magnitude_prune` counts `sp` over all weights, so each round halves the survivors ($1 - s_r = 2^{-r}$) and each mask is a subset of the last.
 
 `m = mask_src.copy() if start is None else start.copy()` picks the weights, `m.masks = [...]` attaches the mask, and `m.apply_masks()` zeroes the pruned entries. `scratch(m, s, lr=FT_LR if start is None else 3e-3)` retrains for 3,000 steps. Both learning rates are 3e-3, so the arms differ only in their starting weights. `state[name] = m` carries each arm's lineage into the next round.
 

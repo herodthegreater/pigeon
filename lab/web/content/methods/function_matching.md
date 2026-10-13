@@ -5,10 +5,24 @@ Standard KD precomputes the teacher's answers on fixed inputs, so the student on
 ## How it works
 
 1. Keep the teacher available during training, not just its stored outputs.
-2. For each batch, draw real inputs and augment them. *Mixup* replaces each input by a random blend with another input in the batch: `x' = λ · x_i + (1 − λ) · x_j`, `λ ~ Beta(1, 1)` (uniform on 0 to 1). *Jitter* adds Gaussian noise: `x' = x + 0.3 · ε`.
-3. Run the teacher on `x'` to get fresh targets.
-4. Train the student on `x'` with KD against those targets.
+2. For each batch, draw real inputs and augment them. *Mixup* replaces each input by a random blend with another input in the batch: $x' = \lambda x_i + (1 - \lambda) x_j$, $\lambda \sim \operatorname{Beta}(1, 1)$ (uniform on 0 to 1). *Jitter* adds Gaussian noise: $x' = x + 0.3 \, \epsilon$.
+3. Run the teacher on $x'$ to get fresh targets.
+4. Train the student on $x'$ with KD against those targets.
 5. Train for many more steps than you would on fixed targets.
+
+The two augmentations, with $\epsilon$ standard Gaussian noise:
+
+$$
+x' = \lambda x_i + (1 - \lambda) x_j, \quad \lambda \sim \operatorname{Beta}(1, 1)
+\qquad\qquad
+x' = x + \sigma \epsilon, \quad \epsilon \sim \mathcal{N}(0, I), \ \sigma = 0.3
+$$
+
+Fixed-target KD minimizes the loss on the stored inputs only. Function matching minimizes it in expectation over augmented inputs, with the teacher queried on the same $x'$ as the student:
+
+$$
+\mathcal{L} = \E_{x} \, \E_{x' \sim \operatorname{aug}(x)} \Big[ T^2 \, \KL\big( p_t(x') \,\|\, p_s(x') \big) \Big]
+$$
 
 ```python
 for step in range(steps):
@@ -23,7 +37,7 @@ for step in range(steps):
 
 - `__init__` stores the inputs `X`, labels `y`, the `teacher`, the `aug` string and `noise` (default 0.3). `extra_X` appends unlabeled inputs with label `-1`.
 - `batches()` shuffles indices with `rng.permutation(len(self.X))` and walks through them in chunks of `bs`.
-- If `"mixup" in self.aug`: `k = rng.permutation(len(j))` pairs every row with another row of the same batch, `lam = rng.beta(1.0, 1.0, size=(len(j), 1))` draws one blend weight per row, and `X = lam * X + (1 - lam) * X[k]` mixes. `Y` (one-hot labels) is mixed the same way, and `lab = lab & lab[k]` marks a mixed row as labeled only if both parents were. These matter only with a cross-entropy term.
+- If `"mixup" in self.aug`: `k = rng.permutation(len(j))` pairs every row with another row of the same batch, `lam = rng.beta(1.0, 1.0, size=(len(j), 1))` draws one blend weight $\lambda$ per row, and `X = lam * X + (1 - lam) * X[k]` mixes. `Y` (one-hot labels) is mixed the same way, and `lab = lab & lab[k]` marks a mixed row as labeled only if both parents were. These matter only with a cross-entropy term.
 - If `"noise" in self.aug`: `X = X + rng.standard_normal(X.shape) * self.noise`.
 - `out, hid, _ = self.teacher.forward(X)` queries the teacher on the augmented batch. This line is the whole method: the target belongs to the exact input the student trains on.
 - With `teacher=None` it yields plain augmented batches (ordinary mixup training).
@@ -32,7 +46,7 @@ for step in range(steps):
 
 ## What the simulations show
 
-`function_matching` (2x32 student, 2 seeds, `T = 1`, 8k real inputs, test accuracy):
+`function_matching` (2x32 student, 2 seeds, $T = 1$, 8k real inputs, test accuracy):
 
 | steps | fixed targets | online mixup | online mixup + jitter | labels only |
 |---|---|---|---|---|
@@ -51,7 +65,7 @@ This page's runs (seed 0, mixup), fixed against online: length 2 (2000 steps) 0.
 - Short budgets: online augmentation loses to fixed targets until training is long enough.
 - Cost: every step pays for a teacher forward pass.
 - Augmentations that leave the data distribution (too much jitter) give targets on inputs that never occur. Here jitter on top of mixup was slightly worse with 8k inputs, but helped with 500.
-- Mixup with plain labels needs care: the blended label `λ · y_i + (1 − λ) · y_j` is a guess about what a blended input is. Querying the teacher on the blend replaces that guess with an answer.
+- Mixup with plain labels needs care: the blended label $\lambda y_i + (1 - \lambda) y_j$ is a guess about what a blended input is. Querying the teacher on the blend replaces that guess with an answer.
 
 ## Try this
 

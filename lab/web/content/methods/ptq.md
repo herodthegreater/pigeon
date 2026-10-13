@@ -1,14 +1,30 @@
 ## The idea
 
-A trained network stores 32-bit floats but rarely needs that much precision. *Post-training quantization* (PTQ) rounds each weight to one of a small set of evenly spaced levels, so it can be stored as a `b`-bit integer plus a shared *scale* (the float that turns integers back into weights). It needs no data and no training. How low `b` can go depends on how many weights share a scale. One scale per matrix is set by its largest weight and leaves few levels for typical ones. A scale per *group* of 16 weights tracks local size much more closely.
+A trained network stores 32-bit floats but rarely needs that much precision. *Post-training quantization* (PTQ) rounds each weight to one of a small set of evenly spaced levels, so it can be stored as a $b$-bit integer plus a shared *scale* (the float that turns integers back into weights). It needs no data and no training. How low $b$ can go depends on how many weights share a scale. One scale per matrix is set by its largest weight and leaves few levels for typical ones. A scale per *group* of 16 weights tracks local size much more closely.
 
 ## How it works
 
-1. Flatten the weight matrix and cut it into groups of `g` consecutive values (or keep one group for the whole tensor).
-2. For `b >= 2` bits, symmetric quantization uses the integers `-qmax..qmax` with `qmax = 2^(b-1) - 1`. For 4 bits that is -7..7: 15 levels.
-3. Per group: `scale = max|w| / qmax`, then `q = clip(round(w / scale), -qmax, qmax)`.
-4. The stored model is `q` (b bits each) plus one scale per group. The weight used at inference is `q * scale`.
-5. For `b = 1` there are just two levels: `w_hat = sign(w) * mean|w|` per group.
+1. Flatten the weight matrix and cut it into groups of $g$ consecutive values (or keep one group for the whole tensor).
+2. For $b \ge 2$ bits, symmetric quantization uses the integers $-q_{\max}, \dots, q_{\max}$ with $q_{\max} = 2^{b-1} - 1$. For 4 bits that is $-7, \dots, 7$: 15 levels.
+3. Per group: scale $s = \max \lvert w \rvert / q_{\max}$, then $q = \clip(\round(w / s), -q_{\max}, q_{\max})$.
+4. The stored model is $q$ ($b$ bits each) plus one scale per group. The weight used at inference is $\hat w = q \cdot s$.
+5. For $b = 1$ there are just two levels: $\hat w = \sign(w) \cdot \operatorname{mean} \lvert w \rvert$ per group.
+
+For a group of weights $w_1, \dots, w_g$ and $b \ge 2$ bits:
+
+$$
+q_{\max} = 2^{b-1} - 1, \qquad s = \frac{\max_i \lvert w_i \rvert}{q_{\max}}
+$$
+
+$$
+q_i = \clip\!\left( \round\!\left( \frac{w_i}{s} \right), -q_{\max}, q_{\max} \right), \qquad \hat w_i = s \, q_i
+$$
+
+For $b = 1$ the scale is the group's mean magnitude instead:
+
+$$
+\hat w_i = \sign(w_i) \cdot \frac{1}{g} \sum_{j=1}^{g} \lvert w_j \rvert
+$$
 
 ```python
 qmax = 2 ** (bits - 1) - 1
@@ -18,15 +34,15 @@ w_hat = clip(round(group / scale), -qmax, qmax) * scale
 
 ## The code, line by line
 
-`fake_quantize` in `lab/nn.py` is a line-for-line numpy twin of `harness/quant.py:fake_quantize`, the function the YOLOv8n cockpit runs on its detector. Both return floats ("fake" quantization) holding exactly the values a `b`-bit format could store, so measured accuracy matches a real export.
+`fake_quantize` in `lab/nn.py` is a line-for-line numpy twin of `harness/quant.py:fake_quantize`, the function the YOLOv8n cockpit runs on its detector. Both return floats ("fake" quantization) holding exactly the values a $b$-bit format could store, so measured accuracy matches a real export.
 
 `if bits >= 16: return w` is the native setting. `flat = w.reshape(-1)` flattens row by row. `lab/nn.py` stores `W` as (inputs, outputs), so a group of 16 is 16 weights leaving one input towards 16 consecutive neurons. With no `group_size`, `g = flat[None, :]` is one group. Otherwise `pad = (-n) % group_size` zeros are appended and `reshape(-1, group_size)` makes one row per group.
 
-For 1 bit, `scale = np.maximum(np.abs(g).mean(1, keepdims=True), 1e-12)` and `q = np.where(g >= 0, 1.0, -1.0)`, so even an exact zero becomes `+scale`. The torch version does the same. For more bits, `qmax = (1 << (bits - 1)) - 1`, `scale = max|g| / qmax`, and `q = np.clip(np.round(g / scale), -qmax, qmax)`. The `1e-12` floor guards all-zero groups. `out = (q * scale)` is reshaped, unpadded and cast back to float32.
+For 1 bit, `scale = np.maximum(np.abs(g).mean(1, keepdims=True), 1e-12)` and `q = np.where(g >= 0, 1.0, -1.0)`, so even an exact zero becomes `+scale`. The torch version does the same. For more bits, `qmax = (1 << (bits - 1)) - 1` is $2^{b-1} - 1$, `scale` is $\max \lvert g \rvert / q_{\max}$, and `q = np.clip(np.round(g / scale), -qmax, qmax)`. The `1e-12` floor guards all-zero groups. `out = (q * scale)` is reshaped, unpadded and cast back to float32.
 
 `quantize` in `lab/compress.py` copies the net, sets `net.qbits, net.qgroup`, and bakes the result in with `net.W = [net.eff(i) for i in range(net.n_layers)]`, since `MLP.eff` applies `fake_quantize` when `qbits` is set. Clearing `qbits` leaves an ordinary float MLP whose weights lie on the grid.
 
-One consequence is easy to miss. At 2 bits, `qmax = 1`, so the levels are only `{-scale, 0, +scale}`, and every weight smaller than half the group maximum becomes zero. The `params` column counts nonzero weights and shows this directly.
+One consequence is easy to miss. At 2 bits, $q_{\max} = 1$, so $s = \max \lvert w \rvert$, the levels are only $\{-s, 0, +s\}$, and every weight smaller than half the group maximum ($\lvert w \rvert < s/2$) becomes zero. The `params` column counts nonzero weights and shows this directly.
 
 ## What the simulations show
 
@@ -42,9 +58,9 @@ From `quantization`, accuracy on 20 classes. The "teacher" is the 3x256 net (140
 | 2 | 0.0707 | 0.6098 | 0.0686 | 0.1683 |
 | 1 | 0.4013 | 0.4356 | 0.1522 | 0.1680 |
 
-8 and 6 bits are free for both models. Below that, group scales are worth a lot (teacher at 3 bits: 0.7766 → 0.8970), and the small student degrades much earlier than the big teacher. Per-tensor 2-bit is worse than 1-bit. At 2 bits only 3,616 of the teacher's 140,052 weights stay nonzero, while 1-bit keeps every weight as ±mean.
+8 and 6 bits are free for both models. Below that, group scales are worth a lot (teacher at 3 bits: 0.7766 to 0.8970), and the small student degrades much earlier than the big teacher. Per-tensor 2-bit is worse than 1-bit. At 2 bits only 3,616 of the teacher's 140,052 weights stay nonzero, while 1-bit keeps every weight as plus or minus its group's mean magnitude.
 
-Scales cost storage. Counting an fp16 scale per group, the teacher at 4 bits takes 582.3 kbit per-tensor and 721.5 kbit with group-16, against 4,481.7 kbit in fp32. A group of 16 adds one bit per weight, and a group of 4 adds four.
+Scales cost storage. Counting an fp16 scale per group, the teacher at 4 bits takes 582.3 kbit per-tensor and 721.5 kbit with group-16, against 4,481.7 kbit in fp32. With a 16-bit scale per group of $g$, each weight costs $b + 16/g$ bits: a group of 16 adds one bit per weight, and a group of 4 adds four.
 
 Page runs: the default (teacher, 4-bit, group 16) gives 0.9135. Group 4 at 2 bits gives 0.8278, but with four extra bits of scale per weight.
 

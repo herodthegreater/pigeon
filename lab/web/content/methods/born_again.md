@@ -5,10 +5,18 @@ Distillation does not need a bigger teacher. Furlanello et al. trained a network
 ## How it works
 
 1. Generation 0: train a network of a fixed architecture on the labels.
-2. Generation `g`: create a new network of the *same* architecture with new random weights.
-3. Train it on `alpha · KD(parent) + (1 − alpha) · CE(labels)`, where KD compares temperature-softened outputs `softmax(z / T)` of child and parent, and CE (cross-entropy) is the ordinary label loss.
+2. Generation $g$: create a new network of the *same* architecture with new random weights.
+3. Train it on $\alpha \cdot \text{KD}(\text{parent}) + (1 - \alpha) \cdot \text{CE}(\text{labels})$, where KD compares temperature-softened outputs $\softmax(z / T)$ of child and parent, and CE (cross-entropy) is the ordinary label loss.
 4. The child becomes the parent; repeat.
 5. Evaluate every generation on held-out data. Optionally average several generations' predictions.
+
+With $z_g$ the logits of generation $g$ and $y$ the label, generation $g$ minimizes
+
+$$
+\mathcal{L}_g = \alpha \, T^2 \, \KL\big( \softmax(z_{g-1} / T) \,\|\, \softmax(z_g / T) \big) + (1 - \alpha) \big( -\log \softmax(z_g)_y \big)
+$$
+
+with the parent $z_{g-1}$ held fixed.
 
 ```python
 parent = train_on_labels(arch, seed=0)
@@ -51,7 +59,7 @@ This page's runs (1000 steps, seed 0). Width 32: 0.7398, 0.7032, 0.6980. Width 1
 
 - Capacity-limited models: the parent's mistakes become the child's targets. Self-distillation helps models that already fit the data well.
 - Short budgets: each generation is trained from scratch, so a child that has not converged is worse than its parent.
-- Too much weight on KD (`alpha` near 1) with a weak parent copies its errors; the labels are what keep generations anchored.
+- Too much weight on KD ($\alpha$ near 1) with a weak parent copies its errors; the labels are what keep generations anchored.
 - Gains are small, often within seed noise. Run several seeds before trusting a generation-to-generation difference.
 - Give generation 0 the same recipe and budget as its children; otherwise the comparison measures the recipe.
 

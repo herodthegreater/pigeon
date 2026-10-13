@@ -4,15 +4,31 @@ Networks trained from different random starts make different mistakes, so averag
 
 ## How it works
 
-1. Train `n` teachers with the same recipe but different random seeds.
+1. Train $n$ teachers with the same recipe but different random seeds.
 2. Run all of them on the transfer inputs and combine their outputs, either way:
-3. **Average logits**: `z = mean_i(z_i)`, then `softmax(z / T)`. This is the normalized *geometric* mean of the teachers' probabilities. Classes only keep mass where all teachers agree, so the target is sharper.
-4. **Average probabilities**: `p = mean_i(softmax(z_i))`, then use `log p` as the logits. This is the *arithmetic* mean: a class keeps mass if any teacher gives it some, so the target preserves the teachers' disagreement.
+3. **Average logits**: $\bar{z} = \frac{1}{n} \sum_i z_i$, then $\softmax(\bar{z} / T)$. This is the normalized *geometric* mean of the teachers' probabilities. Classes only keep mass where all teachers agree, so the target is sharper.
+4. **Average probabilities**: $\bar{p} = \frac{1}{n} \sum_i \softmax(z_i)$, then use $\log \bar{p}$ as the logits. This is the *arithmetic* mean: a class keeps mass if any teacher gives it some, so the target preserves the teachers' disagreement.
 5. Distill one student on the combined target with ordinary KD.
 
-Feeding `log p` back in as logits works because `softmax(log p) = p` for a probability vector `p`.
+With $p_i = \softmax(z_i / T)$ the $i$-th teacher's probabilities, the two targets for class $c$ are
 
-Computing `log(mean(p))` naively fails when probabilities underflow to 0, so the code uses the log-sum-exp trick: `log mean_i p_i = m + log(mean_i exp(log p_i − m))`, with `m` the largest `log p_i`.
+$$
+\begin{aligned}
+\text{average logits:} \quad \softmax\!\Big( \frac{1}{n} \sum_{i=1}^{n} \frac{z_i}{T} \Big)_c &= \frac{\big( \prod_{i=1}^{n} p_{i,c} \big)^{1/n}}{\sum_{c'} \big( \prod_{i=1}^{n} p_{i,c'} \big)^{1/n}} \\
+\text{average probabilities:} \quad \bar{p}_c &= \frac{1}{n} \sum_{i=1}^{n} p_{i,c}
+\end{aligned}
+$$
+
+Feeding $\log \bar{p}$ back in as logits works because $\softmax(\log p) = p$ for a probability vector $p$.
+
+Computing $\log \bar{p}$ naively fails when probabilities underflow to 0, so the code uses the log-sum-exp trick, here a log-mean-exp:
+
+$$
+\log \frac{1}{n} \sum_{i=1}^{n} p_i = m + \log \frac{1}{n} \sum_{i=1}^{n} \exp\big( \log p_i - m \big),
+\qquad m = \max_i \log p_i
+$$
+
+taken per class, so $m$ is the largest $\log p_i$.
 
 ```python
 logit_avg = mean([t.logits(X) for t in teachers])
@@ -27,15 +43,15 @@ student = train_kd(X, targets=logit_avg or prob_avg, T=1)
 - `ts = [teacher(seed=i) for i in range(1 if QUICK else 8)]` loads up to eight 3x256 teachers that differ only in their seed (initial weights and data order), cached on disk.
 - `X, y = transfer_X(d)` is the 8k labeled plus 20k unlabeled inputs.
 - For `k` in 1, 2, 4, 8 it takes the first `k` teachers. `logit_avg = np.mean([t.logits(X) for t in sub], 0)` averages raw logits. `prob_avg = log_mean_softmax([t.logits(X) for t in sub])` averages probabilities in log space.
-- `log_mean_softmax` in `lab/train.py`: `ls = np.stack([log_softmax(z) for z in logit_list])` holds each teacher's exact log-probabilities, `m = ls.max(0)` the largest per class, and `m + np.log(np.exp(ls - m).mean(0))` the log of the mean probability. The largest term inside `exp` is `exp(0) = 1`, so nothing underflows.
+- `log_mean_softmax` in `lab/train.py`: `ls = np.stack([log_softmax(z) for z in logit_list])` holds each teacher's exact log-probabilities, `m = ls.max(0)` the largest per class, and `m + np.log(np.exp(ls - m).mean(0))` the log of the mean probability. The largest term inside `exp` is $\exp(0) = 1$, so nothing underflows.
 - `test_probs` and `ens_acc` score the ensemble itself on the test set by averaging probabilities.
 - For each way of combining, `train(net(STUDENT, s), FixedSource(X, y, ..., t_logits=tl), [KD(T=1)], seed=s)` trains a 2x32 student. Passing `t_logits` instead of a `teacher` makes `FixedSource` treat these as one teacher's logits. The labels `y` go unused with only a `KD` term.
 
-`run_ensemble` in `lab/methods.py` does the same for up to 4 teachers, and adds a row for a student distilled from teacher 0 alone through `distill`; all students use `T = 1`.
+`run_ensemble` in `lab/methods.py` does the same for up to 4 teachers, and adds a row for a student distilled from teacher 0 alone through `distill`; all students use $T = 1$.
 
 ## What the simulations show
 
-`ensemble_teacher` (2x32 student, 3 seeds, 3000 steps, `T = 1`; accuracy, with NLL in brackets):
+`ensemble_teacher` (2x32 student, 3 seeds, 3000 steps, $T = 1$; accuracy, with NLL in brackets):
 
 | teachers | ensemble itself | student from avg logits | student from avg probs |
 |---|---|---|---|
@@ -56,7 +72,7 @@ The toy cannot show where ensembles help most: members that learned genuinely di
 
 - If the student, not the teacher, is the bottleneck, a better teacher does not produce a better student.
 - Logit averaging assumes the teachers' logits are on comparable scales; one overconfident teacher dominates the average.
-- Averaging probabilities with `log(mean(p) + eps)` instead of log-sum-exp changes the target when teachers are very confident, especially at high temperature.
+- Averaging probabilities with $\log(\bar{p} + \varepsilon)$ instead of log-sum-exp changes the target when teachers are very confident, especially at high temperature.
 - Members trained the same way on the same data agree on most inputs, so the average adds little.
 
 ## Try this

@@ -4,33 +4,60 @@ Output distillation tells the student *what* the teacher answered. Its hidden la
 
 ## How it works
 
-FitNets hint, for a batch of `N` inputs:
+FitNets hint, for a batch of $N$ inputs:
 
-1. Run teacher and student; take student hidden activations `hs` (shape `N × ds`) and teacher activations `ht` (shape `N × dt`). Hidden activations are a layer's outputs after its ReLU.
-2. Map the student to teacher width with a trainable matrix `P` (`ds × dt`), since the widths differ.
-3. Loss: `mean((hs · P − ht)²)`. Train `P` and the student together.
+1. Run teacher and student; take student hidden activations $h_s \in \R^{N \times d_s}$ and teacher activations $h_t \in \R^{N \times d_t}$. Hidden activations are a layer's outputs after its ReLU.
+2. Map the student to teacher width with a trainable matrix $P \in \R^{d_s \times d_t}$, since the widths differ.
+3. Loss: the mean squared entry of $h_s P - h_t$. Train $P$ and the student together.
+
+$$
+\mathcal{L}_{\text{hint}} = \frac{1}{N d_t} \left\lVert h_s P - h_t \right\rVert_F^2 = \frac{1}{N d_t} \sum_{i=1}^{N} \sum_{j=1}^{d_t} \left( (h_s P)_{ij} - (h_t)_{ij} \right)^2
+$$
 
 Similarity-preserving, for the same batch:
 
-1. Build each network's Gram matrix, the table of dot products between every pair of examples: `A = h · hᵀ` (`N × N`).
-2. Divide each row by its length: `G = A / ‖A_row‖`.
-3. Loss: `Σ (Gs − Gt)² / N²`.
+1. Build each network's Gram matrix, the table of dot products between every pair of examples: $A = h h^\top$ ($N \times N$).
+2. Divide each row by its length: $G_{ij} = A_{ij} / \lVert A_{i,:} \rVert_2$.
+3. Loss: the summed squared difference of $G_s$ and $G_t$, divided by $N^2$.
+
+$$
+\begin{aligned}
+A &= h h^\top, \qquad G_{ij} = \frac{A_{ij}}{\lVert A_{i,:} \rVert_2} \\
+\mathcal{L}_{\text{SP}} &= \frac{1}{N^2} \left\lVert G_s - G_t \right\rVert_F^2 = \frac{1}{N^2} \sum_{i=1}^{N} \sum_{j=1}^{N} \left( G_{s,ij} - G_{t,ij} \right)^2
+\end{aligned}
+$$
 
 Both are added to the KD loss with a weight, and both need the teacher's hidden activations.
 
 ## The code, line by line
 
-`Hint.__init__` in `lab/train.py` stores which student layer (`s_layer`) and teacher layer (`t_layer`) to align and creates `self.P`, a random `d_s × d_t` matrix scaled by `1 / sqrt(d_s)`. Its `params()` returns `[self.P]`, so `fit` adds `P` to the optimizer (`extra = [p for t in terms for p in t.params()]`).
+`Hint.__init__` in `lab/train.py` stores which student layer (`s_layer`) and teacher layer (`t_layer`) to align and creates `self.P`, a random $d_s \times d_t$ matrix scaled by $1 / \sqrt{d_s}$. Its `params()` returns `[self.P]`, so `fit` adds $P$ to the optimizer (`extra = [p for t in terms for p in t.params()]`).
 
-`Hint.__call__`: `hs, ht = hid[self.s], b.t_hidden[self.t]` picks the two layers; `b.t_hidden` exists because `distill` passes `hidden=bool(extra_terms)` to `FixedSource`. `r = hs @ self.P - ht` is the residual, `n = r.size`. The gradient for `P` is `self.dP = self.w * hs.T @ (2 * r / n)`, and the gradient flowing into the student's hidden layer is `dh = self.w * (2 * r / n) @ self.P.T`. It returns `np.zeros_like(z)` for the logits and `{self.s: dh}`. In `lab/nn.py`, `MLP.backward` adds `dhid[i - 1]` when it reaches layer `i`, which injects `dh` exactly at hidden layer `s`. `fit` appends `t.dP` to the gradients in the same order it added `P` to the optimizer.
+`Hint.__call__`: `hs, ht = hid[self.s], b.t_hidden[self.t]` picks the two layers; `b.t_hidden` exists because `distill` passes `hidden=bool(extra_terms)` to `FixedSource`. `r = hs @ self.P - ht` is the residual $R = h_s P - h_t$, `n = r.size` is $N d_t$. The gradient for $P$ is `self.dP = self.w * hs.T @ (2 * r / n)`, and the gradient flowing into the student's hidden layer is `dh = self.w * (2 * r / n) @ self.P.T`. With loss weight $w$:
 
-`SP._gram(h)` returns `A = h @ h.T`, the row norms `nrm`, and `A / nrm`. `SP.__call__` builds `Gs` and `Gt`, then `loss = ((Gs - Gt) ** 2).sum() / (N * N)`. `dG = 2 * (Gs - Gt) / (N * N)` is the gradient with respect to `Gs`. `dA = (dG - Gs * (Gs * dG).sum(1, keepdims=True)) / nrm` pushes it back through the row normalization: the subtracted term removes the part of `dG` that only changes a row's length, which normalization would undo anyway. Since `A = h hᵀ` uses `h` twice, `dh = (dA + dA.T) @ hs`.
+$$
+\frac{\partial \mathcal{L}}{\partial P} = \frac{2w}{N d_t} \, h_s^\top R,
+\qquad
+\frac{\partial \mathcal{L}}{\partial h_s} = \frac{2w}{N d_t} \, R P^\top
+$$
 
-`run_feature_kd` in `lab/methods.py` distills at `distill`'s default `T = 1` and uses `Hint(1, 2, w, 256, ...)` or `SP(1, 2, ...)`: student layer 1 (the last of its two hidden layers) against teacher layer 2 (the last of its three 256-wide layers). It trains labels only, KD, and KD plus your term.
+It returns `np.zeros_like(z)` for the logits and `{self.s: dh}`. In `lab/nn.py`, `MLP.backward` adds `dhid[i - 1]` when it reaches layer `i`, which injects `dh` exactly at hidden layer `s`. `fit` appends `t.dP` to the gradients in the same order it added $P$ to the optimizer.
+
+`SP._gram(h)` returns `A = h @ h.T`, the row norms `nrm`, and `A / nrm`. `SP.__call__` builds `Gs` and `Gt`, then `loss = ((Gs - Gt) ** 2).sum() / (N * N)`. `dG = 2 * (Gs - Gt) / (N * N)` is the gradient with respect to $G_s$. `dA = (dG - Gs * (Gs * dG).sum(1, keepdims=True)) / nrm` pushes it back through the row normalization: the subtracted term removes the part of `dG` that only changes a row's length, which normalization would undo anyway. Since $A = h h^\top$ uses $h$ twice, `dh = (dA + dA.T) @ hs`. Writing $\bar{X}$ for $\partial \mathcal{L} / \partial X$:
+
+$$
+\begin{aligned}
+\bar{G} &= \frac{2}{N^2} (G_s - G_t) \\
+\bar{A}_{ij} &= \frac{1}{\lVert A_{i,:} \rVert_2} \left( \bar{G}_{ij} - G_{s,ij} \sum_{k=1}^{N} G_{s,ik} \bar{G}_{ik} \right) \\
+\bar{h}_s &= \left( \bar{A} + \bar{A}^\top \right) h_s
+\end{aligned}
+$$
+
+`run_feature_kd` in `lab/methods.py` distills at `distill`'s default $T = 1$ and uses `Hint(1, 2, w, 256, ...)` or `SP(1, 2, ...)`: student layer 1 (the last of its two hidden layers) against teacher layer 2 (the last of its three 256-wide layers). It trains labels only, KD, and KD plus your term.
 
 ## What the simulations show
 
-`loss_zoo` (2x16 student, 3 seeds, 3000 steps, KD at `T = 1`; hint weight 0.05, SP weight 50):
+`loss_zoo` (2x16 student, 3 seeds, 3000 steps, KD at $T = 1$; hint weight 0.05, SP weight 50):
 
 | arm | accuracy |
 |---|---|
@@ -49,7 +76,7 @@ Likely reason: forcing 16 student units to linearly predict 256 teacher units us
 - The loss weight must be tuned to the term's natural scale: here a hint works around 0.05 and SP around 50 (the page default).
 - Too large a hint weight crowds out the task (0.5092 at weight 5 above).
 - Which layers to pair is a guess; a hint at the wrong depth can fight the student's own solution.
-- SP depends on the batch: small batches give a poor Gram matrix, and cost grows as `N²`.
+- SP depends on the batch: small batches give a poor Gram matrix, and cost grows as $N^2$.
 
 ## Try this
 
@@ -59,4 +86,4 @@ Likely reason: forcing 16 student units to linearly predict 256 teacher units us
 
 ## Going further
 
-On convolutional networks, FitNets matches feature maps through a 1x1 convolution (the analogue of `P`), and attention transfer matches spatial activation maps. For detectors, feature distillation is usually restricted to regions near objects, since most of an image is background. In transformers, distilling attention maps and hidden states layer by layer is common for compressing language models. `lab/train.py:Hint` and `lab/train.py:SP` are the closest analogues here; `MLP.backward`'s `dhid` argument is how any such term plugs into training without autograd.
+On convolutional networks, FitNets matches feature maps through a 1x1 convolution (the analogue of $P$), and attention transfer matches spatial activation maps. For detectors, feature distillation is usually restricted to regions near objects, since most of an image is background. In transformers, distilling attention maps and hidden states layer by layer is common for compressing language models. `lab/train.py:Hint` and `lab/train.py:SP` are the closest analogues here; `MLP.backward`'s `dhid` argument is how any such term plugs into training without autograd.

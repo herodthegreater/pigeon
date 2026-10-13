@@ -4,22 +4,52 @@ Most training tricks were invented for big networks that *overfit*: they memoris
 
 ## How it works
 
-1. **Label smoothing** with `ε = 0.1`: `y_smooth = (1 - ε) * onehot(y) + ε / C`, so the model is never pushed to put 100% on one class.
-2. **Mixup**: pair each example with a random partner, draw `λ ~ Beta(1, 1)` (uniform on 0-1), and train on `x = λ x_a + (1 - λ) x_b` with target `λ y_a + (1 - λ) y_b`.
-3. **EMA**: after every optimizer step, `shadow = d * shadow + (1 - d) * W` with decay `d` close to 1. At the end, replace `W` by `shadow`.
+1. **Label smoothing** with $\varepsilon = 0.1$: mix the one-hot target with the uniform distribution over the $C$ classes, so the model is never pushed to put 100% on one class.
+2. **Mixup**: pair each example with a random partner, draw $\lambda \sim \operatorname{Beta}(1, 1)$ (uniform on $[0, 1]$), and train on the blend of the two inputs with the same blend of their targets.
+3. **EMA**: after every optimizer step, update a shadow copy $\bar W$ of the weights with decay $d$ close to 1. At the end, replace $W$ by $\bar W$.
 4. **Longer**: the same cosine learning-rate schedule stretched over 4x the steps.
+
+The three rules, with $e_y$ the one-hot vector for label $y$ and $\mathbf{1}$ the all-ones vector:
+
+$$
+y^{\text{smooth}} = (1 - \varepsilon) \, e_y + \frac{\varepsilon}{C} \, \mathbf{1}
+$$
+
+$$
+\tilde x = \lambda x_a + (1 - \lambda) x_b, \qquad \tilde y = \lambda y_a + (1 - \lambda) y_b
+$$
+
+$$
+\bar W \leftarrow d \, \bar W + (1 - d) \, W
+$$
 
 ## The code, line by line
 
-`CE` in `lab/train.py` is cross-entropy against `b.Y`, a matrix of target probabilities (one-hot, or soft for mixup). With smoothing, `Y = Y * (1 - self.ls) + self.ls / Y.shape[1]` mixes in the uniform distribution. `m = b.lab.astype(F)[:, None]` masks out unlabeled rows and `n` counts the labeled ones. The loss is `-(m * Y * log_softmax(z)).sum() / n`, with logit gradient `(softmax(z) - Y) * m / n`.
+`CE` in `lab/train.py` is cross-entropy against `b.Y`, a matrix of target probabilities (one-hot, or soft for mixup). With smoothing, `Y = Y * (1 - self.ls) + self.ls / Y.shape[1]` mixes in the uniform distribution. `m = b.lab.astype(F)[:, None]` masks out unlabeled rows and `n` counts the labeled ones. The loss is `-(m * Y * log_softmax(z)).sum() / n`, with logit gradient `(softmax(z) - Y) * m / n`. For example $i$ with mask $m_i$, target row $Y_i$ and logits $z_i$:
 
-Mixup lives in `OnlineSource.batches`. `k = rng.permutation(len(j))` pairs examples within the batch, `lam = rng.beta(1.0, 1.0, size=(len(j), 1))` draws one `λ` per example, and `X` and `Y` are blended with it. `lab = lab & lab[k]` keeps a row labeled only if both parents were.
+$$
+L = -\frac{1}{n} \sum_i m_i \sum_c Y_{ic} \log \softmax(z_i)_c, \qquad \frac{\partial L}{\partial z_i} = \frac{m_i}{n} \left( \softmax(z_i) - Y_i \right)
+$$
 
-`fit` in `lab/train.py`, the lab's training loop, uses AdamW (`wd=1e-4`), fixes the budget with `total = max_steps or epochs * steps_per`, and on each step sets `opt.lr = lr * 0.5 * (1 + np.cos(np.pi * min(step / total, 1.0)))`, a cosine decay to 0. Stretching `total` 4x is all "4x longer" does.
+Mixup lives in `OnlineSource.batches`. `k = rng.permutation(len(j))` pairs examples within the batch, `lam = rng.beta(1.0, 1.0, size=(len(j), 1))` draws one $\lambda$ per example, and `X` and `Y` are blended with it. `lab = lab & lab[k]` keeps a row labeled only if both parents were.
 
-For EMA, `shadow = [p.copy() for p in net.params()] if ema else None` copies the **initial** weights. Each step does `s_ *= ema; s_ += (1 - ema) * p`, and at the end `p[...] = s_` replaces the trained weights. There is no warm-up or bias correction, so after `T` steps the random init still makes up `ema ** T` of the average. The `small_tricks` experiment uses `ema=0.999` over 3,000 steps, leaving 0.0497 of the init in the shipped weights.
+`fit` in `lab/train.py`, the lab's training loop, uses AdamW (`wd=1e-4`), fixes the budget with `total = max_steps or epochs * steps_per`, and on each step sets `opt.lr = lr * 0.5 * (1 + np.cos(np.pi * min(step / total, 1.0)))`, a cosine decay to 0. At step $t$ of a budget of $S$ steps, with base rate $\eta$:
 
-`run_tricks` in `lab/methods.py` trains a baseline and the chosen trick for 1,000 steps each (4,000 for "4x longer"), seed 0. Its EMA uses `ema=1 - 10 / STEPS`, which is 0.99 at this budget, so the init's share is about `0.99 ** 1000`, effectively zero.
+$$
+\eta_t = \frac{\eta}{2} \left( 1 + \cos\!\left( \pi \min(t / S, 1) \right) \right)
+$$
+
+Stretching `total` 4x is all "4x longer" does.
+
+For EMA, `shadow = [p.copy() for p in net.params()] if ema else None` copies the **initial** weights. Each step does `s_ *= ema; s_ += (1 - ema) * p`, and at the end `p[...] = s_` replaces the trained weights. There is no warm-up or bias correction, so after $T$ steps the random init $W_0$ still makes up $d^T$ of the average, as unrolling the update shows:
+
+$$
+\bar W_T = d^T \, W_0 + (1 - d) \sum_{t=1}^{T} d^{\,T-t} \, W_t .
+$$
+
+The `small_tricks` experiment uses `ema=0.999` over 3,000 steps, leaving 0.0497 of the init in the shipped weights.
+
+`run_tricks` in `lab/methods.py` trains a baseline and the chosen trick for 1,000 steps each (4,000 for "4x longer"), seed 0. Its EMA uses `ema=1 - 10 / STEPS`, which is 0.99 at this budget, so the init's share is about $0.99^{1000}$, effectively zero.
 
 ## What the simulations show
 
@@ -36,7 +66,7 @@ From `small_tricks`, 3,000 steps, mean of 3 seeds, accuracy on 20 classes. The 3
 | KD from teacher + pool | 0.6714 | 0.8318 |
 | KD + pool + online mixup + EMA, 4x long | 0.7100 | 0.8607 |
 
-Training longer is the only one of the four tricks with a clear gain. Label smoothing is within noise (2x16 standard deviations are about 0.008). Mixup and EMA hurt. That fits underfitting: regularizers fight memorisation, and this model has none to fight. Distilling from the teacher (T=1, on the labeled inputs plus 20,000 unlabeled ones) adds only 0.0077 for 2x16 and 0.0148 for 2x32.
+Training longer is the only one of the four tricks with a clear gain. Label smoothing is within noise (2x16 standard deviations are about 0.008). Mixup and EMA hurt. That fits underfitting: regularizers fight memorisation, and this model has none to fight. Distilling from the teacher ($T = 1$, on the labeled inputs plus 20,000 unlabeled ones) adds only 0.0077 for 2x16 and 0.0148 for 2x32.
 
 Page runs (1,000 steps, width 16): baseline 0.5803, label smoothing 0.5846, mixup 0.5397, EMA 0.5796, 4x longer 0.6909. At width 64, EMA gives 0.8508 against 0.8514. With a decay matched to the run, EMA is neutral.
 
@@ -44,9 +74,9 @@ With 8,000 clean labels the toy cannot show where regularizers usually help: big
 
 ## When it breaks
 
-- **EMA decay too slow for the run.** The average spans roughly `1 / (1 - ema)` steps. With 0.999 over 1,000 steps, 37% of the shipped weights would still be the random init. Warm the decay up, or bias-correct it the way Adam corrects its moments.
+- **EMA decay too slow for the run.** The average spans roughly $1 / (1 - d)$ steps. With 0.999 over 1,000 steps, 37% of the shipped weights would still be the random init. Warm the decay up, or bias-correct it the way Adam corrects its moments.
 - **Mixup on an underfitting model** makes a task it can't fit even harder.
-- **Label smoothing and distillation.** A smoothed model's probabilities carry less class-similarity information. In `teacher_smoothing`, a 2x16 student distilled at T=4 reached 0.6398 from the plain teacher and 0.5738 from one trained with smoothing 0.1, though that teacher was more accurate (0.9216 vs 0.9139). At T=1 the gap nearly vanishes (0.6714 vs 0.6696).
+- **Label smoothing and distillation.** A smoothed model's probabilities carry less class-similarity information. In `teacher_smoothing`, a 2x16 student distilled at $T = 4$ reached 0.6398 from the plain teacher and 0.5738 from one trained with smoothing 0.1, though that teacher was more accurate (0.9216 vs 0.9139). At $T = 1$ the gap nearly vanishes (0.6714 vs 0.6696).
 - **Unequal budgets.** "4x longer" costs 4x the compute.
 
 ## Try this
