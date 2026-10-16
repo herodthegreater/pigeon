@@ -50,3 +50,7 @@ The cockpit has its own requirements and datasets; its README has the steps.
 ## Data
 
 Images and box annotations come from [Open Images V7](https://storage.googleapis.com/openimages/web/index.html) (annotations CC-BY 4.0; images listed as CC-BY 2.0 by their authors). Per-image attribution ships with the site's test set. The cockpit's eval set is a COCO subset; see its README.
+
+## License
+
+MIT for the code (`LICENSE`), except `cockpit/`, which is AGPL-3.0 (`cockpit/LICENSE`) because it is built on Ultralytics YOLOv8. Third-party models and data keep their own terms: see `THIRD_PARTY_NOTICES.md`.
