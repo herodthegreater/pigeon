@@ -14,6 +14,7 @@ Run:  python -m train.export_testset       (after train.train)
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -48,6 +49,16 @@ def balanced_order(labels: list[int], hard: list[int]) -> list[int]:
     return order
 
 
+def author(row) -> str | None:
+    """Open Images' Author is the Flickr display name, which a few people set to their
+    email address. Credit those by Flickr account id instead, so no address ships."""
+    if pd.isna(row.Author):
+        return None
+    if re.fullmatch(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}", row.Author):
+        return "Flickr user " + row.OriginalLandingURL.split("/photos/")[1].split("/")[0]
+    return row.Author
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     ev = load_split("eval")
@@ -71,7 +82,7 @@ def main() -> None:
                 "hard": bool(ev.hard[i]),
                 "boxes": ev.boxes[i],
                 "credit": {
-                    "author": None if pd.isna(row.Author) else row.Author,
+                    "author": author(row),
                     "title": None if pd.isna(row.Title) else row.Title,
                     "url": row.OriginalLandingURL,
                     "license": row.License,
